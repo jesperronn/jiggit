@@ -1,0 +1,649 @@
+#!/usr/bin/env bash
+# Print a normalized git tag range for use with `git log` / `git diff`.
+# Accepts two positional tags: start_tag end_tag. Supports -v/--verbose and --.
+# Normalizes tags to a single leading 'v', preferring tags that exist in the Git repo.
+# Outputs one line: v<start>..v<end> and sets readonly VERSION_GIT_RANGE.
+
+# start section #1 - euo pipefail, pushd, fixed variables
+set -euo pipefail
+
+pushd "$(dirname "$0")/.." > /dev/null || exit 1
+
+# fixed variables go here
+DEFAULT_JIRA_PATTERN='JIRA-[0-9]{3,5}'
+DEFAULT_JIRA_HOST="https://jira.example.com/browse"
+GIT_DIFF_EXPR_CONFIG_FILE="config/git_diff_expr.sh"
+# look for database migration files in these paths. Multiple paths on separate lines
+DB_MIGRATION_PATHS=(
+  # example (used by git):
+  "unilogin-broker/src/main/**/changelog/*.sql"
+  "unilogin-idp/src/main/**/changelog/*.sql"
+)
+
+# color variables
+C_0="\e[0m"
+C_BOLD="\e[1m"
+C_RED="\e[31m"
+C_GREEN="\e[32m"
+C_CYAN="\e[36m"
+# other variables
+VERBOSE=0
+SHOW_NUMSTAT=0
+SHOW_PRETTY_LOG=0
+SHOW_DB_MIGRATIONS=0
+SHOW_JIRA_ISSUES=0
+SHOW_JIRA_ONLY=0
+SHOW_COMPARE_URL=0
+# positional version variables (added)
+VERSION_START=""
+VERSION_END=""
+
+GIT_HOSTING_PROVIDER=""
+GIT_HOSTING_HOST=""
+GIT_HOSTING_NAMESPACE=""
+GIT_HOSTING_REPO=""
+
+# start section #2. Functions: usage, parse_args, check_program, check_prereqs
+function usage() {
+  cat <<EOF
+Usage: $0 [options] start_tag end_tag
+Options:
+  -h, --help    Show this help message and exit
+  -v, --verbose Enable verbose debug output (to stderr)
+  --numstat     Run 'git diff --numstat' for the given range
+  --pretty-log  Run "git log --pretty='%h - %s%n%+b'" for the given range (shows full commit messages)
+  --show-compare-url
+                Print a compare URL for the configured git remote.
+                Supports Bitbucket Server, GitHub, and GitLab.
+  --show-bitbucket-diff
+                Backwards-compatible alias for --show-compare-url.
+  --show-database-migrations
+                Run '--numstat' for the given range and print lines that look like DB migrations
+                (matches paths containing 'changelog' or 'sql' under unilogin-broker or unilogin-idp).
+  --show-jira-issues
+                Show commit messages (one line per commit) and list unique JIRA issue IDs matching
+                the configured pattern (default: JIRA-\d{3,5}) from those messages.
+  --jira-only   Only print the unique JIRA IDs (implies --show-jira-issues). No per-commit lines are printed.
+
+Output:
+  v<start>..v<end>    (printed to stdout; also available in VERSION_GIT_RANGE)
+
+Examples:
+  $0 v11.3.0 11.4.0.6
+  $0 11.3.0 11.4.0.6
+  $0 --numstat 11.3.0 11.4.0.6
+  $0 --pretty-log 11.3.0 11.4.0.6
+  $0 --show-compare-url 11.3.0 11.4.0.6
+  $0 --show-bitbucket-diff 11.3.0 11.4.0.6
+  $0 --show-database-migrations 11.3.0 11.4.0.6
+  $0 --show-jira-issues 11.3.0 11.4.0.6
+  $0 --jira-only 11.3.0 11.4.0.6
+EOF
+}
+
+# Load optional Jira-related config overrides for git_diff_expr.
+load_config() {
+  if [[ -f "${GIT_DIFF_EXPR_CONFIG_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${GIT_DIFF_EXPR_CONFIG_FILE}"
+  fi
+
+  JIRA_PATTERN="${JIRA_PATTERN:-${DEFAULT_JIRA_PATTERN}}"
+  JIRA_HOST="${JIRA_HOST:-${DEFAULT_JIRA_HOST}}"
+}
+
+function parse_args() {
+  # parse options and positional args (VERSION_START, VERSION_END)
+  while [[ $# -gt 0 ]]
+  do
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -v|--verbose)
+        VERBOSE=1
+        debug "Verbose mode enabled"
+        ;;
+      --numstat)
+        SHOW_NUMSTAT=1
+        debug "Numstat mode enabled"
+        ;;
+      --pretty-log)
+        SHOW_PRETTY_LOG=1
+        debug "Pretty-log mode enabled"
+        ;;
+      --show-database-migrations)
+        SHOW_DB_MIGRATIONS=1
+        debug "Show-database-migrations mode enabled"
+        ;;
+      --show-jira-issues)
+        SHOW_JIRA_ISSUES=1
+        debug "Show-jira-issues mode enabled"
+        ;;
+      --jira-only)
+        SHOW_JIRA_ONLY=1
+        debug "Jira-only mode enabled"
+        ;;
+      --show-compare-url|--show-bitbucket-diff)
+        SHOW_COMPARE_URL=1
+        debug "Show-compare-url mode enabled"
+        ;;
+      --)
+        # treat the rest as positional arguments
+        shift
+        while [[ $# -gt 0 ]]; do
+          if [[ -z "${VERSION_START}" ]]; then
+            VERSION_START="$1"
+          elif [[ -z "${VERSION_END}" ]]; then
+            VERSION_END="$1"
+          else
+            debug "Ignoring extra positional argument: $1"
+          fi
+          shift
+        done
+        break
+        ;;
+      -*)
+        echo "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+      *)
+        if [[ -z "${VERSION_START}" ]]; then
+          VERSION_START="$1"
+        elif [[ -z "${VERSION_END}" ]]; then
+          VERSION_END="$1"
+        else
+          debug "Ignoring extra positional argument: $1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  debug "VERSION_START=${VERSION_START} VERSION_END=${VERSION_END} SHOW_DB_MIGRATIONS=${SHOW_DB_MIGRATIONS} SHOW_JIRA_ISSUES=${SHOW_JIRA_ISSUES} SHOW_JIRA_ONLY=${SHOW_JIRA_ONLY}"
+}
+
+# normalize_version: ensure the returned version starts with exactly one lowercase 'v'
+# Returns normalized version on stdout and exit 0. Returns non-zero if input invalid.
+# Normalize a version string into the v-prefixed tag shape used by this tool.
+normalize_version() {
+  local in="$1"
+  if [[ -z "${in:-}" ]]; then
+    return 1
+  fi
+  local core="${in}"
+  # strip all leading v or V characters to get core
+  while [[ "${core:0:1}" == "v" || "${core:0:1}" == "V" ]]; do
+    core="${core:1}"
+  done
+  if [[ -z "${core}" ]]; then
+    # nothing left after stripping v's -> invalid
+    return 1
+  fi
+
+  local candidate_a="${in}"
+  local candidate_b="v${core}"
+
+  # If git knows about the exact tag as provided, prefer that (for validation),
+  # but we still return a normalized form that starts with a single 'v'.
+  if git rev-parse --verify --quiet "refs/tags/${candidate_a}" >/dev/null 2>&1; then
+    debug "normalize_version: found tag '${candidate_a}' in git; normalizing to v${core}"
+    printf 'v%s\n' "$core"
+    return 0
+  fi
+
+  # Try prepending a single 'v' and check again
+  if git rev-parse --verify --quiet "refs/tags/${candidate_b}" >/dev/null 2>&1; then
+    debug "normalize_version: found tag '${candidate_b}' in git"
+    printf '%s\n' "$candidate_b"
+    return 0
+  fi
+
+  # Neither tag exists in git: return normalized v+core anyway (caller may handle missing tag)
+  # collect suggestions from git tags
+  local suggestions
+  # Prefer v-prefixed suggestions first
+  suggestions="$(git tag --list "v${core}*" 2>/dev/null || true)"
+  if [[ -z "${suggestions}" ]]; then
+    suggestions="$(git tag --list "*${core}*" 2>/dev/null || true)"
+  fi
+
+  if [[ -n "${suggestions}" ]]; then
+    # show up to 5 suggestions in a compact form
+    local sug_preview
+    sug_preview=$(printf '%s\n' "${suggestions}" | awk 'NR<=5{printf "%s ", $0} END{print ""}')
+    printf 'NOTE: no exact tag found for "%s" or "%s". Did you mean: %s\n' "${candidate_a}" "${candidate_b}" "${sug_preview}" >&2
+  else
+    printf 'NOTE: no tags found matching "%s"\n' "${core}" >&2
+  fi
+
+  printf 'v%s\n' "$core"
+  return 0
+}
+
+# debug helper: prints only when VERBOSE is enabled
+# Print verbose debug output for git_diff_expr.
+debug() {
+  # Print the provided message(s) with escape sequences interpreted, but only when verbose
+  if [[ "${VERBOSE:-0}" -eq 1 ]]; then
+    # Automatically wrap debug output in cyan coloring so callers don't need to embed color codes.
+    printf '%b\n' "${C_CYAN}${*}${C_0}" >&2
+  fi
+}
+
+# Verify that an external program exists before the command depends on it.
+check_program() {
+  set +e
+  command_to_test=$(command -v "${1}")
+  command_exit_code=$?
+  set -e
+  if [[ "${command_exit_code}" -ne 0 ]]; then
+    echo -e "${C_BOLD}${C_RED}FATAL: Required ${1} command not found. You MUST install ${1} manually${C_0}" >&2
+    return 9
+  else
+    debug "✅${C_GREEN} Found ${1} [${command_to_test}]"
+  fi
+
+}
+
+# Check required prerequisites when full validation is requested.
+check_prereqs() {
+  if [[ "${RUN_ALL:-}" != "true" ]]; then
+    return
+  fi
+  debug "Check prereqs... Testing for required commands availability"
+  check_program git
+  debug "✅Check prereqs... All relevant commands available"
+
+
+}
+# start section #3. Specific functions
+
+# (deliberately empty in the template)
+
+
+# start section #4. Main: run_main function. This is a separate function to make file testable
+
+# Ensure both positional version arguments were provided.
+require_args() {
+  # Ensure both version arguments were provided by parse_args
+  if [[ -z "${VERSION_START}" || -z "${VERSION_END}" ]]; then
+    echo "ERROR: You must provide both start and end version arguments."
+    usage
+    exit 1
+  fi
+}
+
+# Normalize the user-provided start and end versions into tag refs.
+normalize_versions() {
+  # Normalize VERSION_START and VERSION_END into VERSION_START_NORM and VERSION_END_NORM
+  VERSION_START_NORM=""
+  VERSION_END_NORM=""
+  if ! VERSION_START_NORM=$(normalize_version "${VERSION_START}" | tr -d '\n'); then
+    echo "ERROR: Invalid start version: ${VERSION_START}" >&2
+    exit 1
+  fi
+  if ! VERSION_END_NORM=$(normalize_version "${VERSION_END}" | tr -d '\n'); then
+    echo "ERROR: Invalid end version: ${VERSION_END}" >&2
+    exit 1
+  fi
+}
+
+# Print DB migration file changes for the resolved git range.
+action_show_db_migrations() {
+  # Guard: only run when the flag is set
+  if [[ "${SHOW_DB_MIGRATIONS:-0}" -ne 1 ]]; then
+    debug "action_show_db_migrations: guard prevented execution"
+    return 0
+  fi
+  if [[ -z "${VERSION_GIT_RANGE:-}" ]]; then
+    echo "ERROR: VERSION_GIT_RANGE not set" >&2
+    return 1
+  fi
+
+  # Use Git pathspecs to restrict the diff to SQL changelog files under the two modules.
+  # Use explicit src/main/**/changelog pattern for accuracy across layouts.
+  git diff --numstat "${VERSION_GIT_RANGE}" -- \
+    "${DB_MIGRATION_PATHS[@]}" \
+    | { output=$(cat); if [[ -n "${output}" ]]; then printf '%s\n' "${output}"; exit 0; else exit 2; fi }
+}
+
+# Print git diff numstat output for the resolved range.
+action_show_numstat() {
+  # Guard: only run when the flag is set
+  if [[ "${SHOW_NUMSTAT:-0}" -ne 1 ]]; then
+    debug "action_show_numstat: guard prevented execution"
+    return 0
+  fi
+  if [[ -z "${VERSION_GIT_RANGE:-}" ]]; then
+    echo "ERROR: VERSION_GIT_RANGE not set" >&2
+    return 1
+  fi
+
+  git diff --numstat "${VERSION_GIT_RANGE}"
+}
+
+# Print a readable git log for the resolved range.
+action_pretty_log() {
+  # Guard: only run when the flag is set
+  if [[ "${SHOW_PRETTY_LOG:-0}" -ne 1 ]]; then
+    debug "action_pretty_log: guard prevented execution"
+    return 0
+  fi
+  if [[ -z "${VERSION_GIT_RANGE:-}" ]]; then
+    echo "ERROR: VERSION_GIT_RANGE not set" >&2
+    return 1
+  fi
+
+  git log --pretty='%h - %s%n%+b' "${VERSION_GIT_RANGE}"
+}
+
+# New: Show commit messages one-per-line and extract unique JIRA IDs matching the configured JIRA_PATTERN
+# Print commit lines and extracted Jira issue URLs for the resolved range.
+action_show_jira_issues() {
+  # Guard: only run when either flag is set
+  if [[ "${SHOW_JIRA_ISSUES:-0}" -ne 1 && "${SHOW_JIRA_ONLY:-0}" -ne 1 ]]; then
+    debug "action_show_jira_issues: guard prevented execution"
+    return 0
+  fi
+  if [[ -z "${VERSION_GIT_RANGE:-}" ]]; then
+    echo "ERROR: VERSION_GIT_RANGE not set" >&2
+    return 1
+  fi
+
+  # Use a commit separator and then collapse each commit (subject+body) into a single line.
+  # We mirror the pretty-log format but make each commit a single output line.
+  local commit_lines
+  commit_lines=$(git log --pretty=format:'%h - %s%n%+b%n==GIT_COMMIT_END==' "${VERSION_GIT_RANGE}" 2>/dev/null | \
+    awk 'BEGIN{RS="==GIT_COMMIT_END=="; ORS=""} {gsub(/\n/, " "); gsub(/==GIT_COMMIT_END==/, ""); sub(/^ +/, ""); sub(/ +$/, ""); if(length($0)) print $0 "\n"}' || true)
+
+  # Only print commit lines and the blank separator when running in verbose mode and not jira-only.
+  if [[ "${SHOW_JIRA_ONLY:-0}" -eq 0 ]]; then
+    if [[ -n "${commit_lines}" ]]; then
+      printf '%s' "${commit_lines}"
+    fi
+
+    # Blank line separator (helps when piping/reading)
+    printf '\n'
+  fi
+
+  # Extract unique JIRA-IDs from the commit lines using the configured pattern and print one per line
+  local issues
+  issues=$(printf '%s' "${commit_lines}" | grep -Eo "${JIRA_PATTERN}" | sort -u || true)
+  if [[ -n "${issues}" ]]; then
+    while read -r issue; do
+      printf '%s/%s\n' "${JIRA_HOST}" "${issue}"
+    done <<< "${issues}"
+  fi
+}
+
+# URL-encode a ref so it can be embedded in compare URLs.
+url_encode() {
+  local raw="${1:-}"
+  local encoded=""
+  local i char
+
+  for ((i = 0; i < ${#raw}; i++)); do
+    char="${raw:i:1}"
+    case "${char}" in
+      [a-zA-Z0-9.~_-])
+        encoded+="${char}"
+        ;;
+      *)
+        printf -v char_code '%%%02X' "'${char}"
+        encoded+="${char_code}"
+        ;;
+    esac
+  done
+
+  printf '%s\n' "${encoded}"
+}
+
+# Parse a git remote URL into provider, host, namespace, and repo parts.
+parse_git_remote_url() {
+  local remote_url="${1}"
+  local host path
+  local -a parts
+
+  GIT_HOSTING_PROVIDER=""
+  GIT_HOSTING_HOST=""
+  GIT_HOSTING_NAMESPACE=""
+  GIT_HOSTING_REPO=""
+
+  debug "parse_git_remote_url: remote_url='${remote_url}'"
+
+  if [[ "${remote_url}" =~ ^ssh:// ]]; then
+    local without_proto
+    without_proto=${remote_url#ssh://}
+    if [[ "${without_proto}" == *"@"* ]]; then
+      without_proto=${without_proto#*@}
+    fi
+    host=${without_proto%%/*}
+    path=${without_proto#*/}
+  elif [[ "${remote_url}" =~ @.*: ]]; then
+    host=${remote_url#*@}
+    host=${host%%:*}
+    path=${remote_url#*:}
+  elif [[ "${remote_url}" =~ ^https?:// ]]; then
+    local tmp
+    tmp=${remote_url#https://}
+    tmp=${tmp#http://}
+    host=${tmp%%/*}
+    path=${tmp#*/}
+  else
+    echo "ERROR: Unrecognized git remote URL format: ${remote_url}" >&2
+    return 3
+  fi
+
+  path=${path%%.git}
+  IFS='/' read -r -a parts <<< "${path}"
+
+  if [[ "${host}" =~ github\.com$ ]]; then
+    if [[ ${#parts[@]} -lt 2 ]]; then
+      echo "ERROR: GitHub remote path '${path}' does not contain owner and repo segments" >&2
+      return 4
+    fi
+    GIT_HOSTING_PROVIDER="github"
+    GIT_HOSTING_REPO="${parts[${#parts[@]}-1]}"
+    unset 'parts[${#parts[@]}-1]'
+    GIT_HOSTING_NAMESPACE="$(IFS=/; echo "${parts[*]}")"
+  elif [[ "${host}" =~ gitlab ]]; then
+    if [[ ${#parts[@]} -lt 2 ]]; then
+      echo "ERROR: GitLab remote path '${path}' does not contain namespace and repo segments" >&2
+      return 4
+    fi
+    GIT_HOSTING_PROVIDER="gitlab"
+    GIT_HOSTING_REPO="${parts[${#parts[@]}-1]}"
+    unset 'parts[${#parts[@]}-1]'
+    GIT_HOSTING_NAMESPACE="$(IFS=/; echo "${parts[*]}")"
+  else
+    if [[ "${parts[0]:-}" == "scm" ]]; then
+      parts=("${parts[@]:1}")
+    fi
+    if [[ ${#parts[@]} -lt 2 ]]; then
+      echo "ERROR: Bitbucket-style remote path '${path}' does not contain project and repo segments" >&2
+      return 4
+    fi
+    GIT_HOSTING_PROVIDER="bitbucket"
+    GIT_HOSTING_NAMESPACE="${parts[0]}"
+    GIT_HOSTING_REPO="${parts[1]}"
+  fi
+
+  GIT_HOSTING_HOST="https://${host}"
+
+  debug "Parsed provider=${GIT_HOSTING_PROVIDER} host=${GIT_HOSTING_HOST} namespace=${GIT_HOSTING_NAMESPACE} repo=${GIT_HOSTING_REPO}"
+
+  export GIT_HOSTING_PROVIDER GIT_HOSTING_HOST GIT_HOSTING_NAMESPACE GIT_HOSTING_REPO
+  return 0
+}
+
+# Read the origin remote from git config and parse it into hosting metadata.
+parse_git_remote() {
+  local remote_url
+  remote_url=$(git remote get-url origin 2>/dev/null || true)
+  if [[ -z "${remote_url}" ]]; then
+    remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
+  fi
+
+  if [[ -z "${remote_url}" ]]; then
+    echo "ERROR: Could not determine git remote URL for 'origin'" >&2
+    return 2
+  fi
+
+  parse_git_remote_url "${remote_url}"
+}
+
+# Build a provider-specific compare URL from normalized refs.
+build_compare_url() {
+  local start_ref="${1}"
+  local end_ref="${2}"
+  local start_enc
+  local end_enc
+
+  start_enc="$(url_encode "${start_ref}")"
+  end_enc="$(url_encode "${end_ref}")"
+
+  case "${GIT_HOSTING_PROVIDER}" in
+    bitbucket)
+      printf '%s\n' "${GIT_HOSTING_HOST}/projects/${GIT_HOSTING_NAMESPACE}/repos/${GIT_HOSTING_REPO}/compare/commits?sourceBranch=${end_enc}&targetBranch=${start_enc}"
+      ;;
+    github)
+      printf '%s\n' "${GIT_HOSTING_HOST}/${GIT_HOSTING_NAMESPACE}/${GIT_HOSTING_REPO}/compare/${start_enc}...${end_enc}"
+      ;;
+    gitlab)
+      printf '%s\n' "${GIT_HOSTING_HOST}/${GIT_HOSTING_NAMESPACE}/${GIT_HOSTING_REPO}/-/compare/${start_enc}...${end_enc}"
+      ;;
+    *)
+      echo "ERROR: Unsupported git hosting provider '${GIT_HOSTING_PROVIDER}'" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Print a compare URL for the resolved range and detected git hosting provider.
+action_show_compare_url() {
+  if [[ "${SHOW_COMPARE_URL:-0}" -ne 1 ]]; then
+    debug "action_show_compare_url: guard prevented execution"
+    return 0
+  fi
+  if [[ -z "${VERSION_GIT_RANGE:-}" ]]; then
+    echo "ERROR: VERSION_GIT_RANGE not set" >&2
+    return 1
+  fi
+
+  # Ensure normalized versions available
+  if [[ -z "${VERSION_START_NORM:-}" || -z "${VERSION_END_NORM:-}" ]]; then
+    echo "ERROR: Normalized versions not available" >&2
+    return 1
+  fi
+
+  if ! parse_git_remote; then
+    return 1
+  fi
+
+  build_compare_url "refs/tags/${VERSION_START_NORM}" "refs/tags/${VERSION_END_NORM}"
+}
+
+# Print the normalized git range when no other action was selected.
+action_print_range() {
+  # Guard: only run when no other action flags are set
+  if [[ "${SHOW_DB_MIGRATIONS:-0}" -eq 1 || "${SHOW_NUMSTAT:-0}" -eq 1 || "${SHOW_PRETTY_LOG:-0}" -eq 1 || "${SHOW_JIRA_ISSUES:-0}" -eq 1 || "${SHOW_JIRA_ONLY:-0}" -eq 1 ]]; then
+    debug "action_print_range: guard prevented execution because another action flag is set"
+    return 0
+  fi
+  if [[ -z "${VERSION_GIT_RANGE:-}" ]]; then
+    echo "ERROR: VERSION_GIT_RANGE not set" >&2
+    return 1
+  fi
+
+  echo "${VERSION_GIT_RANGE}"
+}
+
+# Reject combinations of action flags that would produce ambiguous output.
+validate_flag_conflicts() {
+  if [[ "${SHOW_NUMSTAT}" -eq 1 && "${SHOW_PRETTY_LOG}" -eq 1 ]]; then
+    echo "ERROR: --numstat and --pretty-log are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_DB_MIGRATIONS}" -eq 1 && "${SHOW_PRETTY_LOG}" -eq 1 ]]; then
+    echo "ERROR: --show-database-migrations and --pretty-log are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_JIRA_ISSUES}" -eq 1 && "${SHOW_PRETTY_LOG}" -eq 1 ]]; then
+    echo "ERROR: --show-jira-issues and --pretty-log are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_JIRA_ONLY}" -eq 1 && "${SHOW_PRETTY_LOG}" -eq 1 ]]; then
+    echo "ERROR: --jira-only and --pretty-log are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_JIRA_ISSUES}" -eq 1 && "${SHOW_NUMSTAT}" -eq 1 ]]; then
+    echo "ERROR: --show-jira-issues and --numstat are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_JIRA_ONLY}" -eq 1 && "${SHOW_NUMSTAT}" -eq 1 ]]; then
+    echo "ERROR: --jira-only and --numstat are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_JIRA_ISSUES}" -eq 1 && "${SHOW_DB_MIGRATIONS}" -eq 1 ]]; then
+    echo "ERROR: --show-jira-issues and --show-database-migrations are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_JIRA_ONLY}" -eq 1 && "${SHOW_DB_MIGRATIONS}" -eq 1 ]]; then
+    echo "ERROR: --jira-only and --show-database-migrations are mutually exclusive. Pick one." >&2
+    usage
+    exit 1
+  fi
+  if [[ "${SHOW_COMPARE_URL}" -eq 1 && ("${SHOW_PRETTY_LOG}" -eq 1 || "${SHOW_NUMSTAT}" -eq 1 || "${SHOW_DB_MIGRATIONS}" -eq 1 || "${SHOW_JIRA_ISSUES}" -eq 1 || "${SHOW_JIRA_ONLY}" -eq 1) ]]; then
+    echo "ERROR: --show-compare-url is mutually exclusive with other action flags. Pick only one." >&2
+    usage
+    exit 1
+  fi
+}
+
+# Parse arguments, normalize refs, and dispatch the selected git_diff_expr action.
+run_main() {
+  load_config
+  parse_args "$@"
+  check_prereqs
+
+  validate_flag_conflicts
+
+  require_args
+  normalize_versions
+
+  # Build range
+  VERSION_GIT_RANGE="${VERSION_START_NORM}..${VERSION_END_NORM}"
+  readonly VERSION_GIT_RANGE
+
+  # Dispatch to action
+  if [[ "${SHOW_DB_MIGRATIONS}" -eq 1 ]]; then
+    action_show_db_migrations
+  elif [[ "${SHOW_NUMSTAT}" -eq 1 ]]; then
+    action_show_numstat
+  elif [[ "${SHOW_PRETTY_LOG}" -eq 1 ]]; then
+    action_pretty_log
+  elif [[ "${SHOW_JIRA_ISSUES}" -eq 1 || "${SHOW_JIRA_ONLY}" -eq 1 ]]; then
+    action_show_jira_issues
+  elif [[ "${SHOW_COMPARE_URL}" -eq 1 ]]; then
+    action_show_compare_url
+  else
+    action_print_range
+  fi
+
+  debug "Normalized versions: ${VERSION_START_NORM} ${VERSION_END_NORM}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
+then
+  run_main "$@"
+fi

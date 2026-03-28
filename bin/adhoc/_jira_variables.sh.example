@@ -1,0 +1,8 @@
+# shellcheck shell=bash
+# Copy this file to `_jira_variables.sh` and fill in your local Jira values.
+
+export JIRA_BASE_URL="https://jira.stil.dk"
+export JIRA_PROJECT_KEY="SKOLELOGIN"
+
+# Use your Jira personal access token here.
+export JIRA_API_TOKEN=""

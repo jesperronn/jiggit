@@ -1,0 +1,21 @@
+# Example TOML project config for jiggit.
+
+[jira]
+base_url = "https://jira.example.com"
+bearer_token = "token"
+# or:
+# user_email = "user@example.com"
+# api_token = "token"
+
+# sample project entry:
+[example-api]
+repo_path = "$HOME/path/to/example-api"
+remote_url = "git@github.com:org/example-api.git"
+jira_project_key = "JIRA"
+jira_regexes = ["JIRA-[0-9]+", "PLAT-[0-9]+"]
+environments = ["prod", "staging"]
+info_version_expr = "jq -r '.git.branch'"
+
+[example-api.environment_info_urls]
+prod = "https://prod.example.com/actuator/info"
+staging = "https://staging.example.com/actuator/info"

@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pushd "$(dirname "$0")/.." > /dev/null || exit 1
+
+JIGGIT_LINT_VERBOSE=0
+
+# Render help for the repo lint runner.
+usage() {
+  cat <<'EOF'
+Usage: bin/lint [--verbose] [file ...]
+
+Run syntax checks for one or more shell scripts.
+If no files are supplied, lint all shell scripts in this repository.
+If `shellcheck` is available, run it too.
+EOF
+}
+
+# Return the explicit file list or discover shell sources under bin/ and config/.
+collect_shell_files() {
+  if [[ $# -gt 0 ]]; then
+    printf '%s\n' "$@"
+    return 0
+  fi
+
+  find bin config -type f \( -name '*.sh' -o -path 'bin/*' \) | sort
+}
+
+# Run Bash syntax validation for one file.
+run_bash_syntax_check() {
+  local file="${1}"
+  printf 'syntax  %s\n' "${file}"
+  bash -n "${file}"
+}
+
+# Print one verbose troubleshooting line for the lint runner.
+lint_debug() {
+  if [[ "${JIGGIT_LINT_VERBOSE:-0}" -eq 1 ]]; then
+    printf '[lint] %s\n' "$*" >&2
+  fi
+}
+
+# Run shellcheck across the selected files when the tool is available locally.
+run_shellcheck_if_available() {
+  local -a files=("$@")
+  local file
+  local total_count="${#files[@]}"
+  local index=0
+
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    printf 'shellcheck not installed; skipping.\n'
+    return 0
+  fi
+
+  printf 'shellcheck %s files\n' "${total_count}"
+  for file in "${files[@]}"; do
+    index=$((index + 1))
+    printf 'shellcheck [%s/%s] %s\n' "${index}" "${total_count}" "${file}"
+    lint_debug "run: shellcheck -x ${file}"
+    shellcheck -x "${file}"
+  done
+}
+
+# Resolve files to lint, run syntax checks, and then run shellcheck if possible.
+run_main() {
+  local -a requested_files=()
+
+  while [[ $# -gt 0 ]]; do
+    case "${1}" in
+      -h|--help)
+        usage
+        return 0
+        ;;
+      --verbose)
+        JIGGIT_LINT_VERBOSE=1
+        shift
+        ;;
+      *)
+        requested_files+=("${1}")
+        shift
+        ;;
+    esac
+  done
+
+  local -a files=()
+  mapfile -t files < <(collect_shell_files "${requested_files[@]}")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    printf 'No shell files found.\n' >&2
+    return 1
+  fi
+
+  local file
+  for file in "${files[@]}"; do
+    run_bash_syntax_check "${file}"
+  done
+
+  run_shellcheck_if_available "${files[@]}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  run_main "$@"
+fi
