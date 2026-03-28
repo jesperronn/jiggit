@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pushd "$(dirname "$0")/.." > /dev/null || exit 1
+
+source bin/lib/explore.sh
+source bin/lib/jira_check_command.sh
+
+# Render help for the local setup helper.
+usage() {
+  cat <<'EOF'
+Usage: bin/setup
+
+Check whether `jiggit` is already on PATH and, if not, add this repo's `bin/`
+directory to the relevant shell startup file for the current shell.
+Re-running setup is safe and idempotent.
+EOF
+}
+
+# Return the absolute repo root for the current checkout.
+setup_repo_root() {
+  pwd
+}
+
+# Return the repo-local bin directory that should be added to PATH.
+setup_repo_bin_dir() {
+  printf '%s/bin\n' "$(setup_repo_root)"
+}
+
+# Print the current shell name, preferring $SHELL and falling back to bash.
+current_shell_name() {
+  local shell_path="${SHELL:-bash}"
+  local shell_name="${shell_path##*/}"
+  printf '%s\n' "${shell_name:-bash}"
+}
+
+# Choose the startup file that should be edited for the active shell.
+startup_file_for_shell() {
+  local shell_name="${1:-}"
+
+  case "${shell_name}" in
+    zsh)
+      printf '%s\n' "${HOME}/.zshrc"
+      ;;
+    bash)
+      if [[ -f "${HOME}/.bashrc" ]]; then
+        printf '%s\n' "${HOME}/.bashrc"
+      elif [[ -f "${HOME}/.bash_profile" ]]; then
+        printf '%s\n' "${HOME}/.bash_profile"
+      else
+        printf '%s\n' "${HOME}/.profile"
+      fi
+      ;;
+    *)
+      printf '%s\n' "${HOME}/.profile"
+      ;;
+  esac
+}
+
+# Return success when jiggit is already available on PATH.
+jiggit_on_path() {
+  command -v jiggit >/dev/null 2>&1
+}
+
+# Return success when the chosen startup file already contains the repo PATH snippet.
+startup_file_has_jiggit_path() {
+  local startup_file="${1}"
+  local repo_bin_dir="${2}"
+
+  [[ -f "${startup_file}" ]] && grep -Fq "${repo_bin_dir}" "${startup_file}"
+}
+
+# Return a previously managed jiggit PATH export line when present.
+startup_file_managed_jiggit_export() {
+  local startup_file="${1}"
+
+  [[ -f "${startup_file}" ]] || return 0
+  awk '
+    /# >>> jiggit setup >>>/ { in_block=1; next }
+    /# <<< jiggit setup <<</ { in_block=0 }
+    in_block && /^export PATH=/ { print; exit }
+  ' "${startup_file}"
+}
+
+# Read one setup prompt line from either a test file or /dev/tty.
+setup_prompt_line() {
+  local prompt_text="${1:-}"
+  local response=""
+  local input_file="${JIGGIT_SETUP_INPUT_FILE:-}"
+
+  if [[ -n "${prompt_text}" && -z "${input_file}" ]]; then
+    printf '%s' "${prompt_text}" >&2
+  fi
+
+  if [[ -n "${input_file}" && -f "${input_file}" ]]; then
+    response="$(sed -n '1p' "${input_file}")"
+    tail -n +2 "${input_file}" > "${input_file}.tmp"
+    mv "${input_file}.tmp" "${input_file}"
+  else
+    IFS= read -r response < /dev/tty || true
+  fi
+
+  printf '%s\n' "${response}"
+}
+
+# Return success when setup can prompt interactively.
+setup_can_prompt() {
+  [[ -n "${JIGGIT_SETUP_INPUT_FILE:-}" || ( -r /dev/tty && -w /dev/tty ) ]]
+}
+
+# Ask whether setup should override, skip, or quit when a conflict is found.
+setup_conflict_choice() {
+  local prompt_text="${1}"
+  local response=""
+
+  while true; do
+    response="$(setup_prompt_line "${prompt_text} [o]verride/[s]kip/[q]uit: ")"
+    case "${response}" in
+      o|O|override|OVERRIDE) printf '%s\n' "override"; return 0 ;;
+      s|S|skip|SKIP|'') printf '%s\n' "skip"; return 0 ;;
+      q|Q|quit|QUIT) printf '%s\n' "quit"; return 0 ;;
+    esac
+  done
+}
+
+# Append the managed PATH snippet to the chosen startup file.
+append_jiggit_path_snippet() {
+  local startup_file="${1}"
+  local repo_bin_dir="${2}"
+
+  mkdir -p "$(dirname "${startup_file}")"
+  touch "${startup_file}"
+
+  {
+    printf '\n'
+    printf '%s\n' '# >>> jiggit setup >>>'
+    printf "export PATH=\"%s:\$PATH\"\n" "${repo_bin_dir}"
+    printf '%s\n' '# <<< jiggit setup <<<'
+  } >> "${startup_file}"
+}
+
+# Print the setup result and next step instructions.
+render_setup_summary() {
+  local shell_name="${1}"
+  local startup_file="${2}"
+  local repo_bin_dir="${3}"
+  local status="${4}"
+  local jira_status="${5:-unchecked}"
+
+  printf '# jiggit setup\n\n'
+  printf -- "- shell: \`%s\`\n" "${shell_name}"
+  printf -- "- repo bin: \`%s\`\n" "${repo_bin_dir}"
+  printf -- "- startup file: \`%s\`\n" "${startup_file}"
+  printf -- "- status: \`%s\`\n" "${status}"
+  printf -- "- jira setup: \`%s\`\n" "${jira_status}"
+
+  case "${status}" in
+    already-on-path)
+      printf "%s\n" "- next step: \`jiggit --help\`"
+      ;;
+    already-configured)
+      printf -- "- next step: \`source %s\`\n" "${startup_file}"
+      ;;
+    configured)
+      printf -- "- next step: \`source %s\`\n" "${startup_file}"
+      ;;
+    skipped)
+      printf -- "- next step: \`jiggit --help\`\n"
+      ;;
+  esac
+
+  if [[ "${jira_status}" != "ok" ]]; then
+    printf -- "- jira next step: \`jiggit jira-setup\`\n"
+  fi
+}
+
+# Check prerequisites, add repo bin to PATH config when needed, and print the result.
+run_main() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    return 0
+  fi
+
+  local required_program
+  for required_program in bash git curl jq; do
+    if ! command -v "${required_program}" >/dev/null 2>&1; then
+      printf 'Missing required program: %s\n' "${required_program}" >&2
+      return 1
+    fi
+  done
+
+  local shell_name
+  local startup_file
+  local repo_bin_dir
+  local status=""
+  local managed_export=""
+  local conflict_choice=""
+  local jira_status="unchecked"
+
+  shell_name="$(current_shell_name)"
+  startup_file="$(startup_file_for_shell "${shell_name}")"
+  repo_bin_dir="$(setup_repo_bin_dir)"
+
+  if jiggit_on_path; then
+    status="already-on-path"
+    load_project_config
+    jira_check_reset_state
+    if [[ "$(jira_check_probe_access)" == ok* ]]; then
+      jira_status="ok"
+    else
+      jira_status="needs-setup"
+    fi
+    render_setup_summary "${shell_name}" "${startup_file}" "${repo_bin_dir}" "${status}" "${jira_status}"
+    return 0
+  fi
+
+  if startup_file_has_jiggit_path "${startup_file}" "${repo_bin_dir}"; then
+    status="already-configured"
+    load_project_config
+    jira_check_reset_state
+    if [[ "$(jira_check_probe_access)" == ok* ]]; then
+      jira_status="ok"
+    else
+      jira_status="needs-setup"
+    fi
+    render_setup_summary "${shell_name}" "${startup_file}" "${repo_bin_dir}" "${status}" "${jira_status}"
+    return 0
+  fi
+
+  managed_export="$(startup_file_managed_jiggit_export "${startup_file}")"
+  if [[ -n "${managed_export}" && "${managed_export}" != "export PATH=\"${repo_bin_dir}:\$PATH\"" ]]; then
+    if ! setup_can_prompt; then
+      printf 'Existing jiggit setup in %s differs; rerun interactively to override, skip, or quit.\n' "${startup_file}" >&2
+      return 1
+    fi
+    conflict_choice="$(setup_conflict_choice "Existing managed jiggit PATH entry differs in ${startup_file}.")"
+    case "${conflict_choice}" in
+      override)
+        append_jiggit_path_snippet "${startup_file}" "${repo_bin_dir}"
+        status="configured"
+        ;;
+      skip)
+        status="skipped"
+        ;;
+      quit)
+        return 1
+        ;;
+    esac
+  else
+    append_jiggit_path_snippet "${startup_file}" "${repo_bin_dir}"
+    status="configured"
+  fi
+
+  load_project_config
+  jira_check_reset_state
+  if [[ "$(jira_check_probe_access)" == ok* ]]; then
+    jira_status="ok"
+  else
+    jira_status="needs-setup"
+  fi
+  render_setup_summary "${shell_name}" "${startup_file}" "${repo_bin_dir}" "${status}" "${jira_status}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  run_main "$@"
+fi

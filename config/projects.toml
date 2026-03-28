@@ -1,0 +1,9 @@
+# Shared TOML config for jiggit.
+# Keep real credentials in user-specific config under ~/.jiggit/config/ when possible.
+
+[jira]
+base_url = "https://jira.example.com"
+bearer_token = "replace-me"
+# or:
+# user_email = "user@example.com"
+# api_token = "replace-me"

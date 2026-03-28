@@ -1,0 +1,3 @@
+bin/adhoc/_jira_variables.sh
+.env
+.envrc

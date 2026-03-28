@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pushd "$(dirname "$0")/.." > /dev/null || exit 1
+
+# Render help for the repo test runner.
+usage() {
+  cat <<'EOF'
+Usage: bin/test [--verbose] [test-file ...]
+
+Run colocated shell test scripts.
+With no arguments, all `*.test.sh` files under `bin/` are run.
+Use `--verbose` to show per-test `RUN` lines from the test files.
+EOF
+}
+
+# Return the explicit test file list or discover all colocated shell tests.
+collect_test_files() {
+  if [[ $# -gt 0 ]]; then
+    printf '%s\n' "$@"
+    return 0
+  fi
+
+  find bin -name '*.test.sh' -type f | sort
+}
+
+# Execute a single shell test file and keep its native output intact.
+run_test_file() {
+  local test_file="${1}"
+  local verbose="${2:-0}"
+  if [[ -z "${NO_COLOR:-}" ]]; then
+    printf '\033[1;36m==> %s\033[0m\n' "${test_file}"
+  else
+    printf '==> %s\n' "${test_file}"
+  fi
+  BASH_TEST_VERBOSE="${verbose}" bash "${test_file}"
+}
+
+# Resolve requested tests and run them in a stable sorted order.
+run_main() {
+  local verbose=0
+  local -a requested=()
+  local arg
+
+  for arg in "$@"; do
+    case "${arg}" in
+      -h|--help)
+        usage
+        return 0
+        ;;
+      --verbose)
+        verbose=1
+        ;;
+      *)
+        requested+=("${arg}")
+        ;;
+    esac
+  done
+
+  local -a test_files=()
+  mapfile -t test_files < <(collect_test_files "${requested[@]}")
+
+  if [[ ${#test_files[@]} -eq 0 ]]; then
+    printf 'No test files found.\n' >&2
+    return 1
+  fi
+
+  local test_file
+  local failures=0
+  for test_file in "${test_files[@]}"; do
+    if ! run_test_file "${test_file}" "${verbose}"; then
+      failures=$((failures + 1))
+    fi
+  done
+
+  if [[ ${failures} -eq 0 ]]; then
+    if [[ -z "${NO_COLOR:-}" ]]; then
+      printf '\033[1;32mTEST SUMMARY: all test files passed\033[0m\n'
+    else
+      printf 'TEST SUMMARY: all test files passed\n'
+    fi
+    return 0
+  fi
+
+  if [[ -z "${NO_COLOR:-}" ]]; then
+    printf '\033[1;31mTEST SUMMARY: %d test file(s) failed\033[0m\n' "${failures}" >&2
+  else
+    printf 'TEST SUMMARY: %d test file(s) failed\n' "${failures}" >&2
+  fi
+  return 2
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  run_main "$@"
+fi
