@@ -8,23 +8,21 @@ source bin/setup
 
 TEST_TMPDIR=""
 
+# Create one temporary sandbox per test.
 setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-setup-test.XXXXXX)"
 }
 
+# Clean up the temporary sandbox created for a test.
 cleanup_tmpdir() {
   if [[ -n "${TEST_TMPDIR}" && -d "${TEST_TMPDIR}" ]]; then
     rm -rf "${TEST_TMPDIR}"
   fi
 }
 
-create_fake_jiggit_on_path() {
-  mkdir -p "${TEST_TMPDIR}/path-bin"
-  cat > "${TEST_TMPDIR}/path-bin/jiggit" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-  chmod +x "${TEST_TMPDIR}/path-bin/jiggit"
+# Return the current repository root for assertions that depend on symlink targets.
+repo_root() {
+  pwd
 }
 
 test_setup_help_mentions_usage() {
@@ -34,87 +32,111 @@ test_setup_help_mentions_usage() {
   assert_contains "${output}" "Usage: bin/setup" "setup help renders usage"
 }
 
-test_startup_file_for_zsh_prefers_zshrc() {
+test_select_link_dir_uses_explicit_link_dir_override() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
+  mkdir -p "${TEST_TMPDIR}/bin"
   local actual
-  actual="$(HOME="${TEST_TMPDIR}" startup_file_for_shell zsh)"
+  actual="$(
+    PATH="${TEST_TMPDIR}/bin:/usr/bin:/bin" \
+      JIGGIT_LINK_DIR="${TEST_TMPDIR}/bin" \
+      select_link_dir "$(repo_root)/bin/jiggit"
+  )"
 
-  assert_eq "${TEST_TMPDIR}/.zshrc" "${actual}" "select .zshrc for zsh"
+  assert_eq "${TEST_TMPDIR}/bin" "${actual}" "select explicit link dir override"
 }
 
-test_startup_file_for_bash_prefers_existing_bashrc() {
+test_select_link_dir_returns_existing_link_dir_for_target() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
-  touch "${TEST_TMPDIR}/.bashrc"
-  touch "${TEST_TMPDIR}/.bash_profile"
+  mkdir -p "${TEST_TMPDIR}/one" "${TEST_TMPDIR}/two"
+  ln -s "$(repo_root)/bin/jiggit" "${TEST_TMPDIR}/two/jiggit"
 
   local actual
-  actual="$(HOME="${TEST_TMPDIR}" startup_file_for_shell bash)"
+  actual="$(
+    PATH="${TEST_TMPDIR}/one:${TEST_TMPDIR}/two:/usr/bin:/bin" \
+      select_link_dir "$(repo_root)/bin/jiggit"
+  )"
 
-  assert_eq "${TEST_TMPDIR}/.bashrc" "${actual}" "prefer existing .bashrc for bash"
+  assert_eq "${TEST_TMPDIR}/two" "${actual}" "reuse existing jiggit symlink directory"
 }
 
-test_run_setup_reports_already_on_path_without_editing_files() {
+test_run_setup_creates_symlink_in_single_writable_path_dir() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
-  create_fake_jiggit_on_path
+
+  mkdir -p "${TEST_TMPDIR}/bin"
 
   local output
   output="$(
-    HOME="${TEST_TMPDIR}" \
-      PATH="${TEST_TMPDIR}/path-bin:${PATH}" \
-      SHELL="/bin/bash" \
+    PATH="${TEST_TMPDIR}/bin:/usr/bin:/bin" \
+      HOME="${TEST_TMPDIR}" \
       run_main
   )"
 
-  assert_contains "${output}" "- status: \`already-on-path\`" "report jiggit already on path"
-  if [[ -f "${TEST_TMPDIR}/.profile" ]]; then
-    fail "do not create startup file when jiggit is already on PATH"
+  assert_contains "${output}" "- status: \`linked\`" "setup reports linked status"
+  assert_contains "${output}" "- link dir: \`${TEST_TMPDIR}/bin\`" "setup reports chosen PATH directory"
+  if [[ -L "${TEST_TMPDIR}/bin/jiggit" ]]; then
+    pass "setup creates the jiggit symlink"
+    assert_eq "$(repo_root)/bin/jiggit" "$(readlink "${TEST_TMPDIR}/bin/jiggit")" "setup links to the current checkout"
   else
-    pass "do not create startup file when jiggit is already on PATH"
+    fail "setup creates the jiggit symlink"
   fi
 }
 
-test_run_setup_appends_repo_bin_to_bash_profile_file() {
+test_run_setup_reports_already_linked_when_symlink_exists() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
-  touch "${TEST_TMPDIR}/.profile"
+  mkdir -p "${TEST_TMPDIR}/bin"
+  ln -s "$(repo_root)/bin/jiggit" "${TEST_TMPDIR}/bin/jiggit"
 
   local output
   output="$(
-    HOME="${TEST_TMPDIR}" \
-      PATH="/usr/bin:/bin" \
-      SHELL="/bin/bash" \
+    PATH="${TEST_TMPDIR}/bin:/usr/bin:/bin" \
+      HOME="${TEST_TMPDIR}" \
       run_main
   )"
 
-  assert_contains "${output}" "- status: \`configured\`" "report configured status"
-  assert_contains "${output}" "- startup file: \`${TEST_TMPDIR}/.profile\`" "report chosen startup file"
-  assert_contains "$(cat "${TEST_TMPDIR}/.profile")" "# >>> jiggit setup >>>" "write managed snippet header"
-  assert_contains "$(cat "${TEST_TMPDIR}/.profile")" "export PATH=\"$(pwd)/bin:\$PATH\"" "write repo bin path export"
+  assert_contains "${output}" "- status: \`already-linked\`" "setup reports existing symlink"
 }
 
-test_run_setup_reports_already_configured_when_profile_contains_repo_bin() {
+test_run_setup_prompts_for_path_selection_when_multiple_dirs_are_writable() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
-  cat > "${TEST_TMPDIR}/.zshrc" <<EOF
-export PATH="$(pwd)/bin:\$PATH"
-EOF
-
+  mkdir -p "${TEST_TMPDIR}/one" "${TEST_TMPDIR}/two"
   local output
   output="$(
-    HOME="${TEST_TMPDIR}" \
-      PATH="/usr/bin:/bin" \
-      SHELL="/bin/zsh" \
-      run_main
+    printf '2\n' | PATH="${TEST_TMPDIR}/one:${TEST_TMPDIR}/two:/usr/bin:/bin" \
+      HOME="${TEST_TMPDIR}" \
+      bash bin/setup 2>&1
   )"
 
-  assert_contains "${output}" "- status: \`already-configured\`" "report already configured status"
+  assert_contains "${output}" "Choose a PATH directory for the \`jiggit\` symlink:" "setup prompts for PATH selection"
+  assert_contains "${output}" "- link dir: \`${TEST_TMPDIR}/two\`" "setup uses the selected PATH directory"
+}
+
+test_run_setup_fails_when_no_writable_path_dir_exists() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  mkdir -p "${TEST_TMPDIR}/one" "${TEST_TMPDIR}/two"
+  chmod 555 "${TEST_TMPDIR}/one" "${TEST_TMPDIR}/two"
+
+  local output=""
+  if output="$(
+    PATH="${TEST_TMPDIR}/one:${TEST_TMPDIR}/two:/usr/bin:/bin" \
+      HOME="${TEST_TMPDIR}" \
+      bash bin/setup 2>&1
+  )"; then
+    fail "setup should fail without a writable PATH directory"
+  else
+    pass "setup should fail without a writable PATH directory"
+    assert_contains "${output}" "No writable PATH directories are available for the \`jiggit\` symlink." "setup reports missing writable PATH directory"
+  fi
 }
 
 run_tests "$@"

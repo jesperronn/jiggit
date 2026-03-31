@@ -1,264 +1,255 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
-
-source bin/lib/explore.sh
-source bin/lib/jira_check_command.sh
-
 # Render help for the local setup helper.
 usage() {
   cat <<'EOF'
 Usage: bin/setup
 
-Check whether `jiggit` is already on PATH and, if not, add this repo's `bin/`
-directory to the relevant shell startup file for the current shell.
-Re-running setup is safe and idempotent.
+Create or refresh a single `jiggit` symlink in one writable directory from the
+current PATH. When several writable PATH directories exist, setup prompts for
+which one to use.
 EOF
+}
+
+# Resolve one script path through any symlink chain.
+resolve_script_path() {
+  local source_path="${1}"
+  local source_dir=""
+  local next_path=""
+
+  while [[ -L "${source_path}" ]]; do
+    source_dir="$(cd -P "$(dirname "${source_path}")" > /dev/null 2>&1 && pwd)"
+    next_path="$(readlink "${source_path}")"
+    if [[ "${next_path}" != /* ]]; then
+      source_path="${source_dir}/${next_path}"
+    else
+      source_path="${next_path}"
+    fi
+  done
+
+  source_dir="$(cd -P "$(dirname "${source_path}")" > /dev/null 2>&1 && pwd)"
+  printf '%s/%s\n' "${source_dir}" "$(basename "${source_path}")"
 }
 
 # Return the absolute repo root for the current checkout.
 setup_repo_root() {
+  local script_path
+
+  script_path="$(resolve_script_path "${BASH_SOURCE[0]}")"
+  cd -P "$(dirname "${script_path}")/.." > /dev/null 2>&1
   pwd
 }
 
-# Return the repo-local bin directory that should be added to PATH.
-setup_repo_bin_dir() {
-  printf '%s/bin\n' "$(setup_repo_root)"
+# Return the absolute jiggit executable path for this checkout.
+setup_command_target() {
+  printf '%s/bin/jiggit\n' "$(setup_repo_root)"
 }
 
-# Print the current shell name, preferring $SHELL and falling back to bash.
-current_shell_name() {
-  local shell_path="${SHELL:-bash}"
-  local shell_name="${shell_path##*/}"
-  printf '%s\n' "${shell_name:-bash}"
+# Return a newline-delimited list of existing PATH directories.
+path_directories() {
+  local path_value="${PATH:-}"
+  local old_ifs="${IFS}"
+  local candidate_dir
+
+  IFS=':'
+  for candidate_dir in ${path_value}; do
+    [[ -n "${candidate_dir}" ]] || continue
+    [[ -d "${candidate_dir}" ]] || continue
+    printf '%s\n' "${candidate_dir}"
+  done
+  IFS="${old_ifs}"
 }
 
-# Choose the startup file that should be edited for the active shell.
-startup_file_for_shell() {
-  local shell_name="${1:-}"
+# Return success when two paths resolve to the same filesystem entry.
+same_file() {
+  local left_path="${1:-}"
+  local right_path="${2:-}"
 
-  case "${shell_name}" in
-    zsh)
-      printf '%s\n' "${HOME}/.zshrc"
-      ;;
-    bash)
-      if [[ -f "${HOME}/.bashrc" ]]; then
-        printf '%s\n' "${HOME}/.bashrc"
-      elif [[ -f "${HOME}/.bash_profile" ]]; then
-        printf '%s\n' "${HOME}/.bash_profile"
-      else
-        printf '%s\n' "${HOME}/.profile"
-      fi
-      ;;
-    *)
-      printf '%s\n' "${HOME}/.profile"
-      ;;
-  esac
+  [[ -e "${left_path}" ]] && [[ -e "${right_path}" ]] && [[ "${left_path}" -ef "${right_path}" ]]
 }
 
-# Return success when jiggit is already available on PATH.
-jiggit_on_path() {
-  command -v jiggit >/dev/null 2>&1
+# Return the first PATH directory that already exposes this checkout's jiggit command.
+existing_link_dir_for_target() {
+  local target_path="${1}"
+  local candidate_dir
+  local candidate_path
+
+  while IFS= read -r candidate_dir; do
+    candidate_path="${candidate_dir}/jiggit"
+    if same_file "${candidate_path}" "${target_path}"; then
+      printf '%s\n' "${candidate_dir}"
+      return 0
+    fi
+  done < <(path_directories)
+
+  return 1
 }
 
-# Return success when the chosen startup file already contains the repo PATH snippet.
-startup_file_has_jiggit_path() {
-  local startup_file="${1}"
-  local repo_bin_dir="${2}"
+# Return newline-delimited writable PATH directories, de-duplicated in order.
+collect_writable_path_dirs() {
+  local candidate_dir
+  local seen_dirs=""
 
-  [[ -f "${startup_file}" ]] && grep -Fq "${repo_bin_dir}" "${startup_file}"
+  while IFS= read -r candidate_dir; do
+    [[ -w "${candidate_dir}" ]] || continue
+    if printf '%s\n' "${seen_dirs}" | grep -Fx -- "${candidate_dir}" > /dev/null 2>&1; then
+      continue
+    fi
+    seen_dirs="${seen_dirs}${candidate_dir}
+"
+    printf '%s\n' "${candidate_dir}"
+  done < <(path_directories)
 }
 
-# Return a previously managed jiggit PATH export line when present.
-startup_file_managed_jiggit_export() {
-  local startup_file="${1}"
+# Read one prompt response from stdin when available, otherwise /dev/tty.
+read_prompt_choice() {
+  local choice=""
 
-  [[ -f "${startup_file}" ]] || return 0
-  awk '
-    /# >>> jiggit setup >>>/ { in_block=1; next }
-    /# <<< jiggit setup <<</ { in_block=0 }
-    in_block && /^export PATH=/ { print; exit }
-  ' "${startup_file}"
-}
-
-# Read one setup prompt line from either a test file or /dev/tty.
-setup_prompt_line() {
-  local prompt_text="${1:-}"
-  local response=""
-  local input_file="${JIGGIT_SETUP_INPUT_FILE:-}"
-
-  if [[ -n "${prompt_text}" && -z "${input_file}" ]]; then
-    printf '%s' "${prompt_text}" >&2
+  if IFS= read -r choice; then
+    printf '%s\n' "${choice}"
+    return 0
   fi
 
-  if [[ -n "${input_file}" && -f "${input_file}" ]]; then
-    response="$(sed -n '1p' "${input_file}")"
-    tail -n +2 "${input_file}" > "${input_file}.tmp"
-    mv "${input_file}.tmp" "${input_file}"
-  else
-    IFS= read -r response < /dev/tty || true
+  if exec 3<> /dev/tty 2>/dev/null; then
+    if IFS= read -r choice <&3; then
+      exec 3<&-
+      exec 3>&-
+      printf '%s\n' "${choice}"
+      return 0
+    fi
+    exec 3<&-
+    exec 3>&-
   fi
 
-  printf '%s\n' "${response}"
+  return 1
 }
 
-# Return success when setup can prompt interactively.
-setup_can_prompt() {
-  [[ -n "${JIGGIT_SETUP_INPUT_FILE:-}" || ( -r /dev/tty && -w /dev/tty ) ]]
-}
+# Prompt the user to select one writable PATH directory.
+prompt_for_link_dir() {
+  local -a candidate_dirs=("$@")
+  local choice=""
 
-# Ask whether setup should override, skip, or quit when a conflict is found.
-setup_conflict_choice() {
-  local prompt_text="${1}"
-  local response=""
+  printf "Choose a PATH directory for the \`jiggit\` symlink:\n" >&2
+
+  local index=0
+  local candidate_dir
+  for candidate_dir in "${candidate_dirs[@]}"; do
+    index=$((index + 1))
+    printf '  %s. %s\n' "${index}" "${candidate_dir}" >&2
+  done
 
   while true; do
-    response="$(setup_prompt_line "${prompt_text} [o]verride/[s]kip/[q]uit: ")"
-    case "${response}" in
-      o|O|override|OVERRIDE) printf '%s\n' "override"; return 0 ;;
-      s|S|skip|SKIP|'') printf '%s\n' "skip"; return 0 ;;
-      q|Q|quit|QUIT) printf '%s\n' "quit"; return 0 ;;
-    esac
+    printf 'Selection [1-%s]: ' "${#candidate_dirs[@]}" >&2
+    if ! choice="$(read_prompt_choice)"; then
+      printf '\nUnable to read a PATH selection.\n' >&2
+      return 1
+    fi
+
+    if [[ "${choice}" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#candidate_dirs[@]} )); then
+      printf '%s\n' "${candidate_dirs[$((choice - 1))]}"
+      return 0
+    fi
+
+    printf 'Invalid selection. Enter a number from 1 to %s.\n' "${#candidate_dirs[@]}" >&2
   done
 }
 
-# Append the managed PATH snippet to the chosen startup file.
-append_jiggit_path_snippet() {
-  local startup_file="${1}"
-  local repo_bin_dir="${2}"
+# Choose the PATH directory where the jiggit symlink should live.
+select_link_dir() {
+  local target_path="${1}"
+  local explicit_link_dir="${JIGGIT_LINK_DIR:-}"
+  local existing_link_dir=""
+  local -a candidate_dirs=()
+  local candidate_dir
 
-  mkdir -p "$(dirname "${startup_file}")"
-  touch "${startup_file}"
+  if [[ -n "${explicit_link_dir}" ]]; then
+    if [[ ! -d "${explicit_link_dir}" ]]; then
+      printf 'Configured link directory does not exist: %s\n' "${explicit_link_dir}" >&2
+      return 1
+    fi
+    if [[ ! -w "${explicit_link_dir}" ]]; then
+      printf 'Configured link directory is not writable: %s\n' "${explicit_link_dir}" >&2
+      return 1
+    fi
+    printf '%s\n' "${explicit_link_dir}"
+    return 0
+  fi
 
-  {
-    printf '\n'
-    printf '%s\n' '# >>> jiggit setup >>>'
-    printf "export PATH=\"%s:\$PATH\"\n" "${repo_bin_dir}"
-    printf '%s\n' '# <<< jiggit setup <<<'
-  } >> "${startup_file}"
+  if existing_link_dir="$(existing_link_dir_for_target "${target_path}" 2>/dev/null)"; then
+    printf '%s\n' "${existing_link_dir}"
+    return 0
+  fi
+
+  while IFS= read -r candidate_dir; do
+    candidate_dirs+=("${candidate_dir}")
+  done < <(collect_writable_path_dirs)
+  if [[ ${#candidate_dirs[@]} -eq 0 ]]; then
+    printf "No writable PATH directories are available for the \`jiggit\` symlink.\n" >&2
+    return 1
+  fi
+
+  if [[ ${#candidate_dirs[@]} -eq 1 ]]; then
+    printf '%s\n' "${candidate_dirs[0]}"
+    return 0
+  fi
+
+  prompt_for_link_dir "${candidate_dirs[@]}"
+}
+
+# Create or refresh the managed jiggit symlink in the chosen PATH directory.
+ensure_jiggit_symlink() {
+  local link_dir="${1}"
+  local target_path="${2}"
+  local symlink_path="${link_dir}/jiggit"
+
+  if same_file "${symlink_path}" "${target_path}"; then
+    printf 'already-linked\n'
+    return 0
+  fi
+
+  if [[ -e "${symlink_path}" || -L "${symlink_path}" ]]; then
+    printf 'Refusing to replace an existing command at %s\n' "${symlink_path}" >&2
+    return 1
+  fi
+
+  ln -s "${target_path}" "${symlink_path}"
+  printf 'linked\n'
 }
 
 # Print the setup result and next step instructions.
 render_setup_summary() {
-  local shell_name="${1}"
-  local startup_file="${2}"
-  local repo_bin_dir="${3}"
+  local repo_root="${1}"
+  local target_path="${2}"
+  local link_dir="${3}"
   local status="${4}"
-  local jira_status="${5:-unchecked}"
 
   printf '# jiggit setup\n\n'
-  printf -- "- shell: \`%s\`\n" "${shell_name}"
-  printf -- "- repo bin: \`%s\`\n" "${repo_bin_dir}"
-  printf -- "- startup file: \`%s\`\n" "${startup_file}"
+  printf -- "- repo root: \`%s\`\n" "${repo_root}"
+  printf -- "- command target: \`%s\`\n" "${target_path}"
+  printf -- "- link dir: \`%s\`\n" "${link_dir}"
   printf -- "- status: \`%s\`\n" "${status}"
-  printf -- "- jira setup: \`%s\`\n" "${jira_status}"
-
-  case "${status}" in
-    already-on-path)
-      printf "%s\n" "- next step: \`jiggit --help\`"
-      ;;
-    already-configured)
-      printf -- "- next step: \`source %s\`\n" "${startup_file}"
-      ;;
-    configured)
-      printf -- "- next step: \`source %s\`\n" "${startup_file}"
-      ;;
-    skipped)
-      printf -- "- next step: \`jiggit --help\`\n"
-      ;;
-  esac
-
-  if [[ "${jira_status}" != "ok" ]]; then
-    printf -- "- jira next step: \`jiggit jira-setup\`\n"
-  fi
+  printf -- "- next step: \`jiggit --version\`\n"
 }
 
-# Check prerequisites, add repo bin to PATH config when needed, and print the result.
+# Choose one PATH directory, create the symlink, and print the result.
 run_main() {
+  local repo_root
+  local target_path
+  local link_dir
+  local status
+
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
     return 0
   fi
 
-  local required_program
-  for required_program in bash git curl jq; do
-    if ! command -v "${required_program}" >/dev/null 2>&1; then
-      printf 'Missing required program: %s\n' "${required_program}" >&2
-      return 1
-    fi
-  done
+  repo_root="$(setup_repo_root)"
+  target_path="$(setup_command_target)"
+  link_dir="$(select_link_dir "${target_path}")"
+  status="$(ensure_jiggit_symlink "${link_dir}" "${target_path}")"
 
-  local shell_name
-  local startup_file
-  local repo_bin_dir
-  local status=""
-  local managed_export=""
-  local conflict_choice=""
-  local jira_status="unchecked"
-
-  shell_name="$(current_shell_name)"
-  startup_file="$(startup_file_for_shell "${shell_name}")"
-  repo_bin_dir="$(setup_repo_bin_dir)"
-
-  if jiggit_on_path; then
-    status="already-on-path"
-    load_project_config
-    jira_check_reset_state
-    if [[ "$(jira_check_probe_access)" == ok* ]]; then
-      jira_status="ok"
-    else
-      jira_status="needs-setup"
-    fi
-    render_setup_summary "${shell_name}" "${startup_file}" "${repo_bin_dir}" "${status}" "${jira_status}"
-    return 0
-  fi
-
-  if startup_file_has_jiggit_path "${startup_file}" "${repo_bin_dir}"; then
-    status="already-configured"
-    load_project_config
-    jira_check_reset_state
-    if [[ "$(jira_check_probe_access)" == ok* ]]; then
-      jira_status="ok"
-    else
-      jira_status="needs-setup"
-    fi
-    render_setup_summary "${shell_name}" "${startup_file}" "${repo_bin_dir}" "${status}" "${jira_status}"
-    return 0
-  fi
-
-  managed_export="$(startup_file_managed_jiggit_export "${startup_file}")"
-  if [[ -n "${managed_export}" && "${managed_export}" != "export PATH=\"${repo_bin_dir}:\$PATH\"" ]]; then
-    if ! setup_can_prompt; then
-      printf 'Existing jiggit setup in %s differs; rerun interactively to override, skip, or quit.\n' "${startup_file}" >&2
-      return 1
-    fi
-    conflict_choice="$(setup_conflict_choice "Existing managed jiggit PATH entry differs in ${startup_file}.")"
-    case "${conflict_choice}" in
-      override)
-        append_jiggit_path_snippet "${startup_file}" "${repo_bin_dir}"
-        status="configured"
-        ;;
-      skip)
-        status="skipped"
-        ;;
-      quit)
-        return 1
-        ;;
-    esac
-  else
-    append_jiggit_path_snippet "${startup_file}" "${repo_bin_dir}"
-    status="configured"
-  fi
-
-  load_project_config
-  jira_check_reset_state
-  if [[ "$(jira_check_probe_access)" == ok* ]]; then
-    jira_status="ok"
-  else
-    jira_status="needs-setup"
-  fi
-  render_setup_summary "${shell_name}" "${startup_file}" "${repo_bin_dir}" "${status}" "${jira_status}"
+  render_setup_summary "${repo_root}" "${target_path}" "${link_dir}" "${status}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -6,10 +6,14 @@ Command-line tool for connecting git history, deployed versions, and Jira releas
 
 ## Getting Started
 
+Install with the public one-liner:
+
+`curl -fsSL https://raw.githubusercontent.com/jesperronn/jiggit/main/bin/install | bash`
+
 1. Add curated project config in `config/` or `~/.jiggit/config/`, and shared user Jira settings in `~/.jiggit/config.toml`.
 2. Run `bash bin/lint` to verify shell syntax and lint status.
 3. Run `bash bin/test` to verify the current test suite.
-4. Run `bash bin/setup` if you want `jiggit` available directly on your shell `PATH`.
+4. Run `bash bin/setup` if you want the current checkout exposed as a single `jiggit` symlink on your shell `PATH`.
 5. Use `bash bin/jiggit explore --dry-run --verbose <dir> ...` to inspect candidate repos before writing discovery output.
 6. Run `bash bin/jiggit explore <dir> ...` interactively to review and append discovered entries one by one, or use `--append` / `--replace` for non-interactive flows.
 
@@ -146,6 +150,8 @@ When a value could be interpreted as either, the configured environment name win
   `bash bin/lint && bash bin/test`
 - Add `jiggit` to your shell PATH if it is not already available:
   `bash bin/setup`
+- Install or update `jiggit` from GitHub with one command:
+  `curl -fsSL https://raw.githubusercontent.com/jesperronn/jiggit/main/bin/install | bash`
 
 `release-notes` treats an exact local git ref as a git target first.
 If a fuzzy Jira release query matches multiple releases, it prints the matches and exits instead of guessing.
