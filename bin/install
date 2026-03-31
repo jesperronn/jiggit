@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Render help for the remote installer entrypoint.
+usage() {
+  cat <<'EOF'
+Usage: bin/install
+
+Download or update jiggit from GitHub into ~/.local/share/jiggit and expose a
+single `jiggit` command by symlinking it into one writable directory from PATH.
+
+Intended public usage:
+  curl -fsSL https://raw.githubusercontent.com/jesperronn/jiggit/main/bin/install | bash
+EOF
+}
+
+# Return the GitHub repository slug used for remote installs.
+installer_repo_slug() {
+  printf '%s\n' "${JIGGIT_INSTALL_REPO_SLUG:-jesperronn/jiggit}"
+}
+
+# Return the tracked branch used for archive downloads.
+installer_branch_name() {
+  printf '%s\n' "${JIGGIT_INSTALL_BRANCH:-main}"
+}
+
+# Return the URL used to download the GitHub source archive.
+installer_archive_url() {
+  printf 'https://github.com/%s/archive/refs/heads/%s.tar.gz\n' \
+    "$(installer_repo_slug)" \
+    "$(installer_branch_name)"
+}
+
+# Return the stable local install root for the downloaded checkout.
+installer_install_root() {
+  printf '%s\n' "${JIGGIT_INSTALL_ROOT:-${HOME}/.local/share/jiggit}"
+}
+
+# Return the temporary staging parent used during install/update.
+installer_staging_parent() {
+  printf '%s\n' "${JIGGIT_INSTALL_STAGING_PARENT:-${HOME}/.local/share}"
+}
+
+# Return the stored install metadata path.
+installer_state_file() {
+  printf '%s/.install-state\n' "$(installer_install_root)"
+}
+
+# Print one installer status line.
+installer_log() {
+  printf '[install] %s\n' "$*"
+}
+
+# Fail fast when a required local program is missing.
+require_program() {
+  local program_name="${1:-}"
+
+  if command -v "${program_name}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  printf 'Missing required program: %s\n' "${program_name}" >&2
+  exit 1
+}
+
+# Check the local prerequisites required for download and runtime setup.
+ensure_prerequisites() {
+  local required_program
+
+  for required_program in bash curl git jq tar mktemp; do
+    require_program "${required_program}"
+  done
+}
+
+# Copy a local source tree into the provided staging directory for tests.
+copy_local_source_tree() {
+  local source_dir="${1}"
+  local destination_dir="${2}"
+
+  mkdir -p "${destination_dir}"
+  tar -C "${source_dir}" \
+    --exclude '.git' \
+    --exclude '.DS_Store' \
+    -cf - . | tar -C "${destination_dir}" -xf -
+}
+
+# Download the GitHub archive and expand it into the provided staging directory.
+download_remote_source_tree() {
+  local destination_dir="${1}"
+  local archive_file
+  local extract_dir
+  local extracted_root
+
+  archive_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-install-archive.XXXXXX.tar.gz")"
+  extract_dir="$(mktemp -d "${TMPDIR:-/tmp}/jiggit-install-extract.XXXXXX")"
+
+  installer_log "downloading source archive from $(installer_archive_url)"
+  curl -fsSL "$(installer_archive_url)" -o "${archive_file}"
+  tar -xzf "${archive_file}" -C "${extract_dir}"
+
+  extracted_root="$(find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+  if [[ -z "${extracted_root}" ]]; then
+    printf 'Failed to locate extracted jiggit archive contents.\n' >&2
+    rm -f "${archive_file}"
+    rm -rf "${extract_dir}"
+    exit 1
+  fi
+
+  copy_local_source_tree "${extracted_root}" "${destination_dir}"
+  rm -f "${archive_file}"
+  rm -rf "${extract_dir}"
+}
+
+# Populate the provided staging directory from either a test override or GitHub.
+populate_staging_tree() {
+  local destination_dir="${1}"
+  local source_override="${JIGGIT_INSTALL_SOURCE_DIR:-}"
+
+  if [[ -n "${source_override}" ]]; then
+    installer_log "copying source from ${source_override}"
+    copy_local_source_tree "${source_override}" "${destination_dir}"
+    return 0
+  fi
+
+  download_remote_source_tree "${destination_dir}"
+}
+
+# Return the version string from the staged checkout when available.
+staged_version() {
+  local staging_dir="${1}"
+  local version_file="${staging_dir}/VERSION"
+
+  if [[ -f "${version_file}" ]]; then
+    tr -d '\n' < "${version_file}"
+    return 0
+  fi
+
+  printf 'unknown\n'
+}
+
+# Install the staged checkout into the stable local install root.
+activate_staged_tree() {
+  local staging_dir="${1}"
+  local install_root
+  local install_parent
+  local backup_root
+
+  install_root="$(installer_install_root)"
+  install_parent="$(dirname "${install_root}")"
+  backup_root="${install_root}.previous"
+
+  mkdir -p "${install_parent}"
+  rm -rf "${backup_root}"
+
+  if [[ -d "${install_root}" ]]; then
+    mv "${install_root}" "${backup_root}"
+  fi
+
+  mv "${staging_dir}" "${install_root}"
+  rm -rf "${backup_root}"
+}
+
+# Persist the most recently used symlink directory for later updates.
+write_install_state() {
+  local link_dir="${1:-}"
+  local version_text="${2:-}"
+
+  cat > "$(installer_state_file)" <<EOF
+link_dir=${link_dir}
+version=${version_text}
+EOF
+}
+
+# Read the previously used symlink directory from install metadata.
+read_previous_link_dir() {
+  local state_file
+
+  state_file="$(installer_state_file)"
+  if [[ ! -f "${state_file}" ]]; then
+    return 1
+  fi
+
+  awk -F= '/^link_dir=/{print substr($0, index($0, "=") + 1)}' "${state_file}"
+}
+
+# Run the installed setup helper and let it manage the symlink.
+run_installed_setup() {
+  local install_root
+  local previous_link_dir=""
+  local setup_output
+  local setup_status=0
+
+  install_root="$(installer_install_root)"
+  if previous_link_dir="$(read_previous_link_dir 2>/dev/null)"; then
+    :
+  else
+    previous_link_dir=""
+  fi
+
+  setup_output="$(
+    JIGGIT_LINK_DIR="${JIGGIT_LINK_DIR:-${previous_link_dir}}" \
+      bash "${install_root}/bin/setup"
+  )" || setup_status=$?
+
+  printf '%s\n' "${setup_output}"
+  if [[ "${setup_status}" -ne 0 ]]; then
+    return "${setup_status}"
+  fi
+
+  local selected_link_dir=""
+  selected_link_dir="$(printf '%s\n' "${setup_output}" | awk -F'`' '/- link dir: /{print $2; exit}')"
+  write_install_state "${selected_link_dir}" "$(cat "${install_root}/VERSION" 2>/dev/null || printf 'unknown')"
+}
+
+# Coordinate the download/update flow and wire jiggit into PATH via setup.
+run_main() {
+  local staging_parent
+  local staging_dir
+  local version_text
+
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    return 0
+  fi
+
+  ensure_prerequisites
+
+  staging_parent="$(installer_staging_parent)"
+  mkdir -p "${staging_parent}"
+  staging_dir="$(mktemp -d "${staging_parent}/jiggit-staging.XXXXXX")"
+
+  populate_staging_tree "${staging_dir}"
+  version_text="$(staged_version "${staging_dir}")"
+  activate_staged_tree "${staging_dir}"
+
+  printf '# jiggit install\n\n'
+  printf -- "- repo: \`%s\`\n" "$(installer_repo_slug)"
+  printf -- "- branch: \`%s\`\n" "$(installer_branch_name)"
+  printf -- "- install root: \`%s\`\n" "$(installer_install_root)"
+  printf -- "- version: \`%s\`\n" "${version_text}"
+
+  run_installed_setup
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  run_main "$@"
+fi
