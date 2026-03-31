@@ -109,7 +109,7 @@ test_jira_requests_myself_runs_request_and_prints_next_steps() {
 
   assert_contains "${output}" '{"name":"nine-jrj"}' "print myself response"
   assert_contains "${output}" "Next steps:" "print next steps"
-  assert_contains "${output}" "if successful: bash bin/adhoc/jira_requests.sh project SKOLELOGIN" "show success next step"
+  assert_contains "${output}" "if successful: bin/adhoc/jira_requests.sh project SKOLELOGIN" "show success next step"
   assert_contains "${output}" "if failing: refresh PAT and rerun myself" "show failure next step"
   assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/myself" "call myself once"
 }
@@ -126,7 +126,7 @@ test_jira_requests_all_stops_on_first_failure_by_default() {
   fi
 
   assert_contains "${output}" '{"name":"nine-jrj"}' "run myself before failure"
-  assert_contains "${output}" "if successful: bash bin/adhoc/jira_requests.sh project SKOLELOGIN" "print success next step before failure"
+  assert_contains "${output}" "if successful: bin/adhoc/jira_requests.sh project SKOLELOGIN" "print success next step before failure"
   assert_contains "${output}" "if failing: check project key and permissions" "print failure next step on project failure"
   assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/myself" "call myself first"
   assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/project/SKOLELOGIN" "call project second"

@@ -149,8 +149,8 @@ EOF
   assert_contains "${output}" "env prod: \`ok\` (v2.1.0.26)" "render environment version check"
   assert_contains "${output}" "jira releases: \`ok\` (1 found)" "render jira releases check"
   assert_contains "${output}" "command: \`jiggit doctor project-a\`" "render per-project doctor command hint"
-  assert_contains "${output}" "jiggit: \`warn\` (not directly callable; run bash bin/setup)" "render jiggit PATH warning"
-  assert_contains "${output}" "make jiggit directly callable: \`bash bin/setup\`" "render jiggit setup next step"
+  assert_contains "${output}" "jiggit: \`warn\` (not directly callable; run bin/setup)" "render jiggit PATH warning"
+  assert_contains "${output}" "make jiggit directly callable: \`bin/setup\`" "render jiggit setup next step"
 }
 
 test_run_doctor_main_can_force_colored_headings() {
@@ -293,7 +293,7 @@ EOF
     pass "doctor should fail when the shared Jira auth probe fails"
     assert_contains "${output}" "## Jira Access" "render Jira Access section"
     assert_contains "${output}" "jira access: \`fail\` (auth probe failed; later Jira checks skipped)" "render failed Jira auth probe"
-    assert_contains "${output}" "verify Jira access once: \`bash bin/adhoc/jira_requests.sh myself\`" "suggest a single auth probe"
+    assert_contains "${output}" "verify Jira access once: \`bin/adhoc/jira_requests.sh myself\`" "suggest a single auth probe"
     assert_contains "${output}" "jira project: \`unknown\` (skipped after Jira auth failure)" "mark jira project check unknown after auth failure"
     assert_contains "${output}" "jira releases: \`unknown\` (skipped after Jira auth failure)" "mark jira releases check unknown after auth failure"
   fi

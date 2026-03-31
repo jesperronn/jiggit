@@ -11,11 +11,11 @@ Install with the public one-liner:
 `curl -fsSL https://raw.githubusercontent.com/jesperronn/jiggit/main/bin/install | bash`
 
 1. Add curated project config in `config/` or `~/.jiggit/config/`, and shared user Jira settings in `~/.jiggit/config.toml`.
-2. Run `bash bin/lint` to verify shell syntax and lint status.
-3. Run `bash bin/test` to verify the current test suite.
-4. Run `bash bin/setup` if you want the current checkout exposed as a single `jiggit` symlink on your shell `PATH`.
-5. Use `bash bin/jiggit explore --dry-run --verbose <dir> ...` to inspect candidate repos before writing discovery output.
-6. Run `bash bin/jiggit explore <dir> ...` interactively to review and append discovered entries one by one, or use `--append` / `--replace` for non-interactive flows.
+2. Run `bin/lint` to verify shell syntax and lint status.
+3. Run `bin/test` to verify the current test suite.
+4. Run `bin/setup` if you want the current checkout exposed as `jiggit` on your shell `PATH`.
+5. Use `jiggit explore --dry-run --verbose <dir> ...` to inspect candidate repos before writing discovery output.
+6. Run `jiggit explore <dir> ...` interactively to review and append discovered entries one by one, or use `--append` / `--replace` for non-interactive flows.
 
 Initial bootstrap contents:
 - `docs/jiggit-plan.md` contains the current project plan
@@ -31,6 +31,7 @@ Current commands:
 - `jiggit env-diff [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]`
 - `jiggit doctor [--ignore-failures] [<project|path> ...]`
 - `jiggit jira-check [<project|path>] [--all]`
+- `jiggit jira-setup [<jira-name>]`
 - `jiggit jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run]`
 - `jiggit jira-issues [<project|path>] --release <fixVersion>`
 - `jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>]`
@@ -58,11 +59,11 @@ Project selectors can be:
 You can always override the default scope:
 
 - force one or more explicit projects:
-  `bash bin/jiggit --projects=project_a,project_b overview`
+  `jiggit --projects=project_a,project_b overview`
 - break out of current-repo mode for commands that support many projects:
-  `bash bin/jiggit --all-projects overview`
+  `jiggit --all-projects overview`
 - use a path selector directly:
-  `bash bin/jiggit env-diff . --base prod`
+  `jiggit env-diff . --base prod`
 
 Project config is loaded from:
 - `config/` in the `jiggit` repo
@@ -94,62 +95,57 @@ dev = "https://dev.project-a.example.com/actuator/info"
 
 ## Typical Usecases
 
-- Discover repositories and generate candidate config:
-  `bash bin/jiggit explore --dry-run --verbose ~/src/example`
-- Review discovered entries interactively and append selected ones:
-  `bash bin/jiggit explore ~/src/example/alpha ~/src/example/project_b`
+### Daily Flow
+
+- Check the current project or all configured projects:
+  `jiggit overview`
+- See deployed versions for one project:
+  `jiggit env-versions project_a --verbose`
+- Explain what changed since `prod`:
+  `jiggit env-diff project_a --base prod`
+- Run health checks:
+  `jiggit doctor`
+
+### Release Flow
+
+- Detect whether `prod` is behind and suggest the next release:
+  `jiggit next-release project_a`
+- Show Jira issues for a release:
+  `jiggit jira-issues project_a --release 2.1.0.26`
+- Add a missing fixVersion to commit-linked issues:
+  `jiggit assign-fix-version project_a --release 1.3.0.0`
+- Generate release notes:
+  `jiggit release-notes project_a --from-env prod --target 2.1.0.26`
+
+### Setup And Discovery
+
+- Add `jiggit` to your shell `PATH`:
+  `bin/setup`
+- Discover candidate repos before writing config:
+  `jiggit explore --dry-run --verbose ~/src/example`
+- Review and append discoveries interactively:
+  `jiggit explore ~/src/example/alpha ~/src/example/project_b`
 - Replace the discovery file with fresh findings:
-  `bash bin/jiggit explore --replace ~/src/example/alpha ~/src/example/project_b`
-- Append more repos to existing discoveries:
-  `bash bin/jiggit explore --append ~/src/another-workspace`
-- Show deployed versions for a project's configured environments:
-  `bash bin/jiggit env-versions project_a --verbose`
-- Show deployed versions by running inside the repo:
-  `cd ~/src/example/project_a && bash /Users/jesper/src/jiggit/bin/jiggit env-versions --verbose`
-- Explain the code difference from a base environment to a target environment:
-  `bash bin/jiggit env-diff project_a --base prod --target staging`
-- Explain the code difference using the current directory as the project selector:
-  `cd ~/src/example/project_a && bash /Users/jesper/src/jiggit/bin/jiggit env-diff --base prod --target dev`
-- Compare a base environment against the latest commit on `master`:
-  `bash bin/jiggit env-diff project_a --base prod`
-- Explain a project explicitly by path:
-  `bash bin/jiggit env-diff . --base prod`
-- Compare a base environment against an explicit git tag or commitish:
-  `bash bin/jiggit env-diff project_a --base prod --target v2.1.0.26`
-- Run health checks across all configured projects:
-  `bash bin/jiggit doctor`
-- Run doctor for one project and keep warnings non-fatal:
-  `bash bin/jiggit doctor --ignore-failures project_a`
+  `jiggit explore --replace ~/src/example/alpha ~/src/example/project_b`
+
+### Jira-Only Checks
+
 - Verify Jira auth and project access:
-  `bash bin/jiggit jira-check project_a`
-- Verify Jira auth and project access across every configured project:
-  `bash bin/jiggit jira-check --all`
+  `jiggit jira-check project_a`
+- Repair or create Jira auth config:
+  `jiggit jira-setup`
+- Create a Jira issue draft from the latest commit:
+  `jiggit jira-create project_b --dry-run`
+- List Jira releases/fixVersions:
+  `jiggit releases project_a`
+
 `env-diff` accepts either configured environment names or git refs for `--base` and `--target`.
 When a value could be interpreted as either, the configured environment name wins.
-- Detect whether `prod` is behind and suggest the next release version:
-  `bash bin/jiggit next-release project_a`
-- Add the selected fixVersion to commit-linked Jira issues that are missing it:
-  `bash bin/jiggit assign-fix-version project_a --release 1.3.0.0`
-- Show a read-only dashboard for the current project or all configured projects:
-  `bash bin/jiggit overview`
-- Show a dashboard for a chosen subset of configured projects:
-  `bash bin/jiggit --projects=project_a,project_b overview`
-- Break out of current-repo mode and show all configured projects:
-  `bash bin/jiggit --all-projects overview`
-- Create a Jira issue draft from the latest commit in a configured repo:
-  `bash bin/jiggit jira-create project_b --dry-run`
-- Show Jira issues for a release using fuzzy release matching:
-  `bash bin/jiggit jira-issues project_a --release 2.1.0.26`
-- Generate git-first release notes from prod to a target release:
-  `bash bin/jiggit release-notes project_a --from-env prod --target 2.1.0.26`
-- Generate release notes against an exact git ref target:
-  `bash bin/jiggit release-notes . --from-env prod --target main`
-- List Jira releases/fixVersions for a configured Jira project:
-  `bash bin/jiggit releases project_a`
+
+Additional workflows are easy to discover from each command's built-in next-step hints.
+
 - Run the project checks before or after changes:
-  `bash bin/lint && bash bin/test`
-- Add `jiggit` to your shell PATH if it is not already available:
-  `bash bin/setup`
+  `bin/lint && bin/test`
 - Install or update `jiggit` from GitHub with one command:
   `curl -fsSL https://raw.githubusercontent.com/jesperronn/jiggit/main/bin/install | bash`
 
@@ -173,4 +169,4 @@ user_email = "user@example.com"
 api_token = "token"
 ```
 
-Right now `jiggit` supports one shared Jira for all configured projects. If Jira config is missing, Jira-backed commands fail clearly during config and doctor checks.
+Projects can keep using the default `[jira]` block, or point at named Jira entries when they need more than one Jira host or auth setup.

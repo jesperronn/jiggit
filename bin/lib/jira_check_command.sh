@@ -256,11 +256,11 @@ render_jira_check_access_body() {
       missing-config|failed)
         printf -- "- next step: \`jiggit jira-setup\`\n"
         if [[ "${access_state}" == "failed" ]]; then
-          printf -- "- verify Jira access once: \`bash bin/adhoc/jira_requests.sh myself\`\n"
+          printf -- "- verify Jira access once: \`bin/adhoc/jira_requests.sh myself\`\n"
         fi
         ;;
       missing-prereq)
-        printf -- "- next step: \`bash bin/setup\`\n"
+        printf -- "- next step: \`bin/setup\`\n"
         ;;
     esac
     printf '\n'

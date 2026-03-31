@@ -316,8 +316,8 @@ render_doctor_prereqs() {
   if command -v jiggit >/dev/null 2>&1; then
     doctor_emit_check "jiggit" "ok" "directly callable"
   else
-    doctor_emit_check "jiggit" "warn" "not directly callable; run bash bin/setup"
-    doctor_emit_next_step "make jiggit directly callable" "bash bin/setup"
+    doctor_emit_check "jiggit" "warn" "not directly callable; run bin/setup"
+    doctor_emit_next_step "make jiggit directly callable" "bin/setup"
   fi
   printf '\n'
 }
