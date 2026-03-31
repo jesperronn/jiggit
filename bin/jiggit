@@ -1,7 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+JIGGIT_SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "${JIGGIT_SCRIPT_PATH}" ]]; do
+  JIGGIT_SCRIPT_DIR="$(cd -P "$(dirname "${JIGGIT_SCRIPT_PATH}")" > /dev/null 2>&1 && pwd)"
+  JIGGIT_NEXT_PATH="$(readlink "${JIGGIT_SCRIPT_PATH}")"
+  if [[ "${JIGGIT_NEXT_PATH}" != /* ]]; then
+    JIGGIT_SCRIPT_PATH="${JIGGIT_SCRIPT_DIR}/${JIGGIT_NEXT_PATH}"
+  else
+    JIGGIT_SCRIPT_PATH="${JIGGIT_NEXT_PATH}"
+  fi
+done
+JIGGIT_SCRIPT_DIR="$(cd -P "$(dirname "${JIGGIT_SCRIPT_PATH}")" > /dev/null 2>&1 && pwd)"
+JIGGIT_REPO_ROOT="$(cd -P "${JIGGIT_SCRIPT_DIR}/.." > /dev/null 2>&1 && pwd)"
+readonly JIGGIT_SCRIPT_PATH
+readonly JIGGIT_SCRIPT_DIR
+readonly JIGGIT_REPO_ROOT
+unset JIGGIT_NEXT_PATH
+pushd "${JIGGIT_REPO_ROOT}" > /dev/null || exit 1
+
+# Return the tracked jiggit version from the checkout metadata.
+jiggit_version() {
+  local version_file="${JIGGIT_REPO_ROOT}/VERSION"
+
+  if [[ -f "${version_file}" ]]; then
+    tr -d '\n' < "${version_file}"
+    return 0
+  fi
+
+  printf 'unknown\n'
+}
 
 source bin/lib/explore.sh
 source bin/lib/assign_fix_version_command.sh
@@ -25,8 +53,10 @@ usage() {
   cat <<'USAGE'
 Usage:
   jiggit [--projects=<project[,project...]>] [--all-projects] [--verbose] <command> ...
+  jiggit --version
   jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--verbose]
   jiggit help
+  jiggit version
   jiggit changelog [<project|path>] --from <git-ref> --to <git-ref> [--verbose]
   jiggit config [--global|--no-projects] [<project|path> ...] [--verbose]
   jiggit compare [<project|path>] --from <git-ref> --to <git-ref> [--verbose]
@@ -60,6 +90,9 @@ Commands:
 
   help
     Show this help text.
+
+  version, --version
+    Show the installed jiggit version.
 
   assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--verbose]
     Add the chosen Jira fixVersion to issues in the base-to-target commit span
@@ -192,6 +225,9 @@ run_main() {
   local command="${1:-help}"
 
   case "${command}" in
+    version|--version)
+      printf 'jiggit %s\n' "$(jiggit_version)"
+      ;;
     help|-h|--help)
       usage
       ;;

@@ -119,6 +119,14 @@ test_jiggit_help_lists_global_verbose_flag() {
   assert_contains "${output}" "--verbose" "help lists global --verbose flag"
 }
 
+test_jiggit_help_lists_version_command() {
+  local output
+  output="$(bash bin/jiggit help)"
+
+  assert_contains "${output}" "jiggit --version" "help lists --version"
+  assert_contains "${output}" "jiggit version" "help lists version command"
+}
+
 test_jiggit_config_accepts_global_verbose_flag() {
   local output
   output="$(bash bin/jiggit config --verbose 2>&1)"
@@ -132,6 +140,20 @@ test_jiggit_config_help_lists_global_and_project_args() {
   output="$(bash bin/jiggit help)"
 
   assert_contains "${output}" "jiggit config [--global|--no-projects] [<project|path> ...]" "help lists config project args and global flag"
+}
+
+test_jiggit_dash_dash_version_prints_version() {
+  local output
+  output="$(bash bin/jiggit --version)"
+
+  assert_eq "jiggit $(cat VERSION)" "${output}" "--version prints tracked version"
+}
+
+test_jiggit_version_command_prints_version() {
+  local output
+  output="$(bash bin/jiggit version)"
+
+  assert_eq "jiggit $(cat VERSION)" "${output}" "version command prints tracked version"
 }
 
 run_tests "$@"
