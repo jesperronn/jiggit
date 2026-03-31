@@ -158,7 +158,7 @@ run_all_probes() {
   local overall_rc=0
 
   if run_probe_step \
-    "bash bin/adhoc/jira_requests.sh project ${project_key}" \
+    "bin/adhoc/jira_requests.sh project ${project_key}" \
     "refresh PAT and rerun myself" \
     run_myself_probe "${base_url}"; then
     rc=0
@@ -174,7 +174,7 @@ run_all_probes() {
   printf '\n'
 
   if run_probe_step \
-    "bash bin/adhoc/jira_requests.sh versions ${project_key}" \
+    "bin/adhoc/jira_requests.sh versions ${project_key}" \
     "check project key and permissions" \
     run_project_probe "${base_url}" "${project_key}"; then
     rc=0
@@ -278,7 +278,7 @@ main() {
       ;;
     myself)
       if run_probe_step \
-        "bash bin/adhoc/jira_requests.sh project ${JIRA_PROJECT_KEY}" \
+        "bin/adhoc/jira_requests.sh project ${JIRA_PROJECT_KEY}" \
         "refresh PAT and rerun myself" \
         run_myself_probe "${JIRA_BASE_URL}"; then
         return 0
@@ -294,7 +294,7 @@ main() {
         return 1
       fi
       if run_probe_step \
-        "bash bin/adhoc/jira_requests.sh versions ${1}" \
+        "bin/adhoc/jira_requests.sh versions ${1}" \
         "check project key and permissions" \
         run_project_probe "${JIRA_BASE_URL}" "${1}"; then
         return 0
