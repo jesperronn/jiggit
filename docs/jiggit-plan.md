@@ -36,7 +36,8 @@ Two product decisions are locked:
 ### Partially implemented
 - `jiggit next-release`
   implemented as drift detection, suggested next minor version, unreleased Jira issue review, interactive Jira release creation, and overview integration
-  remaining work is mostly presentation polish rather than missing core behavior
+  currently being reworked so the command first reads Jira release versions, then compares the suggested version against local git tags, and finally reports the combined readiness matrix
+  remaining work is mostly presentation polish and the exact behavior matrix for cases where Jira and git disagree or are both missing
 - `jiggit doctor`
   implemented as health checks plus a default interactive repair flow for shared Jira config and common per-project gaps
   now repairs shared Jira config, remote URLs, Jira project keys, Jira regexes, environments, version expressions, and environment URLs when it can do so safely
@@ -312,6 +313,8 @@ Behavior:
 - Resolve the default target branch/ref from the repo when no explicit target is provided.
 - Count commits between base and target.
 - Suggest the next release version, defaulting to a minor bump.
+- Read the Jira release list first, then compare the suggested version against the local git tag inventory.
+- Show a release matrix for the suggested version so the command can report whether Jira, git, both, or neither currently contain it.
 - Show unreleased Jira issues/stories for the span between the base and target.
 - Reuse shared Jira issue metadata so the next-release report includes current `fixVersions`.
 - In the unreleased issue list:
@@ -326,8 +329,8 @@ Behavior:
 - Detect when production is behind and newer commits exist.
 - Suggest a next release version automatically.
 - Default the suggestion to a minor-version bump.
-- Current implementation stops here.
 - Later let the user review and confirm before creating the Jira release in Jira.
+- Future iterations should make the Jira/git release-state matrix explicit enough to handle the common cases where only Jira exists, only git exists, both exist, or neither exists yet.
 
 ### `jiggit assign-fix-version [<project|path>] --release <fixVersion>`
 Purpose:

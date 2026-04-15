@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
+
 set -euo pipefail
+
+if [[ "${1-}" == "source" ]]; then
+  JIGGIT_SOURCE_ONLY=1
+  shift || true
+else
+  JIGGIT_SOURCE_ONLY=0
+fi
 
 JIGGIT_SCRIPT_PATH="${BASH_SOURCE[0]}"
 while [[ -L "${JIGGIT_SCRIPT_PATH}" ]]; do
@@ -17,7 +26,14 @@ readonly JIGGIT_SCRIPT_PATH
 readonly JIGGIT_SCRIPT_DIR
 readonly JIGGIT_REPO_ROOT
 unset JIGGIT_NEXT_PATH
-pushd "${JIGGIT_REPO_ROOT}" > /dev/null || exit 1
+
+JIGGIT_FLAG_VERBOSE=0
+JIGGIT_GLOBAL_PROJECTS_VALUE=""
+JIGGIT_GLOBAL_ALL_PROJECTS=0
+JIGGIT_COLOR_ENABLED=0
+JIGGIT_REPO_READY=0
+JIGGIT_STRIPPED_ARGS=()
+JIGGIT_POSITIONAL_ARGS=()
 
 # Return the tracked jiggit version from the checkout metadata.
 jiggit_version() {
@@ -31,26 +47,142 @@ jiggit_version() {
   printf 'unknown\n'
 }
 
-source bin/lib/explore.sh
-source bin/lib/assign_fix_version_command.sh
-source bin/lib/changelog_command.sh
-source bin/lib/compare_command.sh
-source bin/lib/config_command.sh
-source bin/lib/doctor_command.sh
-source bin/lib/env_diff_command.sh
-source bin/lib/env_versions_command.sh
-source bin/lib/jira_create.sh
-source bin/lib/jira_check_command.sh
-source bin/lib/jira_setup_command.sh
-source bin/lib/jira_issues_command.sh
-source bin/lib/next_release_command.sh
-source bin/lib/overview_command.sh
-source bin/lib/release_notes_command.sh
-source bin/lib/releases_command.sh
+# Reset the top-level jiggit CLI state before parsing a new argv.
+jiggit_reset_state() {
+  JIGGIT_FLAG_VERBOSE=0
+  JIGGIT_GLOBAL_PROJECTS_VALUE=""
+  JIGGIT_GLOBAL_ALL_PROJECTS=0
+  JIGGIT_STRIPPED_ARGS=()
+  JIGGIT_POSITIONAL_ARGS=()
+}
+
+# Print text with optional ANSI styling.
+color_print() {
+  local style="${1:-}"
+  shift || true
+
+  if [[ "${JIGGIT_COLOR_ENABLED:-0}" -eq 1 && -n "${style}" ]]; then
+    printf '%b%s%b\n' "${style}" "$*" $'\033[0m'
+    return 0
+  fi
+
+  printf '%s\n' "$*"
+}
+
+# Print a styled informational line.
+jiggit_info() {
+  color_print $'\033[1;36m' "$*"
+}
+
+# Print one styled heading line for help output.
+jiggit_help_heading() {
+  color_print $'\033[1;36m' "$*"
+}
+
+# Print one styled command or option label for help output.
+jiggit_help_label() {
+  color_print $'\033[1;32m' "$*"
+}
+
+# Render one help line with optional heading/label styling.
+jiggit_render_help_line() {
+  local line="${1:-}"
+
+  case "${line}" in
+    "Usage:"|"Commands:"|"  Global flags:")
+      jiggit_help_heading "${line}"
+      ;;
+    "    --"*|"  help"|"  version, --version"|"  assign-fix-version "*|"  changelog "*|"  config "*|"  compare "*|"  dash "*|"  doctor "*|"  diagnostics "*|"  env-diff "*|"  env-versions "*|"  explore "*|"  jira-check "*|"  jira-setup "*|"  jira-create "*|"  jira-issues "*|"  next-release "*|"  overview "*|"  release-notes "*|"  releases "*)
+      jiggit_help_label "${line}"
+      ;;
+    *)
+      printf '%s\n' "${line}"
+      ;;
+  esac
+}
+
+# Return success when top-level verbose mode is enabled.
+jiggit_is_verbose() {
+  [[ "${JIGGIT_FLAG_VERBOSE:-0}" -eq 1 ]]
+}
+
+# Print a styled warning line.
+jiggit_warn() {
+  color_print $'\033[1;33m' "$*" >&2
+}
+
+# Print a styled error line.
+jiggit_error() {
+  color_print $'\033[1;31m' "$*" >&2
+}
+
+# Enable the shared verbose troubleshooting mode for all subcommands.
+enable_verbose_mode() {
+  JIGGIT_FLAG_VERBOSE=1
+  export JIGGIT_VERBOSE=1
+  export VERBOSE=true
+  export JIGGIT_EXPLORE_VERBOSE=1
+  export JIGGIT_ENV_VERSIONS_VERBOSE=1
+  export JIGGIT_ENV_DIFF_VERBOSE=1
+}
+
+# Remove any --verbose flags from the provided argv while enabling verbose mode.
+strip_verbose_flags() {
+  local arg
+
+  JIGGIT_STRIPPED_ARGS=()
+  for arg in "$@"; do
+    if [[ "${arg}" == "--verbose" ]]; then
+      enable_verbose_mode
+      continue
+    fi
+    JIGGIT_STRIPPED_ARGS+=("${arg}")
+  done
+}
+
+# Source the subcommand implementations from the repository checkout.
+jiggit_load_commands() {
+  # shellcheck source=bin/lib/explore.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/explore.sh"
+  # shellcheck source=bin/lib/assign_fix_version_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/assign_fix_version_command.sh"
+  # shellcheck source=bin/lib/changelog_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/changelog_command.sh"
+  # shellcheck source=bin/lib/compare_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/compare_command.sh"
+  # shellcheck source=bin/lib/config_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/config_command.sh"
+  # shellcheck source=bin/lib/doctor_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/doctor_command.sh"
+  # shellcheck source=bin/lib/env_diff_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/env_diff_command.sh"
+  # shellcheck source=bin/lib/env_versions_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/env_versions_command.sh"
+  # shellcheck source=bin/lib/jira_create.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/jira_create.sh"
+  # shellcheck source=bin/lib/jira_check_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/jira_check_command.sh"
+  # shellcheck source=bin/lib/jira_setup_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/jira_setup_command.sh"
+  # shellcheck source=bin/lib/jira_issues_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/jira_issues_command.sh"
+  # shellcheck source=bin/lib/next_release_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/next_release_command.sh"
+  # shellcheck source=bin/lib/overview_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/overview_command.sh"
+  # shellcheck source=bin/lib/release_notes_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/release_notes_command.sh"
+  # shellcheck source=bin/lib/releases_command.sh
+  source "${JIGGIT_REPO_ROOT}/bin/lib/releases_command.sh"
+}
 
 # Render the top-level CLI help for jiggit subcommands.
-usage() {
-  cat <<'USAGE'
+jiggit_usage() {
+  local line
+
+  while IFS= read -r line; do
+    jiggit_render_help_line "${line}"
+  done <<'USAGE'
 Usage:
   jiggit [--projects=<project[,project...]>] [--all-projects] [--verbose] <command> ...
   jiggit --version
@@ -161,67 +293,95 @@ Commands:
 USAGE
 }
 
-# Enable the shared verbose troubleshooting mode for all subcommands.
-enable_verbose_mode() {
-  export JIGGIT_VERBOSE=1
-  export VERBOSE=true
-  export JIGGIT_EXPLORE_VERBOSE=1
-  export JIGGIT_ENV_VERSIONS_VERBOSE=1
-  export JIGGIT_ENV_DIFF_VERBOSE=1
-}
-
-# Remove any --verbose flags from the provided argv while enabling verbose mode.
-strip_verbose_flags() {
-  local arg
-
-  JIGGIT_STRIPPED_ARGS=()
-  for arg in "$@"; do
-    if [[ "${arg}" == "--verbose" ]]; then
-      enable_verbose_mode
-      continue
-    fi
-    JIGGIT_STRIPPED_ARGS+=("${arg}")
-  done
-}
-
 # Parse top-level project-scope flags before dispatching to a subcommand.
-run_with_global_options() {
-  local projects_value=""
-  local all_projects=0
-
+parse_opts() {
+  jiggit_reset_state
   while [[ $# -gt 0 ]]; do
     case "${1}" in
       --projects=*)
-        projects_value="${1#--projects=}"
+        JIGGIT_GLOBAL_PROJECTS_VALUE="${1#--projects=}"
         shift
         ;;
       --projects)
-        projects_value="${2:-}"
+        if [[ $# -lt 2 ]]; then
+          jiggit_error "Missing value for --projects"
+      jiggit_usage >&2
+      return 2
+        fi
+        JIGGIT_GLOBAL_PROJECTS_VALUE="${2}"
         shift 2
         ;;
       --all-projects)
-        all_projects=1
+        JIGGIT_GLOBAL_ALL_PROJECTS=1
         shift
         ;;
+      -h|--help)
+        JIGGIT_POSITIONAL_ARGS=("help")
+        break
+        ;;
+      --version)
+        JIGGIT_POSITIONAL_ARGS=("version")
+        break
+        ;;
+      --verbose)
+        enable_verbose_mode
+        shift
+        ;;
+      --)
+        shift
+        JIGGIT_POSITIONAL_ARGS=("$@")
+        break
+        ;;
+      -*)
+        jiggit_warn "Unknown option: ${1}"
+        jiggit_usage >&2
+        return 2
+        ;;
       *)
+        JIGGIT_POSITIONAL_ARGS=("$@")
         break
         ;;
     esac
   done
 
-  if [[ -n "${projects_value}" ]]; then
-    export JIGGIT_PROJECT_SELECTORS="${projects_value}"
+  if [[ ${#JIGGIT_POSITIONAL_ARGS[@]} -eq 0 ]]; then
+    JIGGIT_POSITIONAL_ARGS=("help")
+  fi
+
+  strip_verbose_flags "${JIGGIT_POSITIONAL_ARGS[@]}"
+}
+
+# Detect terminal capabilities and prepare the runtime environment.
+parse_prereqs() {
+  if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    JIGGIT_COLOR_ENABLED=1
+  else
+    JIGGIT_COLOR_ENABLED=0
+  fi
+
+  if [[ -n "${JIGGIT_GLOBAL_PROJECTS_VALUE}" ]]; then
+    export JIGGIT_PROJECT_SELECTORS="${JIGGIT_GLOBAL_PROJECTS_VALUE}"
   else
     unset JIGGIT_PROJECT_SELECTORS || true
   fi
-  export JIGGIT_ALL_PROJECTS="${all_projects}"
+  export JIGGIT_ALL_PROJECTS="${JIGGIT_GLOBAL_ALL_PROJECTS}"
+}
 
-  strip_verbose_flags "$@"
-  run_main "${JIGGIT_STRIPPED_ARGS[@]}"
+# Change into the repo root once before command dispatch.
+jiggit_enter_repo_root() {
+  if [[ "${JIGGIT_REPO_READY:-0}" -eq 1 ]]; then
+    return 0
+  fi
+
+  pushd "${JIGGIT_REPO_ROOT}" > /dev/null || {
+    jiggit_error "Failed to enter repo root: ${JIGGIT_REPO_ROOT}"
+    return 1
+  }
+  JIGGIT_REPO_READY=1
 }
 
 # Dispatch the selected jiggit subcommand to its implementation.
-run_main() {
+dispatch_command() {
   local command="${1:-help}"
 
   case "${command}" in
@@ -304,13 +464,34 @@ run_main() {
       run_releases_main "$@"
       ;;
     *)
-      printf 'Unknown command: %s\n\n' "${command}" >&2
-      usage >&2
+      jiggit_error "Unknown command: ${command}"
+      printf '\n' >&2
+      jiggit_usage >&2
       return 1
       ;;
   esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  run_with_global_options "$@"
+# Parse, prepare, and dispatch the requested jiggit command.
+jiggit_run_main() {
+  parse_opts "$@" || return $?
+  parse_prereqs || return $?
+  jiggit_enter_repo_root || return $?
+  dispatch_command "${JIGGIT_STRIPPED_ARGS[@]}"
+}
+
+jiggit_load_commands
+
+# Reclaim the public entrypoint name after sourcing helpers that may define run_main.
+usage() {
+  jiggit_usage
+}
+
+# Reclaim the public entrypoint name after sourcing helpers that may define run_main.
+run_main() {
+  jiggit_run_main "$@"
+}
+
+if (( ! JIGGIT_SOURCE_ONLY )); then
+  run_main "$@"
 fi
