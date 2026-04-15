@@ -9,10 +9,12 @@ source bin/lib/next_release_command.sh
 TEST_TMPDIR=""
 declare -A JIGGIT_TEST_ENV_VERSION_BY_NAME=()
 JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG=""
+JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG=""
 
 setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-next-release-test.XXXXXX)"
   JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG="${TEST_TMPDIR}/create-release.log"
+  JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG="${TEST_TMPDIR}/fetch-issues.log"
   # shellcheck disable=SC2034
   JIGGIT_CAN_PROMPT_INTERACTIVELY="false"
   # shellcheck disable=SC2034
@@ -61,6 +63,11 @@ fetch_project_environment_version() {
 }
 
 fetch_jira_issues_by_keys() {
+  local jira_base_url="${1}"
+  local auth_reference="${2:-}"
+  shift 2 || true
+
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG}"
   cat <<'EOF'
 {
   "issues": [
@@ -97,7 +104,22 @@ EOF
 
 fetch_jira_releases() {
   cat <<'EOF'
-[]
+[
+  {
+    "name": "1.2.0.0",
+    "released": true,
+    "archived": false,
+    "releaseDate": "2026-02-10",
+    "issuesStatusForFixVersion": { "toDo": 0, "inProgress": 0, "done": 3 }
+  },
+  {
+    "name": "1.4.0.0",
+    "released": false,
+    "archived": false,
+    "releaseDate": "2026-04-30",
+    "issuesStatusForFixVersion": { "toDo": 2, "inProgress": 1, "done": 4 }
+  }
+]
 EOF
 }
 
@@ -139,6 +161,9 @@ EOF
       run_next_release_main next-release-project
   )"
 
+  local fetch_log
+  fetch_log="$(cat "${JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG}")"
+
   assert_contains "${output}" "# jiggit next-release" "render next-release heading"
   assert_contains "${output}" "Base: \`prod\`" "default base to prod"
   assert_contains "${output}" "Base version: \`v1.2.0.0\`" "render base version"
@@ -147,12 +172,20 @@ EOF
   assert_contains "${output}" "Status: \`release-needed\`" "render release-needed status"
   assert_contains "${output}" "Suggested next release: \`v1.3.0.0\`" "suggest next minor release"
   assert_contains "${output}" "github.com/example/next-release-repo/compare/" "render compare url"
+  assert_contains "${output}" "## Release Matrix" "render release matrix section"
+  assert_contains "${output}" "combined state: \`missing-both\`" "render combined missing state"
+  assert_contains "${output}" "## Jira Releases" "render jira release inventory"
+  assert_contains "${output}" "\`1.4.0.0\`" "render jira release inventory entry"
+  assert_contains "${output}" "## Jira Release" "render jira release creation status"
+  assert_contains "${output}" "status: \`missing\`" "render jira release creation outcome"
+  assert_contains "${output}" "detail: \`run interactively to create it\`" "render interactive creation next step"
   assert_contains "${output}" "## Unreleased Jira Issues" "render unreleased Jira issues section"
   assert_contains "${output}" "ALPHA-2" "render first unreleased jira issue"
   assert_contains "${output}" "release_match: \`expected-fix-version\`" "mark issue with expected fix version"
   assert_contains "${output}" "release_match: \`missing-fix-version\`" "mark issue with missing fix version"
   assert_contains "${output}" "## Next Steps" "render next-release next steps section"
   assert_contains "${output}" "jiggit releases next-release-project" "suggest releases command"
+  assert_contains "${fetch_log}" "https://jira.example.test||ALPHA-2 ALPHA-3" "pass all unreleased issue keys with blank auth reference"
 }
 
 test_run_next_release_main_can_force_colored_issue_states() {

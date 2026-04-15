@@ -177,7 +177,7 @@ render_overview_next_release_issues() {
     return 0
   fi
 
-  if ! issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${issue_keys[@]}" 2>/dev/null)"; then
+  if ! issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}" 2>/dev/null)"; then
     fetch_failed=1
   fi
 

@@ -495,7 +495,7 @@ run_release_notes_main() {
   build_release_notes_buckets "${repo_path}" "${git_range}" "${project_id}"
   if [[ -n "${RELEASE_NOTES_ISSUE_KEYS}" && -n "${jira_base_url_value}" ]]; then
     mapfile -t issue_keys < <(printf '%s\n' "${RELEASE_NOTES_ISSUE_KEYS}" | sed '/^$/d')
-    issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${issue_keys[@]}")"
+    issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}")"
   fi
 
   if [[ "${target_kind}" == "release" ]]; then

@@ -7,6 +7,16 @@ if ! declare -F load_project_config >/dev/null 2>&1; then
   source "$(dirname "${BASH_SOURCE[0]}")/explore.sh"
 fi
 
+if ! declare -F require_program >/dev/null 2>&1 || ! declare -F jira_auth_args >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  source "$(dirname "${BASH_SOURCE[0]}")/jira_create.sh"
+fi
+
+if ! declare -F jira_issue_fix_version_display >/dev/null 2>&1 || ! declare -F jira_issues_url_encode >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  source "$(dirname "${BASH_SOURCE[0]}")/jira_issues_command.sh"
+fi
+
 if ! declare -F normalize_version >/dev/null 2>&1; then
   # shellcheck disable=SC1091
   source "$(dirname "${BASH_SOURCE[0]}")/../git_diff_expr"
@@ -105,6 +115,47 @@ compare_commit_count() {
   git -C "${repo_path}" rev-list --count "${git_range}"
 }
 
+# Fetch Jira issue details for a list of issue keys.
+fetch_jira_issues_by_keys() {
+  local jira_base_url="${1}"
+  shift
+  local -a keys=("$@")
+  local jql=""
+  local joined_keys=""
+  local encoded_jql=""
+  local -a auth_args=()
+
+  if [[ ${#keys[@]} -eq 0 ]]; then
+    printf '{"issues":[]}\n'
+    return 0
+  fi
+
+  joined_keys="$(printf '"%s",' "${keys[@]}")"
+  joined_keys="${joined_keys%,}"
+  jql="key in (${joined_keys}) ORDER BY key ASC"
+  encoded_jql="$(jira_issues_url_encode "${jql}")"
+  mapfile -t auth_args < <(jira_auth_args)
+
+  curl --silent --show-error --fail \
+    "${auth_args[@]}" \
+    -H "Accept: application/json" \
+    "${jira_base_url%/}/rest/api/2/search?jql=${encoded_jql}&fields=summary,status,labels,fixVersions"
+}
+
+# Fetch Jira issue details for issue keys found in the compare range.
+compare_fetch_issues_json() {
+  local jira_base_url_value="${1}"
+  shift
+  local -a issue_keys=("$@")
+
+  if [[ -z "${jira_base_url_value}" || ${#issue_keys[@]} -eq 0 ]]; then
+    printf '{"issues":[]}\n'
+    return 0
+  fi
+
+  fetch_jira_issues_by_keys "${jira_base_url_value}" "${issue_keys[@]}"
+}
+
 # Build a compare URL when a supported remote URL is available.
 compare_url_for_project() {
   local project_id="${1}"
@@ -122,6 +173,27 @@ compare_url_for_project() {
   build_compare_url "${start_ref}" "${end_ref}"
 }
 
+# Render detailed Jira issue entries for compare.
+render_compare_issue_details() {
+  local issues_json="${1}"
+  local issue_json
+  local rendered_any=0
+
+  while IFS= read -r issue_json; do
+    [[ -z "${issue_json}" ]] && continue
+    printf -- "- \`%s\`\n" "$(printf '%s\n' "${issue_json}" | jq -r '.key // "unknown"')"
+    printf "  - title: \`%s\`\n" "$(printf '%s\n' "${issue_json}" | jq -r '.fields.summary // "unknown"')"
+    printf "  - status: \`%s\`\n" "$(printf '%s\n' "${issue_json}" | jq -r '.fields.status.name // "unknown"')"
+    printf "  - labels: \`%s\`\n" "$(printf '%s\n' "${issue_json}" | jq -r 'if (.fields.labels // []) == [] then "none" else (.fields.labels | join(", ")) end')"
+    printf "  - fix_version: \`%s\`\n" "$(jira_issue_fix_version_display "${issue_json}")"
+    rendered_any=1
+  done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
+
+  if [[ ${rendered_any} -eq 0 ]]; then
+    printf '_No Jira issue details returned for these commit keys._\n'
+  fi
+}
+
 # Render the Markdown compare report for a project and range.
 render_compare_summary() {
   local project_id="${1}"
@@ -130,7 +202,9 @@ render_compare_summary() {
   local to_norm="${4}"
   local commit_count="${5}"
   local compare_url="${6}"
-  local issue_keys="${7}"
+  local issue_keys_text="${7}"
+  local issues_json="${8}"
+  local jira_fetch_status="${9}"
   local issue_key
 
   print_markdown_h1 "jiggit compare"
@@ -146,13 +220,28 @@ render_compare_summary() {
   printf '\n'
   print_markdown_h2 "Jira Keys" "${C_CYAN}"
   printf '\n'
-  if [[ -z "${issue_keys}" ]]; then
+  if [[ -z "${issue_keys_text}" ]]; then
     printf '_No Jira keys found in commit history for this range._\n'
   else
     while IFS= read -r issue_key; do
       [[ -z "${issue_key}" ]] && continue
       printf -- "- \`%s\`\n" "${issue_key}"
-    done <<< "${issue_keys}"
+    done <<< "${issue_keys_text}"
+  fi
+
+  printf '\n'
+  print_markdown_h2 "Jira Issues" "${C_GREEN}"
+  printf '\n'
+  if [[ -z "${issue_keys_text}" ]]; then
+    printf '_No Jira issues mentioned in commit history for this range._\n'
+  elif [[ "${jira_fetch_status}" == "missing-config" ]]; then
+    printf -- "- status: \`missing jira base url\`\n"
+    printf -- "- next step: \`jiggit config\`\n"
+  elif [[ "${jira_fetch_status}" == "fetch-failed" ]]; then
+    printf -- "- status: \`unable to fetch jira issues\`\n"
+    printf -- "- next step: \`jiggit jira-check %s\`\n" "${project_id}"
+  else
+    render_compare_issue_details "${issues_json}"
   fi
 }
 
@@ -200,6 +289,7 @@ run_compare_main() {
     return 1
   fi
 
+  require_program jq
   load_project_config
 
   local project_id
@@ -228,6 +318,10 @@ run_compare_main() {
   local git_range
   local commit_count
   local issue_keys
+  local jira_base_url_value=""
+  local issues_json='{"issues":[]}'
+  local jira_fetch_status="ok"
+  local -a issue_key_list=()
   local compare_url=""
 
   from_norm="$(compare_normalize_version "${repo_path}" "${from_ref}" | tr -d '\n')"
@@ -241,7 +335,18 @@ run_compare_main() {
   git_range="${from_norm}..${to_norm}"
   commit_count="$(compare_commit_count "${repo_path}" "${git_range}")"
   issue_keys="$(compare_issue_keys "${repo_path}" "${git_range}" "${project_id}")"
+  jira_base_url_value="$(jira_base_url "${project_id}")"
+  if [[ -n "${issue_keys}" ]]; then
+    mapfile -t issue_key_list < <(printf '%s\n' "${issue_keys}" | sed '/^$/d')
+    if [[ ${#issue_key_list[@]} -gt 0 ]]; then
+      if [[ -z "${jira_base_url_value}" ]]; then
+        jira_fetch_status="missing-config"
+      elif ! issues_json="$(compare_fetch_issues_json "${jira_base_url_value}" "${issue_key_list[@]}" 2>/dev/null)"; then
+        jira_fetch_status="fetch-failed"
+      fi
+    fi
+  fi
   compare_url="$(compare_url_for_project "${project_id}" "${repo_path}" "refs/tags/${from_norm}" "refs/tags/${to_norm}" || true)"
 
-  render_compare_summary "${project_id}" "${repo_path}" "${from_norm}" "${to_norm}" "${commit_count}" "${compare_url}" "${issue_keys}"
+  render_compare_summary "${project_id}" "${repo_path}" "${from_norm}" "${to_norm}" "${commit_count}" "${compare_url}" "${issue_keys}" "${issues_json}" "${jira_fetch_status}"
 }

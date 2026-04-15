@@ -8,11 +8,13 @@ source bin/lib/assign_fix_version_command.sh
 
 TEST_TMPDIR=""
 JIGGIT_TEST_ASSIGN_FIX_VERSION_UPDATE_LOG=""
+JIGGIT_TEST_ASSIGN_FIX_VERSION_FETCH_LOG=""
 declare -A JIGGIT_TEST_ENV_VERSION_BY_NAME=()
 
 setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-assign-fix-version-test.XXXXXX)"
   JIGGIT_TEST_ASSIGN_FIX_VERSION_UPDATE_LOG="${TEST_TMPDIR}/update.log"
+  JIGGIT_TEST_ASSIGN_FIX_VERSION_FETCH_LOG="${TEST_TMPDIR}/fetch.log"
   JIGGIT_PROMPT_INPUT_FILE=""
   JIGGIT_CAN_PROMPT_INTERACTIVELY=false
 }
@@ -67,6 +69,11 @@ EOF
 }
 
 fetch_jira_issues_by_keys() {
+  local jira_base_url="${1}"
+  local auth_reference="${2:-}"
+  shift 2 || true
+
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${JIGGIT_TEST_ASSIGN_FIX_VERSION_FETCH_LOG}"
   cat <<'EOF'
 {
   "issues": [
@@ -137,6 +144,8 @@ EOF
 
   local update_log
   update_log="$(cat "${JIGGIT_TEST_ASSIGN_FIX_VERSION_UPDATE_LOG}")"
+  local fetch_log
+  fetch_log="$(cat "${JIGGIT_TEST_ASSIGN_FIX_VERSION_FETCH_LOG}")"
   assert_contains "${output}" "# jiggit assign-fix-version" "render assign-fix-version heading"
   assert_contains "${output}" "Release: \`1.3.0.0\`" "resolve canonical release name"
   assert_contains "${output}" "fix_version: \`1.3.0.0\`" "render existing fix version"
@@ -145,6 +154,7 @@ EOF
   assert_contains "${output}" "## Update Result" "render update result section"
   assert_contains "${output}" "applied: \`1\`" "report applied update count"
   assert_contains "${update_log}" "https://jira.example.test|ALPHA-3|1.3.0.0" "update only the missing issue"
+  assert_contains "${fetch_log}" "https://jira.example.test||ALPHA-2 ALPHA-3" "pass all issue keys with blank auth reference"
 }
 
 test_run_assign_fix_version_main_prints_matches_when_release_is_ambiguous() {

@@ -81,8 +81,9 @@ fetch_project_environment_version() {
 
 fetch_jira_issues_by_keys() {
   local jira_base_url="${1}"
-  shift
-  printf 'issues-by-key|%s|%s\n' "${jira_base_url}" "$*" >> "${TEST_TMPDIR}/fetch.log"
+  local auth_reference="${2:-}"
+  shift 2 || true
+  printf 'issues-by-key|%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${TEST_TMPDIR}/fetch.log"
 
   cat <<'EOF'
 {
@@ -187,7 +188,7 @@ EOF
   fetch_log="$(sed -n '1,20p' "${TEST_TMPDIR}/fetch.log")"
   assert_contains "${fetch_log}" "env|alpha|prod" "fetch base version from environment"
   assert_contains "${fetch_log}" "releases|https://jira.example.test|ALPHA" "fetch releases to resolve target"
-  assert_contains "${fetch_log}" "issues-by-key|https://jira.example.test|ALPHA-2" "fetch issue metadata for git evidence"
+  assert_contains "${fetch_log}" "issues-by-key|https://jira.example.test||ALPHA-2" "fetch issue metadata for git evidence"
   assert_contains "${fetch_log}" "issues-for-release|https://jira.example.test|ALPHA|1.1.0" "fetch release issues for mismatch check"
 }
 

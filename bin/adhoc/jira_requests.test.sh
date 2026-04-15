@@ -43,6 +43,12 @@ case "$*" in
   *"/rest/api/2/project/SKOLELOGIN"*)
     printf '{"key":"SKOLELOGIN"}'
     ;;
+  *"/rest/api/2/issue/SKOLELOGIN-123"*)
+    printf '{"key":"SKOLELOGIN-123","fields":{"summary":"Example issue","status":{"name":"Done"},"labels":["demo"],"fixVersions":[{"name":"1.2.3"}]}}'
+    ;;
+  *"/rest/api/2/search?jql=project%20%3D%20%22SKOLELOGIN%22%20AND%20statusCategory%20%21%3D%20Done"*)
+    printf '{"issues":[{"key":"SKOLELOGIN-1","fields":{"summary":"Open issue","status":{"name":"In Progress"}}},{"key":"SKOLELOGIN-2","fields":{"summary":"Another open issue","status":{"name":"To Do"}}}]}'
+    ;;
   *"/rest/api/2/search?jql="*)
     printf '{"issues":[]}'
     ;;
@@ -83,6 +89,27 @@ EOF
   chmod +x "${TEST_TMPDIR}/bin/curl"
 }
 
+create_fake_curl_fail_on_myself() {
+  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${TEST_TMPDIR}/curl.log"
+
+case "$*" in
+  *"/rest/api/2/myself"*)
+    printf 'auth failed\n' >&2
+    exit 22
+    ;;
+  *)
+    printf 'unexpected curl call: %s\n' "$*" >&2
+    exit 22
+    ;;
+esac
+EOF
+  chmod +x "${TEST_TMPDIR}/bin/curl"
+}
+
 test_jira_requests_dry_run_prints_commands_without_calling_curl() {
   setup_test_tmpdir
   create_jira_requests_fixture
@@ -109,9 +136,157 @@ test_jira_requests_myself_runs_request_and_prints_next_steps() {
 
   assert_contains "${output}" '{"name":"nine-jrj"}' "print myself response"
   assert_contains "${output}" "Next steps:" "print next steps"
-  assert_contains "${output}" "if successful: bin/adhoc/jira_requests.sh project SKOLELOGIN" "show success next step"
-  assert_contains "${output}" "if failing: refresh PAT and rerun myself" "show failure next step"
+    assert_contains "${output}" "bin/adhoc/jira_requests.sh project SKOLELOGIN" "show success next step"
+  if [[ "${output}" == *"if failing:"* ]]; then
+    fail "myself success output should omit failure next step"
+    return 1
+  fi
+  pass "myself success output omits failure next step"
   assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/myself" "call myself once"
+}
+
+test_jira_requests_issues_runs_request_and_prints_next_steps() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_success
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" issues SKOLELOGIN-123 2>&1)"
+
+  assert_contains "${output}" '{"key":"SKOLELOGIN-123"' "print issue response"
+  assert_contains "${output}" "Next steps:" "print next steps"
+    assert_contains "${output}" "inspect the issue page in Jira" "show success next step"
+  if [[ "${output}" == *"if failing:"* ]]; then
+    fail "issues success output should omit failure next step"
+    return 1
+  fi
+  pass "issues success output omits failure next step"
+  assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/issue/SKOLELOGIN-123" "call issue once"
+}
+
+test_jira_requests_issues_lists_open_requests_for_project_key() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_success
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" issues SKOLELOGIN 2>&1)"
+
+  assert_contains "${output}" '{"issues":[{"key":"SKOLELOGIN-1"' "print open issues response"
+  assert_contains "${output}" "Next steps:" "print next steps"
+    assert_contains "${output}" "inspect the open issues list in Jira" "show list success next step"
+  if [[ "${output}" == *"if failing:"* ]]; then
+    fail "issues list success output should omit failure next step"
+    return 1
+  fi
+  pass "issues list success output omits failure next step"
+  assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/search?jql=project%20%3D%20%22SKOLELOGIN%22%20AND%20statusCategory%20%21%3D%20Done" "call open issues search"
+  assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "maxResults=10" "default issues limit is ten"
+}
+
+test_jira_requests_issues_accepts_explicit_limit_after_project_key() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_success
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" issues SKOLELOGIN --limit 10 2>&1)"
+
+  assert_contains "${output}" '{"issues":[{"key":"SKOLELOGIN-1"' "print open issues response"
+  assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "maxResults=10" "explicit issues limit is forwarded"
+}
+
+test_jira_requests_issues_treats_limit_zero_as_all() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_success
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" issues SKOLELOGIN --limit 0 2>&1)"
+
+  assert_contains "${output}" '{"issues":[{"key":"SKOLELOGIN-1"' "print open issues response"
+  assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "maxResults=1000" "limit zero expands to all results"
+}
+
+test_jira_requests_releases_runs_request_and_prints_next_steps() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_success
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" releases SKOLELOGIN 2>&1)"
+
+  assert_contains "${output}" '[{"name":"1.2.3"}]' "print releases response"
+  assert_contains "${output}" "Next steps:" "print next steps"
+  assert_contains "${output}" "review the releases page in Jira" "show success next step"
+  if [[ "${output}" == *"if failing:"* ]]; then
+    fail "releases success output should omit failure next step"
+    return 1
+  fi
+  pass "releases success output omits failure next step"
+  assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/project/SKOLELOGIN/versions" "call releases once"
+}
+
+test_jira_requests_releases_raw_mode_prints_only_response_body() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_success
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" --raw releases SKOLELOGIN 2>&1)"
+
+  assert_contains "${output}" '[{"name":"1.2.3"}]' "raw releases output includes json body"
+  if [[ "${output}" == *"Next steps:"* || "${output}" == *"review the releases page in Jira"* ]]; then
+    fail "raw releases output should omit next steps"
+    return 1
+  fi
+  pass "raw releases output stays pipe-friendly"
+}
+
+test_jira_requests_versions_accepts_raw_after_project_key() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_success
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" versions SKOLELOGIN --raw 2>&1)"
+
+  assert_contains "${output}" '[{"name":"1.2.3"}]' "raw versions output includes json body"
+    if [[ "${output}" == *"Next steps:"* || "${output}" == *"if successful:"* || "${output}" == *"if failing:"* ]]; then
+    fail "raw versions output should omit next steps"
+    return 1
+  fi
+  pass "raw versions output stays pipe-friendly"
+}
+
+test_jira_requests_versions_accepts_short_after_project_key() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+
+  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${TEST_TMPDIR}/curl.log"
+
+case "$*" in
+  *"/rest/api/2/project/SKOLELOGIN/versions"*)
+    printf '[{"name":"1.2.3"},{"name":"1.2.4"},{"name":"1.2.5"},{"name":"1.2.6"},{"name":"1.2.7"},{"name":"1.2.8"},{"name":"1.2.9"},{"name":"1.2.10"},{"name":"1.2.11"},{"name":"1.2.12"}]'
+    ;;
+  *)
+    printf 'unexpected curl call: %s\n' "$*" >&2
+    exit 22
+    ;;
+esac
+EOF
+  chmod +x "${TEST_TMPDIR}/bin/curl"
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" versions SKOLELOGIN --short 2>&1)"
+
+  assert_contains "${output}" "..." "short versions output is abbreviated"
+  assert_contains "${output}" "Next steps:" "short versions output keeps guidance"
+  assert_contains "${output}" "run a search once you know a release name" "short versions output keeps success guidance"
 }
 
 test_jira_requests_all_stops_on_first_failure_by_default() {
@@ -125,9 +300,11 @@ test_jira_requests_all_stops_on_first_failure_by_default() {
     return 1
   fi
 
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh myself --short" "print myself command in all mode"
   assert_contains "${output}" '{"name":"nine-jrj"}' "run myself before failure"
-  assert_contains "${output}" "if successful: bin/adhoc/jira_requests.sh project SKOLELOGIN" "print success next step before failure"
-  assert_contains "${output}" "if failing: check project key and permissions" "print failure next step on project failure"
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh project SKOLELOGIN --short" "print project command in all mode"
+  assert_contains "${output}" "Next steps:" "print failure next steps block"
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh project SKOLELOGIN" "print failure next step on project failure"
   assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/myself" "call myself first"
   assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/project/SKOLELOGIN" "call project second"
   if [[ "$(cat "${TEST_TMPDIR}/curl.log")" == *"/rest/api/2/project/SKOLELOGIN/versions"* ]]; then
@@ -135,6 +312,80 @@ test_jira_requests_all_stops_on_first_failure_by_default() {
     return 1
   fi
   pass "fail-fast stops before versions"
+}
+
+test_jira_requests_all_stops_on_first_verification_failure_even_without_fail_fast() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+  create_fake_curl_fail_on_myself
+
+  local output
+  if output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" --no-fail-fast all 2>&1)"; then
+    fail "all should stop on first verification failure"
+    return 1
+  fi
+
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh myself --short" "print first command before guard failure"
+  assert_contains "${output}" "auth failed" "report first verification failure"
+  assert_contains "${output}" "Next steps:" "show failure next steps block only"
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh myself" "show failure next step only"
+    if [[ "${output}" == *"if successful:"* || "${output}" == *"if failing:"* ]]; then
+      fail "failed myself probe should omit old guidance phrasing"
+    return 1
+  fi
+    pass "failed myself probe omits old guidance phrasing"
+  assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "/rest/api/2/myself" "call myself first on brute-force guard"
+  if [[ "$(cat "${TEST_TMPDIR}/curl.log")" == *"/rest/api/2/project/SKOLELOGIN" ]]; then
+    fail "guard should stop before project probe"
+    return 1
+  fi
+  pass "guard stops after the first verification failure"
+}
+
+test_jira_requests_all_prints_excerpt_for_long_output() {
+  setup_test_tmpdir
+  create_jira_requests_fixture
+
+  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${TEST_TMPDIR}/curl.log"
+
+case "$*" in
+  *"/rest/api/2/myself"*)
+    printf '{"name":"nine-jrj"}'
+    ;;
+  *"/rest/api/2/project/SKOLELOGIN"*)
+    printf '{"key":"SKOLELOGIN"}'
+    ;;
+  *"/rest/api/2/project/SKOLELOGIN/versions"*)
+    printf '[{"name":"1.2.3"}]'
+    ;;
+  *"/rest/api/2/issue/SKOLELOGIN-1"*)
+    printf '{"key":"SKOLELOGIN-1","fields":{"summary":"%s","status":{"name":"Done"},"labels":["demo"],"fixVersions":[{"name":"1.2.3"}]}}' "$(printf 'x%.0s' {1..400})"
+    ;;
+  *"/rest/api/2/search?jql="*)
+    printf '{"issues":[]}'
+    ;;
+  *"/rest/api/2/project/SKOLELOGIN/versions"*)
+    printf '[{"name":"1.2.3"}]'
+    ;;
+  *)
+    printf 'unexpected curl call: %s\n' "$*" >&2
+    exit 22
+    ;;
+esac
+EOF
+  chmod +x "${TEST_TMPDIR}/bin/curl"
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" --no-fail-fast all 2>&1)"
+
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh myself --short" "print command for myself step"
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh project SKOLELOGIN --short" "print command for project step"
+  assert_contains "${output}" "bin/adhoc/jira_requests.sh issues SKOLELOGIN-1 --short" "print command for issues step"
+  assert_contains "${output}" "..." "truncate long output in all mode"
 }
 
 run_tests "$@"

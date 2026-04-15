@@ -33,12 +33,13 @@ compare_issue_keys() {
 
 fetch_jira_issues_by_keys() {
   local jira_base_url="${1}"
-  shift || true
+  local auth_reference="${2:-}"
+  shift 2 || true
   local issues_json="${JIGGIT_TEST_ISSUES_JSON:-}"
   if [[ -z "${issues_json}" ]]; then
     issues_json='{"issues":[]}'
   fi
-  printf '%s|%s\n' "${jira_base_url}" "$*" >> "${TEST_TMPDIR}/jira-issues.log"
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${TEST_TMPDIR}/jira-issues.log"
   printf '%s\n' "${issues_json}"
 }
 
@@ -252,6 +253,10 @@ EOF
   local issue_key_log
   issue_key_log="$(sed -n '1,20p' "${TEST_TMPDIR}/issue-keys.log")"
   assert_contains "${issue_key_log}" "${repo_dir}|v1.2.3..refs/remotes/origin/master|project-a" "inspect prod drift span for unreleased issues"
+
+  local jira_issues_log
+  jira_issues_log="$(sed -n '1,20p' "${TEST_TMPDIR}/jira-issues.log")"
+  assert_contains "${jira_issues_log}" "https://jira.example.com||JIRA-1 JIRA-2" "pass all unreleased issue keys with blank auth reference"
 }
 
 run_tests "$@"

@@ -158,6 +158,22 @@ render_next_release_summary() {
   printf '\n'
 }
 
+# Render the release matrix for the suggested next version.
+render_next_release_release_matrix() {
+  local suggested_version="${1}"
+  local jira_release_present="${2}"
+  local git_tag_present="${3}"
+  local combined_state="${4}"
+
+  print_markdown_h2 "Release Matrix" "${C_CYAN}"
+  printf '\n'
+  printf -- "- suggested release: \`%s\`\n" "${suggested_version}"
+  printf -- "- jira release present: \`%s\`\n" "${jira_release_present}"
+  printf -- "- git tag present: \`%s\`\n" "${git_tag_present}"
+  printf -- "- combined state: \`%s\`\n" "${combined_state}"
+  printf '\n'
+}
+
 # Render a failure report with an adjacent investigation or repair command.
 render_next_release_failure() {
   local project_id="${1}"
@@ -171,6 +187,29 @@ render_next_release_failure() {
   printf -- "- Repo path: \`%s\`\n" "${repo_path:-missing}"
   printf -- "- Status: \`%s\`\n" "${status}"
   printf -- "- Next step: \`%s\`\n\n" "${next_step_command}"
+}
+
+# Return a combined release-state label from Jira and git tag presence.
+next_release_release_state() {
+  local jira_release_present="${1}"
+  local git_tag_present="${2}"
+
+  if [[ "${jira_release_present}" == "yes" && "${git_tag_present}" == "yes" ]]; then
+    printf '%s\n' "ready"
+    return 0
+  fi
+
+  if [[ "${jira_release_present}" == "yes" ]]; then
+    printf '%s\n' "git-tag-missing"
+    return 0
+  fi
+
+  if [[ "${git_tag_present}" == "yes" ]]; then
+    printf '%s\n' "jira-release-missing"
+    return 0
+  fi
+
+  printf '%s\n' "missing-both"
 }
 
 # Normalize a release/fixVersion name so v-prefixed and plain versions compare equally.
@@ -391,8 +430,67 @@ maybe_create_next_jira_release() {
   printf '%s\n' "created|${release_name:-${release_name_default}}"
 }
 
-# Render the Jira release creation or existence state for the suggested next release.
+# Render the Jira release inventory and the suggested release lookup.
 render_next_release_jira_release_status() {
+  local repo_path="${1}"
+  local suggested_version="${2}"
+  local jira_release_state="${3}"
+  local jira_release_detail="${4}"
+  local releases_json="${5}"
+  local jira_release_present="no"
+  local git_tag_present="no"
+  local combined_state=""
+  local release_json=""
+  local rendered_any=0
+
+  if [[ "${jira_release_state}" == "ok" ]]; then
+    if jira_release_exists_named "${releases_json}" "${suggested_version}"; then
+      jira_release_present="yes"
+    fi
+  else
+    jira_release_present="unknown"
+  fi
+
+  if release_matches_git_tag "${repo_path}" "${suggested_version}"; then
+    git_tag_present="yes"
+  fi
+
+  if [[ "${jira_release_present}" == "unknown" ]]; then
+    combined_state="jira-unknown"
+  else
+    combined_state="$(next_release_release_state "${jira_release_present}" "${git_tag_present}")"
+  fi
+
+  print_markdown_h2 "Jira Releases" "${C_MAGENTA}"
+  printf '\n'
+  printf -- "- status: \`%s\`\n" "${jira_release_state}"
+  if [[ -n "${jira_release_detail}" ]]; then
+    printf -- "- detail: \`%s\`\n" "${jira_release_detail}"
+  fi
+  printf -- "- suggested release present: \`%s\`\n" "${jira_release_present}"
+  printf -- "- git tag present: \`%s\`\n" "${git_tag_present}"
+  printf -- "- combined state: \`%s\`\n\n" "${combined_state}"
+
+  if [[ "${jira_release_state}" == "ok" ]]; then
+    while IFS= read -r release_json; do
+      [[ -z "${release_json}" ]] && continue
+      render_release_entry "${repo_path}" "${release_json}"
+      rendered_any=1
+    done < <(
+      printf '%s\n' "${releases_json}" \
+        | jq -c 'sort_by((.released // false), (.archived // false), (.releaseDate // ""), (.name // "")) | reverse[]'
+    )
+
+    if [[ ${rendered_any} -eq 0 ]]; then
+      printf '_No Jira releases found._\n'
+    fi
+  fi
+
+  printf '\n'
+}
+
+# Render the outcome of the interactive Jira release creation attempt.
+render_next_release_jira_creation_status() {
   local jira_release_state="${1}"
   local jira_release_detail="${2}"
 
@@ -485,8 +583,14 @@ run_next_release_main() {
   local jira_release_result=""
   local jira_release_state=""
   local jira_release_detail=""
+  local jira_release_fetch_state="warn"
+  local jira_release_fetch_detail="unable to fetch existing releases"
+  local jira_release_present="unknown"
+  local git_tag_present="no"
+  local release_matrix_state="unknown"
   local -a issue_keys=()
   local issues_json='{"issues":[]}'
+  local releases_json='[]'
 
   if ! project_selector="$(effective_single_project_selector "${project_selector}")"; then
     return 1
@@ -530,6 +634,16 @@ run_next_release_main() {
     suggested_version="$(bump_minor_version "${base_git_ref}" || true)"
   fi
 
+  if [[ -n "${jira_project_key}" && -n "${jira_base_url_value}" && -n "${suggested_version}" ]]; then
+    if releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" 2>/dev/null)"; then
+      jira_release_fetch_state="ok"
+      jira_release_fetch_detail=""
+    fi
+  else
+    jira_release_fetch_state="unavailable"
+    jira_release_fetch_detail="missing jira config"
+  fi
+
   base_compare_ref="$(env_diff_compare_ref "${repo_path}" "${base_git_ref}")"
   target_compare_ref="$(env_diff_compare_ref "${repo_path}" "${target_ref}")"
   compare_url="$(compare_url_for_project "${project_id}" "${repo_path}" "${base_compare_ref}" "${target_compare_ref}" || true)"
@@ -537,13 +651,30 @@ run_next_release_main() {
   if [[ "${commit_count}" -gt 0 ]]; then
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "${suggested_version}" "${compare_url}" "release-needed"
     if [[ -n "${jira_project_key}" && -n "${jira_base_url_value}" ]]; then
+      if [[ "${jira_release_fetch_state}" == "ok" ]]; then
+        if jira_release_exists_named "${releases_json}" "${suggested_version}"; then
+          jira_release_present="yes"
+        else
+          jira_release_present="no"
+        fi
+      fi
+      if release_matches_git_tag "${repo_path}" "${suggested_version}"; then
+        git_tag_present="yes"
+      fi
+      if [[ "${jira_release_present}" == "unknown" ]]; then
+        release_matrix_state="jira-unknown"
+      else
+        release_matrix_state="$(next_release_release_state "${jira_release_present}" "${git_tag_present}")"
+      fi
+      render_next_release_release_matrix "${suggested_version}" "${jira_release_present}" "${git_tag_present}" "${release_matrix_state}"
+      render_next_release_jira_release_status "${repo_path}" "${suggested_version}" "${jira_release_fetch_state}" "${jira_release_fetch_detail}" "${releases_json}"
       jira_release_result="$(maybe_create_next_jira_release "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}")"
       IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
-      render_next_release_jira_release_status "${jira_release_state}" "${jira_release_detail}"
+      render_next_release_jira_creation_status "${jira_release_state}" "${jira_release_detail}"
       issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}")"
       if [[ -n "${issue_keys_text}" ]]; then
         mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
-        issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${issue_keys[@]}")"
+        issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}")"
       fi
       render_next_release_issue_summary "${issues_json}" "${suggested_version}"
     else

@@ -418,7 +418,7 @@ run_assign_fix_version_main() {
   issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}")"
   if [[ -n "${issue_keys_text}" ]]; then
     mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
-    issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${issue_keys[@]}")"
+    issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}")"
   fi
 
   render_assign_fix_version_summary "${project_id}" "${repo_path}" "${base_label}" "${base_git_ref}" "${target_ref}" "${release_resolution_detail}" "${issues_json}"

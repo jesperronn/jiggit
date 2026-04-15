@@ -62,6 +62,11 @@ EOF
 }
 
 fetch_jira_issues_by_keys() {
+  local jira_base_url="${1}"
+  local auth_reference="${2:-}"
+  shift 2 || true
+
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${TEST_TMPDIR}/jira-issues.log"
   cat <<'EOF'
 {
   "issues": [
@@ -262,6 +267,10 @@ EOF
   assert_contains "${output}" "\`assign fixVersion\`: \`jiggit assign-fix-version project-a --release 1.3.0.0\`" "render assign-fix-version next step"
   assert_contains "${output}" "\`command\`: \`jiggit releases project-a\`" "render releases section command"
   assert_contains "${output}" "\`top releases\`: \`v1.2.0.0, v1.3.0.0\`" "render compact release summary"
+
+  local jira_issues_log
+  jira_issues_log="$(sed -n '1,20p' "${TEST_TMPDIR}/jira-issues.log")"
+  assert_contains "${jira_issues_log}" "https://jira.example.com||ALPHA-2" "pass the first unreleased issue key through overview issue fetch"
 }
 
 test_run_overview_main_defaults_to_all_projects_outside_configured_repo() {
