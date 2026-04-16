@@ -19,7 +19,7 @@ fi
 
 # Render help for the config subcommand.
 config_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit config [--global|--no-projects] [<project|path> ...]
 
@@ -51,22 +51,22 @@ render_project_config_entry() {
   source_file="$(project_source_file "${project_id}")"
 
   print_markdown_project_item "${project_id}"
-  printf "  - repo path: \`%s\`\n" "${repo_path:-missing}"
-  printf "  - remote url: \`%s\`\n" "${remote_url:-missing}"
-  printf "  - jira config: \`%s\`\n" "${jira_name:-default}"
+  printf "  - repo path: \`%s\` (%s)\n" "${repo_path:-missing}" "$(project_field_source "${project_id}" "repo_path")"
+  printf "  - remote url: \`%s\` (%s)\n" "${remote_url:-missing}" "$(project_field_source "${project_id}" "remote_url")"
+  printf "  - jira config: \`%s\` (%s)\n" "${jira_name:-default}" "$(project_field_source "${project_id}" "jira")"
   if [[ -z "${jira_project_key}" ]]; then
-    print_colored_line "${C_ORANGE}" "  - jira project key: \`missing\`"
+    print_colored_line "${C_ORANGE}" "  - jira project key: \`missing\` ($(project_field_source "${project_id}" "jira_project_key"))"
   else
-    printf "  - jira project key: \`%s\`\n" "${jira_project_key}"
+    printf "  - jira project key: \`%s\` (%s)\n" "${jira_project_key}" "$(project_field_source "${project_id}" "jira_project_key")"
   fi
-  printf "  - jira regexes: \`%s\`\n" "${jira_regexes:-missing}"
+  printf "  - jira regexes: \`%s\` (%s)\n" "${jira_regexes:-missing}" "$(project_field_source "${project_id}" "jira_regexes")"
   if [[ -z "${environments}" ]]; then
-    print_colored_line "${C_ORANGE}" "  - environments: \`none\`"
+    print_colored_line "${C_ORANGE}" "  - environments: \`none\` ($(project_field_source "${project_id}" "environments"))"
   else
-    printf "  - environments: \`%s\`\n" "${environments}"
+    printf "  - environments: \`%s\` (%s)\n" "${environments}" "$(project_field_source "${project_id}" "environments")"
   fi
-  printf "  - environment info urls: \`%s\`\n" "${environment_info_urls:-none}"
-  printf "  - info version expr: \`%s\`\n" "${info_version_expr:-${JIGGIT_DEFAULT_INFO_VERSION_EXPR:-cat}}"
+  printf "  - environment info urls: \`%s\` (%s)\n" "${environment_info_urls:-none}" "$(project_field_source "${project_id}" "environment_info_urls")"
+  printf "  - info version expr: \`%s\` (%s)\n" "${info_version_expr:-${JIGGIT_DEFAULT_INFO_VERSION_EXPR:-cat}}" "$(project_field_source "${project_id}" "info_version_expr")"
   printf "  - source: \`%s\`\n" "${source_file:-unknown}"
 }
 

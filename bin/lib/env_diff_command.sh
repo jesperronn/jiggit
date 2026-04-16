@@ -38,7 +38,7 @@ env_diff_debug() {
 
 # Render help for the env-diff subcommand.
 env_diff_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit env-diff [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
 

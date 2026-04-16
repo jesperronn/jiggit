@@ -56,7 +56,7 @@ fi
 
 # Render help for assign-fix-version.
 assign_fix_version_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>]
 

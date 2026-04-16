@@ -43,9 +43,7 @@ lint_debug() {
 # Run shellcheck across the selected files when the tool is available locally.
 run_shellcheck_if_available() {
   local -a files=("$@")
-  local file
   local total_count="${#files[@]}"
-  local index=0
 
   if ! command -v shellcheck >/dev/null 2>&1; then
     printf 'shellcheck not installed; skipping.\n'
@@ -53,12 +51,8 @@ run_shellcheck_if_available() {
   fi
 
   printf 'shellcheck %s files\n' "${total_count}"
-  for file in "${files[@]}"; do
-    index=$((index + 1))
-    printf 'shellcheck [%s/%s] %s\n' "${index}" "${total_count}" "${file}"
-    lint_debug "run: shellcheck -x ${file}"
-    shellcheck -x "${file}"
-  done
+  lint_debug "run: shellcheck -x ${files[*]}"
+  shellcheck -x "${files[@]}"
 }
 
 # Resolve files to lint, run syntax checks, and then run shellcheck if possible.

@@ -29,7 +29,7 @@ fi
 
 # Render help for the compare subcommand.
 compare_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit compare [<project|path>] --from <git-ref> --to <git-ref>
 

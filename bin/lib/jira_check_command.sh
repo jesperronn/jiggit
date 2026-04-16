@@ -27,7 +27,7 @@ declare -A JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME=()
 
 # Render help for the jira-check command.
 jira_check_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit jira-check [<project|path> ...]
   jiggit jira-check --all
@@ -198,17 +198,36 @@ render_jira_check_config_summary() {
   local reference="${1:-}"
   local jira_name=""
   local jira_base_url_value=""
+  local jira_bearer_token_value=""
+  local jira_bearer_token_source=""
+  local jira_user_email_value=""
+  local jira_user_email_source=""
   local jira_auth_mode_value=""
-  local jira_api_token_state=""
+  local jira_auth_mode_source=""
+  local jira_api_token_value=""
+  local jira_api_token_source=""
   local jira_config_source_value=""
   local projects_text=""
   local project_id=""
 
   jira_name="$(resolve_jira_name "${reference}")"
-  jira_base_url_value="$(jira_base_url "${jira_name}")"
+  jira_base_url_value="$(jira_display_value "${jira_name}" "base_url")"
+  jira_bearer_token_value="$(jira_display_value "${jira_name}" "bearer_token")"
+  jira_bearer_token_source="$(jira_field_source "${jira_name}" "bearer_token")"
+  jira_user_email_value="$(jira_display_value "${jira_name}" "user_email")"
+  jira_user_email_source="$(jira_field_source "${jira_name}" "user_email")"
   jira_auth_mode_value="$(jira_auth_mode "${jira_name}")"
-  jira_api_token_state="$(jira_api_token_status "${jira_name}")"
+  jira_api_token_value="$(jira_display_value "${jira_name}" "api_token")"
   jira_config_source_value="$(jira_config_source "${jira_name}")"
+
+  if [[ "${jira_auth_mode_value}" == "bearer_token" ]]; then
+    jira_auth_mode_source="$(jira_field_source "${jira_name}" "bearer_token")"
+  elif [[ "${jira_auth_mode_value}" == "basic_auth" ]]; then
+    jira_auth_mode_source="$(jira_field_source "${jira_name}" "user_email"), $(jira_field_source "${jira_name}" "api_token")"
+  else
+    jira_auth_mode_source="none"
+  fi
+  jira_api_token_source="$(jira_field_source "${jira_name}" "api_token")"
 
   while IFS= read -r project_id; do
     [[ -z "${project_id}" ]] && continue
@@ -216,9 +235,11 @@ render_jira_check_config_summary() {
   done < <(jira_check_projects_for_jira "${jira_name}")
 
   printf -- "- Jira config: \`%s\`\n" "${jira_name:-missing}"
-  printf -- "- Jira base URL: \`%s\`\n" "${jira_base_url_value:-missing}"
-  printf -- "- Jira auth mode: \`%s\`\n" "${jira_auth_mode_value}"
-  printf -- "- Jira API token: \`%s\`\n" "${jira_api_token_state}"
+  printf -- "- Jira base URL: \`%s\` (%s)\n" "${jira_base_url_value}" "$(jira_field_source "${jira_name}" "base_url")"
+  printf -- "- Jira bearer token: \`%s\` (%s)\n" "${jira_bearer_token_value}" "${jira_bearer_token_source}"
+  printf -- "- Jira user email: \`%s\` (%s)\n" "${jira_user_email_value}" "${jira_user_email_source}"
+  printf -- "- Jira API token: \`%s\` (%s)\n" "${jira_api_token_value}" "${jira_api_token_source}"
+  printf -- "- Jira auth mode: \`%s\` (%s)\n" "${jira_auth_mode_value}" "${jira_auth_mode_source}"
   printf -- "- Jira config source: \`%s\`\n" "${jira_config_source_value}"
   printf -- "- Jira projects: \`%s\`\n" "${projects_text:-none}"
 }

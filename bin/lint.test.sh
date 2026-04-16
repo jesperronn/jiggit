@@ -36,7 +36,6 @@ test_lint_verbose_runs_shellcheck_one_file_at_a_time() {
 
   assert_contains "${output}" "syntax  bin/lint" "run syntax check"
   assert_contains "${output}" "shellcheck 1 files" "show shellcheck summary"
-  assert_contains "${output}" "shellcheck [1/1] bin/lint" "show shellcheck progress"
   assert_contains "${output}" "[lint] run: shellcheck -x bin/lint" "show verbose shellcheck command"
   assert_contains "${output}" "fake shellcheck -x bin/lint" "invoke stub shellcheck"
 }
@@ -51,10 +50,12 @@ test_lint_accepts_multiple_explicit_files() {
   assert_contains "${output}" "syntax  bin/lint" "run syntax check for first file"
   assert_contains "${output}" "syntax  bin/setup" "run syntax check for second file"
   assert_contains "${output}" "shellcheck 2 files" "show shellcheck summary for multiple files"
-  assert_contains "${output}" "shellcheck [1/2] bin/lint" "show first file progress"
-  assert_contains "${output}" "shellcheck [2/2] bin/setup" "show second file progress"
-  assert_contains "${output}" "fake shellcheck -x bin/lint" "invoke stub shellcheck for first file"
-  assert_contains "${output}" "fake shellcheck -x bin/setup" "invoke stub shellcheck for second file"
+  assert_contains "${output}" "[lint] run: shellcheck -x bin/lint bin/setup" "show batched shellcheck command"
+  assert_contains "${output}" "fake shellcheck -x bin/lint bin/setup" "invoke stub shellcheck once for both files"
+
+  local shellcheck_calls
+  shellcheck_calls="$(printf '%s\n' "${output}" | grep -c '^fake shellcheck ' || true)"
+  assert_eq "1" "${shellcheck_calls}" "run shellcheck once for multiple files"
 }
 
 run_tests "$@"

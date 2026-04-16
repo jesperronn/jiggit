@@ -34,7 +34,7 @@ env_versions_debug() {
 
 # Render help for the env-versions subcommand.
 env_versions_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit env-versions [<project|path>] [--verbose]
 

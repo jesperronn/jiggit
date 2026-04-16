@@ -19,7 +19,7 @@ fi
 
 # Render help for the releases command.
 releases_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit releases [<project|path>]
 

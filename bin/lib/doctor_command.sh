@@ -31,7 +31,7 @@ JIGGIT_DOCTOR_IGNORE_FAILURES=0
 JIGGIT_DOCTOR_FAIL_FAST=0
 # Render help for the doctor command.
 doctor_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]
   jiggit diagnostics [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]

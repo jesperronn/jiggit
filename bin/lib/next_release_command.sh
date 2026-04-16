@@ -49,7 +49,7 @@ fi
 
 # Render help for the next-release subcommand.
 next_release_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>]
 

@@ -134,6 +134,41 @@ EOF
   assert_eq "jq -r '.build.version'" "$(project_info_version_expr "delta-api")" "read per-project version expression from TOML"
   assert_eq "https://jira.user.example.test" "$(jira_base_url)" "read shared jira base url from user config.toml"
   assert_eq "user-secret" "$(jira_bearer_token)" "read shared jira bearer token from user config.toml"
+  assert_eq "${user_shared_file}" "$(jira_field_source "" "base_url")" "track jira base url source file"
+  assert_eq "${repo_dir}/config/projects.toml" "$(project_field_source "delta-api" "environment_info_urls")" "track project field source file"
+}
+
+test_shared_jira_env_vars_override_toml_and_report_env_sources() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[jira]
+base_url = "https://jira.config.example.test"
+bearer_token = "config-secret"
+EOF
+
+  export JIGGIT_PROJECTS_FILE="${projects_file}"
+  export JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml"
+  export JIRA_BASE_URL="https://jira.env.example.test"
+  export JIRA_API_TOKEN="env-token"
+  export JIRA_USER_EMAIL="dev@example.test"
+
+  load_project_config
+
+  assert_eq "https://jira.env.example.test" "$(jira_base_url)" "prefer shared jira base url from env"
+  assert_eq "dev@example.test" "$(jira_user_email)" "prefer shared jira user email from env"
+  assert_eq "env-token" "$(jira_api_token)" "prefer shared jira api token from env"
+  assert_eq "bearer_token" "$(jira_auth_mode)" "keep bearer auth mode when no env bearer override replaces it"
+  assert_eq "env: JIRA_BASE_URL" "$(jira_field_source "" "base_url")" "report env base url source"
+  assert_eq "env: JIRA_API_TOKEN" "$(jira_field_source "" "api_token")" "report env api token source"
+
+  unset JIGGIT_PROJECTS_FILE
+  unset JIGGIT_DISCOVERED_PROJECTS_FILE
+  unset JIRA_BASE_URL
+  unset JIRA_API_TOKEN
+  unset JIRA_USER_EMAIL
 }
 
 test_resolve_discovery_file_path_defaults_to_user_home() {

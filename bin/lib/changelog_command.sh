@@ -19,7 +19,7 @@ fi
 
 # Render help for the changelog subcommand.
 changelog_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit changelog [<project|path>] --from <git-ref> --to <git-ref>
 

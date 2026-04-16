@@ -46,7 +46,7 @@ fi
 
 # Render help for the overview command.
 overview_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit overview [<project|path> ...]
 
@@ -59,12 +59,22 @@ overview_target_projects() {
   local selector=""
   local project_id=""
 
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "overview selectors input: ${*:-<default>}"
+  fi
+
   while IFS= read -r selector; do
     [[ -z "${selector}" ]] && continue
     project_id="$(resolve_project_selector "${selector}" || true)"
     if [[ -n "${project_id}" ]]; then
+      if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+        jiggit_verbose_log "overview selector ${selector} resolved to project ${project_id}"
+      fi
       printf '%s\n' "${project_id}"
     else
+      if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+        jiggit_verbose_log "overview selector ${selector} kept as-is"
+      fi
       printf '%s\n' "${selector}"
     fi
   done < <(effective_multi_project_selectors "$@")
@@ -471,9 +481,19 @@ run_overview_main() {
   print_markdown_h1 "jiggit overview"
   printf '\n'
 
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "overview project loop starting"
+  fi
+
   while IFS= read -r project_id; do
     [[ -z "${project_id}" ]] && continue
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      jiggit_verbose_log "overview rendering project ${project_id}"
+    fi
     if ! project_exists "${project_id}"; then
+      if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+        jiggit_verbose_log "overview unknown project ${project_id}"
+      fi
       print_markdown_h2 "${project_id}" "${C_ORANGE}"
       printf '\n'
       overview_emit_line "status" "unknown project"

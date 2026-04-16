@@ -19,7 +19,7 @@ fi
 
 # Render help for the jira-setup command.
 jira_setup_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit jira-setup [<jira-name>]
 

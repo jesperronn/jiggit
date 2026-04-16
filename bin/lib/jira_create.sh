@@ -166,7 +166,7 @@ create_jira_issue() {
 
 # Render help for the jira-create command.
 jira_create_usage() {
-  cat <<'USAGE'
+  print_jiggit_usage_block <<'USAGE'
 Usage:
   jiggit jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run]
 

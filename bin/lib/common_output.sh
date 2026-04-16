@@ -78,6 +78,36 @@ print_markdown_kv() {
   printf -- "- \`%s\`: \`%s\`\n" "${padded_key}" "${value}"
 }
 
+# Print a usage line that bolds the jiggit subcommand token when present.
+print_jiggit_usage_line() {
+  local line="${1:-}"
+  case "${line}" in
+    "Usage: jiggit "*)
+      if [[ "${JIGGIT_COLOR_ENABLED:-0}" -eq 1 ]]; then
+        printf 'Usage: '
+        jiggit_render_help_tokens "${line#Usage: }" "usage"
+      else
+        printf '%s\n' "${line}"
+      fi
+      ;;
+    "  jiggit "*|"  --"*|"\t--"*)
+      jiggit_render_help_tokens "${line}" "usage"
+      ;;
+    *)
+      printf '%s\n' "${line}"
+      ;;
+  esac
+}
+
+# Print a heredoc usage block with consistent command-token styling.
+print_jiggit_usage_block() {
+  local line=""
+
+  while IFS= read -r line; do
+    print_jiggit_usage_line "${line}"
+  done
+}
+
 # Return success when jiggit verbose troubleshooting output is enabled.
 jiggit_is_verbose() {
   [[ "${JIGGIT_VERBOSE:-0}" == "1" || "${VERBOSE:-false}" == "true" ]]

@@ -250,7 +250,8 @@ run_probe_step_excerpt() {
   local success_step="${1}"
   local failure_step="${2}"
   local command_name="${3}"
-  shift 3
+  local excerpt_max_chars="${4:-200}"
+  shift 4
   local output=""
   local rc=0
 
@@ -265,7 +266,7 @@ run_probe_step_excerpt() {
   fi
 
   if [[ "${JIRA_REQUESTS_SHORT_OUTPUT}" -eq 1 ]]; then
-    print_short_output_excerpt "${output}"
+    print_short_output_excerpt "${output}" "${excerpt_max_chars}"
   else
     print_excerpt_or_full_output_hint "${output}" "${command_name}"
   fi
@@ -527,6 +528,7 @@ main() {
           "run a search once you know a release name" \
           "check project key and permissions" \
           "versions" \
+          "120" \
           run_versions_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
           return 0
         else

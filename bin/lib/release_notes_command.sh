@@ -44,7 +44,7 @@ fi
 
 # Render help for release-notes.
 release_notes_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit release-notes [<project|path>] --target <git-ref|release> [--from-env <env>] [--from <git-ref>]
 

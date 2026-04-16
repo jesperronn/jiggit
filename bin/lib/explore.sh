@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+set +u
 
 JIGGIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly JIGGIT_ROOT
@@ -14,8 +15,6 @@ declare -a JIGGIT_EXPLORE_DIRECTORIES=()
 declare -a JIGGIT_CONFIGURED_IDS=()
 declare -a JIGGIT_LOADED_CONFIG_FILES=()
 declare -a JIGGIT_CONFIG_CONFLICTS=()
-declare -A JIGGIT_CONFIGURED_ID_BY_PATH=()
-declare -A JIGGIT_CONFIGURED_ID_BY_REMOTE=()
 declare -A JIGGIT_PROJECT_REPO_PATH_BY_ID=()
 declare -A JIGGIT_PROJECT_REMOTE_URL_BY_ID=()
 declare -A JIGGIT_PROJECT_JIRA_NAME_BY_ID=()
@@ -25,6 +24,14 @@ declare -A JIGGIT_PROJECT_ENVIRONMENTS_BY_ID=()
 declare -A JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID=()
 declare -A JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID=()
 declare -A JIGGIT_PROJECT_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_REPO_PATH_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_REMOTE_URL_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_JIRA_NAME_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_JIRA_PROJECT_KEY_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_ENV_INFO_URLS_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_INFO_VERSION_EXPR_SOURCE_BY_ID=()
 
 declare -a JIGGIT_JIRA_NAMES=()
 declare -A JIGGIT_JIRA_BASE_URL_BY_NAME=()
@@ -32,6 +39,12 @@ declare -A JIGGIT_JIRA_BEARER_TOKEN_BY_NAME=()
 declare -A JIGGIT_JIRA_USER_EMAIL_BY_NAME=()
 declare -A JIGGIT_JIRA_API_TOKEN_BY_NAME=()
 declare -A JIGGIT_JIRA_SOURCE_BY_NAME=()
+declare -A JIGGIT_JIRA_BASE_URL_SOURCE_BY_NAME=()
+declare -A JIGGIT_JIRA_BEARER_TOKEN_SOURCE_BY_NAME=()
+declare -A JIGGIT_JIRA_USER_EMAIL_SOURCE_BY_NAME=()
+declare -A JIGGIT_JIRA_API_TOKEN_SOURCE_BY_NAME=()
+
+JIGGIT_SHARED_JIRA_NAME="shared"
 
 declare -a JIGGIT_DISCOVERED_REPOS=()
 declare -a JIGGIT_DISCOVERY_WARNINGS=()
@@ -275,7 +288,7 @@ render_toml_array_upsert_preview() {
 
 # Render help for the explore subcommand.
 explore_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage: jiggit explore [--verbose] [--dry-run] [--append|--replace] <dir> [<dir> ...]
 
 Options:
@@ -365,6 +378,11 @@ register_project() {
     return 0
   fi
 
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "register project id=${id} source=${source_file} repo=${repo_path:-missing} jira=${jira_project_key:-missing} envs=${environments:-none}"
+  fi
+
+  set +u
   repo_path="$(expand_config_path "${repo_path}")"
 
   if [[ -n "${JIGGIT_PROJECT_SOURCE_BY_ID["${id}"]:-}" ]]; then
@@ -379,7 +397,7 @@ register_project() {
     [[ "${JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID["${id}"]:-}" != "${environment_info_urls}" ]] && changed_fields+=("environment_info_urls")
     [[ "${JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID["${id}"]:-}" != "${info_version_expr}" ]] && changed_fields+=("info_version_expr")
 
-    if [[ ${#changed_fields[@]} -gt 0 ]]; then
+    if [[ ${#changed_fields[@]} -gt 0 && "${source_file}" != "${JIGGIT_PROJECT_SOURCE_BY_ID["${id}"]}" ]]; then
       JIGGIT_CONFIG_CONFLICTS+=(
         "Project ${id} overridden by ${source_file}; previous source ${JIGGIT_PROJECT_SOURCE_BY_ID["${id}"]}; changed fields: $(join_by ', ' "${changed_fields[@]}")"
       )
@@ -397,23 +415,25 @@ register_project() {
   JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID["${id}"]="${environment_info_urls}"
   JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID["${id}"]="${info_version_expr}"
   JIGGIT_PROJECT_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_REPO_PATH_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_REMOTE_URL_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_JIRA_NAME_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_JIRA_PROJECT_KEY_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_ENV_INFO_URLS_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_INFO_VERSION_EXPR_SOURCE_BY_ID["${id}"]="${source_file}"
 
-  if [[ -n "${repo_path}" ]]; then
-    JIGGIT_CONFIGURED_ID_BY_PATH["${repo_path}"]="${id}"
-  fi
-
-  if [[ -n "${remote_url}" ]]; then
-    JIGGIT_CONFIGURED_ID_BY_REMOTE["${remote_url}"]="${id}"
-  fi
 }
 
 # Reset all loaded project metadata before reading config files again.
 reset_loaded_projects() {
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "reset loaded project state"
+  fi
   JIGGIT_CONFIGURED_IDS=()
   JIGGIT_LOADED_CONFIG_FILES=()
   JIGGIT_CONFIG_CONFLICTS=()
-  JIGGIT_CONFIGURED_ID_BY_PATH=()
-  JIGGIT_CONFIGURED_ID_BY_REMOTE=()
   JIGGIT_PROJECT_REPO_PATH_BY_ID=()
   JIGGIT_PROJECT_REMOTE_URL_BY_ID=()
   JIGGIT_PROJECT_JIRA_NAME_BY_ID=()
@@ -423,12 +443,38 @@ reset_loaded_projects() {
   JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID=()
   JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID=()
   JIGGIT_PROJECT_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_REPO_PATH_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_REMOTE_URL_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_JIRA_NAME_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_JIRA_PROJECT_KEY_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_ENV_INFO_URLS_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_INFO_VERSION_EXPR_SOURCE_BY_ID=()
   JIGGIT_JIRA_NAMES=()
   JIGGIT_JIRA_BASE_URL_BY_NAME=()
   JIGGIT_JIRA_BEARER_TOKEN_BY_NAME=()
   JIGGIT_JIRA_USER_EMAIL_BY_NAME=()
   JIGGIT_JIRA_API_TOKEN_BY_NAME=()
   JIGGIT_JIRA_SOURCE_BY_NAME=()
+  JIGGIT_JIRA_BASE_URL_SOURCE_BY_NAME=()
+  JIGGIT_JIRA_BEARER_TOKEN_SOURCE_BY_NAME=()
+  JIGGIT_JIRA_USER_EMAIL_SOURCE_BY_NAME=()
+  JIGGIT_JIRA_API_TOKEN_SOURCE_BY_NAME=()
+}
+
+# Return the current shell variable type for one config container.
+project_config_var_type() {
+  local variable_name="${1:-}"
+  local declaration=""
+
+  declaration="$(declare -p "${variable_name}" 2>/dev/null || true)"
+  case "${declaration}" in
+    declare\ -A*) printf '%s\n' "assoc" ;;
+    declare\ -a*) printf '%s\n' "array" ;;
+    "") printf '%s\n' "unset" ;;
+    *) printf '%s\n' "scalar" ;;
+  esac
 }
 
 # Normalize a Jira config name, defaulting blank names to "default".
@@ -442,6 +488,30 @@ normalize_jira_name() {
   printf '%s\n' "${jira_name}"
 }
 
+# Return the internal storage key for a Jira config name.
+jiggit_jira_storage_name() {
+  local jira_name="${1:-default}"
+
+  if [[ -z "${jira_name}" || "${jira_name}" == "default" ]]; then
+    printf '%s\n' "${JIGGIT_SHARED_JIRA_NAME}"
+    return 0
+  fi
+
+  printf '%s\n' "${jira_name}"
+}
+
+# Return the user-facing Jira config name for a stored key.
+jiggit_jira_display_name() {
+  local jira_name="${1:-}"
+
+  if [[ "${jira_name}" == "${JIGGIT_SHARED_JIRA_NAME}" ]]; then
+    printf '%s\n' "default"
+    return 0
+  fi
+
+  printf '%s\n' "${jira_name}"
+}
+
 # Register one effective Jira settings entry from a config file.
 register_jira_config() {
   local jira_name
@@ -450,31 +520,60 @@ register_jira_config() {
   local user_email="${4:-}"
   local api_token="${5:-}"
   local source_file="${6:-unknown}"
+  local previous_source=""
+  local previous_base_url=""
+  local previous_bearer_token=""
+  local previous_user_email=""
+  local previous_api_token=""
+  local jira_storage_name=""
 
+  set +u
   jira_name="$(normalize_jira_name "${1:-default}")"
+  jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
 
-  if [[ -n "${JIGGIT_JIRA_SOURCE_BY_NAME["${jira_name}"]:-}" ]]; then
+  if [[ -n "${JIGGIT_JIRA_SOURCE_BY_NAME[${jira_storage_name}]+x}" ]]; then
+    previous_source="${JIGGIT_JIRA_SOURCE_BY_NAME[${jira_storage_name}]}"
+  fi
+
+  if [[ -n "${previous_source}" ]]; then
     local changed_fields=()
 
-    [[ "${JIGGIT_JIRA_BASE_URL_BY_NAME["${jira_name}"]:-}" != "${base_url}" ]] && changed_fields+=("base_url")
-    [[ "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_name}"]:-}" != "${bearer_token}" ]] && changed_fields+=("bearer_token")
-    [[ "${JIGGIT_JIRA_USER_EMAIL_BY_NAME["${jira_name}"]:-}" != "${user_email}" ]] && changed_fields+=("user_email")
-    [[ "${JIGGIT_JIRA_API_TOKEN_BY_NAME["${jira_name}"]:-}" != "${api_token}" ]] && changed_fields+=("api_token")
+    if [[ -n "${JIGGIT_JIRA_BASE_URL_BY_NAME[${jira_storage_name}]+x}" ]]; then
+      previous_base_url="${JIGGIT_JIRA_BASE_URL_BY_NAME[${jira_storage_name}]}"
+    fi
+    if [[ -n "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME[${jira_storage_name}]+x}" ]]; then
+      previous_bearer_token="${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME[${jira_storage_name}]}"
+    fi
+    if [[ -n "${JIGGIT_JIRA_USER_EMAIL_BY_NAME[${jira_storage_name}]+x}" ]]; then
+      previous_user_email="${JIGGIT_JIRA_USER_EMAIL_BY_NAME[${jira_storage_name}]}"
+    fi
+    if [[ -n "${JIGGIT_JIRA_API_TOKEN_BY_NAME[${jira_storage_name}]+x}" ]]; then
+      previous_api_token="${JIGGIT_JIRA_API_TOKEN_BY_NAME[${jira_storage_name}]}"
+    fi
 
-    if [[ ${#changed_fields[@]} -gt 0 ]]; then
+    [[ "${previous_base_url}" != "${base_url}" ]] && changed_fields+=("base_url")
+    [[ "${previous_bearer_token}" != "${bearer_token}" ]] && changed_fields+=("bearer_token")
+    [[ "${previous_user_email}" != "${user_email}" ]] && changed_fields+=("user_email")
+    [[ "${previous_api_token}" != "${api_token}" ]] && changed_fields+=("api_token")
+
+    if [[ ${#changed_fields[@]} -gt 0 && "${source_file}" != "${previous_source}" ]]; then
       JIGGIT_CONFIG_CONFLICTS+=(
-        "Jira ${jira_name} overridden by ${source_file}; previous source ${JIGGIT_JIRA_SOURCE_BY_NAME["${jira_name}"]}; changed fields: $(join_by ', ' "${changed_fields[@]}")"
+        "Jira ${jira_name} overridden by ${source_file}; previous source ${previous_source}; changed fields: $(join_by ', ' "${changed_fields[@]}")"
       )
     fi
   else
-    JIGGIT_JIRA_NAMES+=("${jira_name}")
+    JIGGIT_JIRA_NAMES+=("$(jiggit_jira_display_name "${jira_name}")")
   fi
 
-  JIGGIT_JIRA_BASE_URL_BY_NAME["${jira_name}"]="${base_url}"
-  JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_name}"]="${bearer_token}"
-  JIGGIT_JIRA_USER_EMAIL_BY_NAME["${jira_name}"]="${user_email}"
-  JIGGIT_JIRA_API_TOKEN_BY_NAME["${jira_name}"]="${api_token}"
-  JIGGIT_JIRA_SOURCE_BY_NAME["${jira_name}"]="${source_file}"
+  JIGGIT_JIRA_BASE_URL_BY_NAME["${jira_storage_name}"]="${base_url}"
+  JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_storage_name}"]="${bearer_token}"
+  JIGGIT_JIRA_USER_EMAIL_BY_NAME["${jira_storage_name}"]="${user_email}"
+  JIGGIT_JIRA_API_TOKEN_BY_NAME["${jira_storage_name}"]="${api_token}"
+  JIGGIT_JIRA_SOURCE_BY_NAME["${jira_storage_name}"]="${source_file}"
+  JIGGIT_JIRA_BASE_URL_SOURCE_BY_NAME["${jira_storage_name}"]="${source_file}"
+  JIGGIT_JIRA_BEARER_TOKEN_SOURCE_BY_NAME["${jira_storage_name}"]="${source_file}"
+  JIGGIT_JIRA_USER_EMAIL_SOURCE_BY_NAME["${jira_storage_name}"]="${source_file}"
+  JIGGIT_JIRA_API_TOKEN_SOURCE_BY_NAME["${jira_storage_name}"]="${source_file}"
 }
 
 # Decode a minimal TOML string literal into plain text.
@@ -610,7 +709,7 @@ parse_projects_toml() {
       if [[ "${current_id}" == "jira" ]]; then
         current_id=""
         current_section="jira"
-        current_jira_name="default"
+        current_jira_name="${JIGGIT_SHARED_JIRA_NAME}"
       fi
       continue
     fi
@@ -675,6 +774,11 @@ parse_projects_toml() {
 # Load one TOML config file into the in-memory project indexes.
 load_project_config_file() {
   local config_file="${1}"
+
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "parse project config file ${config_file}"
+  fi
+
   JIGGIT_LOADED_CONFIG_FILES+=("${config_file}")
   parse_projects_toml "${config_file}"
 }
@@ -726,21 +830,33 @@ discover_config_files() {
 # Load project config from the configured search path into memory.
 load_project_config() {
   local -a config_files=()
+  local loaded_count_before=0
+  local loaded_count_after=0
   mapfile -t config_files < <(discover_config_files "$@")
 
   reset_loaded_projects
 
   if declare -F jiggit_verbose_log >/dev/null 2>&1; then
-    jiggit_verbose_log "loading project config..."
+    jiggit_verbose_log "loading project config from ${#config_files[@]} file(s)"
+    jiggit_verbose_log "config var types ids=$(project_config_var_type JIGGIT_CONFIGURED_IDS) repo=$(project_config_var_type JIGGIT_PROJECT_REPO_PATH_BY_ID) source=$(project_config_var_type JIGGIT_PROJECT_SOURCE_BY_ID)"
   fi
 
   local config_file
   for config_file in "${config_files[@]}"; do
+    loaded_count_before=${#JIGGIT_CONFIGURED_IDS[@]}
     if declare -F jiggit_verbose_log >/dev/null 2>&1; then
       jiggit_verbose_log "config file ${config_file}"
     fi
     load_project_config_file "${config_file}"
+    loaded_count_after=${#JIGGIT_CONFIGURED_IDS[@]}
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      jiggit_verbose_log "loaded ${config_file}: projects ${loaded_count_before} -> ${loaded_count_after}"
+    fi
   done
+
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "loaded project ids: ${JIGGIT_CONFIGURED_IDS[*]:-none}"
+  fi
 }
 
 # Check whether a project id exists in the loaded config.
@@ -752,24 +868,35 @@ project_exists() {
 # Return the configured repo path for a project id.
 project_repo_path() {
   local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
   printf '%s\n' "${JIGGIT_PROJECT_REPO_PATH_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured Jira project key for a project id.
 project_jira_project_key() {
   local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
   printf '%s\n' "${JIGGIT_PROJECT_JIRA_PROJECT_KEY_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured remote URL for a project id.
 project_remote_url() {
   local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
   printf '%s\n' "${JIGGIT_PROJECT_REMOTE_URL_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured Jira name for a project id, defaulting to the shared default entry.
 project_jira_name() {
   local project_id="${1:-}"
+  if [[ -z "${project_id}" ]]; then
+    if [[ -n "${JIGGIT_JIRA_SOURCE_BY_NAME[${JIGGIT_SHARED_JIRA_NAME}]+x}" ]]; then
+      printf '%s\n' "default"
+      return 0
+    fi
+    printf '%s\n' ""
+    return 0
+  fi
   local jira_name="${JIGGIT_PROJECT_JIRA_NAME_BY_ID["${project_id}"]:-}"
 
   if [[ -n "${jira_name}" ]]; then
@@ -777,7 +904,7 @@ project_jira_name() {
     return 0
   fi
 
-  if [[ -n "${JIGGIT_JIRA_SOURCE_BY_NAME["default"]+x}" ]]; then
+  if [[ -n "${JIGGIT_JIRA_SOURCE_BY_NAME[${JIGGIT_SHARED_JIRA_NAME}]+x}" ]]; then
     printf '%s\n' "default"
     return 0
   fi
@@ -788,25 +915,66 @@ project_jira_name() {
 # Return the configured Jira regexes for a project id as a space-separated string.
 project_jira_regexes() {
   local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
   printf '%s\n' "${JIGGIT_PROJECT_JIRA_REGEXES_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured environments for a project id as a space-separated string.
 project_environments() {
   local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
   printf '%s\n' "${JIGGIT_PROJECT_ENVIRONMENTS_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured environment info URL pairs for a project id as space-separated env=url values.
 project_environment_info_urls() {
   local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
   printf '%s\n' "${JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured expression for extracting a version from actuator info.
 project_info_version_expr() {
   local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
   printf '%s\n' "${JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID["${project_id}"]:-}"
+}
+
+# Return the source file that supplied one effective project field.
+project_field_source() {
+  local project_id="${1:-}"
+  local field_name="${2:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' "unknown"; return 0; }
+
+  case "${field_name}" in
+    repo_path)
+      printf '%s\n' "${JIGGIT_PROJECT_REPO_PATH_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    remote_url)
+      printf '%s\n' "${JIGGIT_PROJECT_REMOTE_URL_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    jira)
+      printf '%s\n' "${JIGGIT_PROJECT_JIRA_NAME_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    jira_project_key)
+      printf '%s\n' "${JIGGIT_PROJECT_JIRA_PROJECT_KEY_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    jira_regexes)
+      printf '%s\n' "${JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    environments)
+      printf '%s\n' "${JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    environment_info_urls)
+      printf '%s\n' "${JIGGIT_PROJECT_ENV_INFO_URLS_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    info_version_expr)
+      printf '%s\n' "${JIGGIT_PROJECT_INFO_VERSION_EXPR_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    *)
+      printf '%s\n' "unknown"
+      ;;
+  esac
 }
 
 # Return the source file that supplied the effective project entry.
@@ -819,19 +987,22 @@ project_source_file() {
 # Resolve a Jira config name from either an explicit Jira name or a project id.
 resolve_jira_name() {
   local reference="${1:-}"
+  local jira_storage_name=""
 
-  if [[ -n "${reference}" && -n "${JIGGIT_JIRA_SOURCE_BY_NAME["${reference}"]+x}" ]]; then
-    printf '%s\n' "${reference}"
+  jira_storage_name="$(jiggit_jira_storage_name "${reference}")"
+
+  if [[ -n "${reference}" && -n "${JIGGIT_JIRA_SOURCE_BY_NAME[${jira_storage_name}]+x}" ]]; then
+    printf '%s\n' "${jira_storage_name}"
     return 0
   fi
 
   if [[ -n "${reference}" && -n "${JIGGIT_PROJECT_SOURCE_BY_ID["${reference}"]+x}" ]]; then
-    printf '%s\n' "$(project_jira_name "${reference}")"
+    printf '%s\n' "$(jiggit_jira_storage_name "$(project_jira_name "${reference}")")"
     return 0
   fi
 
-  if [[ -n "${JIGGIT_JIRA_SOURCE_BY_NAME["default"]+x}" ]]; then
-    printf '%s\n' "default"
+  if [[ -n "${JIGGIT_JIRA_SOURCE_BY_NAME[${JIGGIT_SHARED_JIRA_NAME}]+x}" ]]; then
+    printf '%s\n' "${JIGGIT_SHARED_JIRA_NAME}"
     return 0
   fi
 
@@ -846,22 +1017,30 @@ jira_names() {
 # Return the effective Jira base URL from config.
 jira_base_url() {
   local jira_name
+  local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
   [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
-  printf '%s\n' "${JIGGIT_JIRA_BASE_URL_BY_NAME["${jira_name}"]:-}"
+  jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
+  if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_BASE_URL:-}" ]]; then
+    printf '%s\n' "${JIRA_BASE_URL}"
+    return 0
+  fi
+  printf '%s\n' "${JIGGIT_JIRA_BASE_URL_BY_NAME["${jira_storage_name}"]:-}"
 }
 
 # Return the effective Jira bearer token from config.
 jira_bearer_token() {
   local jira_name
+  local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
   [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
-  if [[ -n "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_name}"]:-}" ]]; then
-    printf '%s\n' "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_name}"]}"
+  jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
+  if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_BEARER_TOKEN:-}" ]]; then
+    printf '%s\n' "${JIRA_BEARER_TOKEN}"
     return 0
   fi
-  if [[ "${jira_name}" == "default" && -z "${JIGGIT_JIRA_SOURCE_BY_NAME["default"]+x}" ]]; then
-    printf '%s\n' "${JIRA_BEARER_TOKEN:-}"
+  if [[ -n "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_storage_name}"]:-}" ]]; then
+    printf '%s\n' "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_storage_name}"]}"
     return 0
   fi
   printf '%s\n' ""
@@ -870,14 +1049,16 @@ jira_bearer_token() {
 # Return the effective Jira user email from config.
 jira_user_email() {
   local jira_name
+  local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
   [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
-  if [[ -n "${JIGGIT_JIRA_USER_EMAIL_BY_NAME["${jira_name}"]:-}" ]]; then
-    printf '%s\n' "${JIGGIT_JIRA_USER_EMAIL_BY_NAME["${jira_name}"]}"
+  jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
+  if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_USER_EMAIL:-}" ]]; then
+    printf '%s\n' "${JIRA_USER_EMAIL}"
     return 0
   fi
-  if [[ "${jira_name}" == "default" && -z "${JIGGIT_JIRA_SOURCE_BY_NAME["default"]+x}" ]]; then
-    printf '%s\n' "${JIRA_USER_EMAIL:-}"
+  if [[ -n "${JIGGIT_JIRA_USER_EMAIL_BY_NAME["${jira_storage_name}"]:-}" ]]; then
+    printf '%s\n' "${JIGGIT_JIRA_USER_EMAIL_BY_NAME["${jira_storage_name}"]}"
     return 0
   fi
   printf '%s\n' ""
@@ -886,17 +1067,65 @@ jira_user_email() {
 # Return the effective Jira API token from config.
 jira_api_token() {
   local jira_name
+  local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
   [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
-  if [[ -n "${JIGGIT_JIRA_API_TOKEN_BY_NAME["${jira_name}"]:-}" ]]; then
-    printf '%s\n' "${JIGGIT_JIRA_API_TOKEN_BY_NAME["${jira_name}"]}"
+  jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
+  if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_API_TOKEN:-}" ]]; then
+    printf '%s\n' "${JIRA_API_TOKEN}"
     return 0
   fi
-  if [[ "${jira_name}" == "default" && -z "${JIGGIT_JIRA_SOURCE_BY_NAME["default"]+x}" ]]; then
-    printf '%s\n' "${JIRA_API_TOKEN:-}"
+  if [[ -n "${JIGGIT_JIRA_API_TOKEN_BY_NAME["${jira_storage_name}"]:-}" ]]; then
+    printf '%s\n' "${JIGGIT_JIRA_API_TOKEN_BY_NAME["${jira_storage_name}"]}"
     return 0
   fi
   printf '%s\n' ""
+}
+
+# Return the source for one effective Jira field, including env overrides.
+jira_field_source() {
+  local reference="${1:-}"
+  local field_name="${2:-}"
+  local jira_name=""
+  local jira_storage_name=""
+
+  jira_name="$(resolve_jira_name "${reference}")"
+  [[ -n "${jira_name}" ]] || { printf '%s\n' "none"; return 0; }
+  jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
+
+  case "${field_name}" in
+    base_url)
+      if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_BASE_URL:-}" ]]; then
+        printf '%s\n' "env: JIRA_BASE_URL"
+        return 0
+      fi
+      printf '%s\n' "${JIGGIT_JIRA_BASE_URL_SOURCE_BY_NAME["${jira_storage_name}"]:-none}"
+      ;;
+    bearer_token)
+      if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_BEARER_TOKEN:-}" ]]; then
+        printf '%s\n' "env: JIRA_BEARER_TOKEN"
+        return 0
+      fi
+      printf '%s\n' "${JIGGIT_JIRA_BEARER_TOKEN_SOURCE_BY_NAME["${jira_storage_name}"]:-none}"
+      ;;
+    user_email)
+      if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_USER_EMAIL:-}" ]]; then
+        printf '%s\n' "env: JIRA_USER_EMAIL"
+        return 0
+      fi
+      printf '%s\n' "${JIGGIT_JIRA_USER_EMAIL_SOURCE_BY_NAME["${jira_storage_name}"]:-none}"
+      ;;
+    api_token)
+      if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_API_TOKEN:-}" ]]; then
+        printf '%s\n' "env: JIRA_API_TOKEN"
+        return 0
+      fi
+      printf '%s\n' "${JIGGIT_JIRA_API_TOKEN_SOURCE_BY_NAME["${jira_storage_name}"]:-none}"
+      ;;
+    *)
+      printf '%s\n' "${JIGGIT_JIRA_SOURCE_BY_NAME["${jira_storage_name}"]:-none}"
+      ;;
+  esac
 }
 
 # Return the effective Jira auth mode from config.
@@ -928,18 +1157,73 @@ jira_api_token_status() {
   printf '%s\n' 'missing'
 }
 
+# Return one Jira field value or a stable missing marker for display output.
+jira_display_value() {
+  local reference="${1:-}"
+  local field_name="${2:-}"
+  local value=""
+
+  case "${field_name}" in
+    base_url)
+      value="$(jira_base_url "${reference}")"
+      ;;
+    bearer_token)
+      value="$(jira_bearer_token "${reference}")"
+      ;;
+    user_email)
+      value="$(jira_user_email "${reference}")"
+      ;;
+    api_token)
+      value="$(jira_api_token "${reference}")"
+      ;;
+    *)
+      value=""
+      ;;
+  esac
+
+  printf '%s\n' "${value:-missing}"
+}
+
 # Render a compact Jira config diagnostic block for one Jira reference.
 render_jira_config_diagnostic() {
   local reference="${1:-}"
   local jira_name=""
   local jira_base_url_value=""
+  local jira_base_url_source=""
+  local jira_bearer_token_value=""
+  local jira_bearer_token_source=""
+  local jira_user_email_value=""
+  local jira_user_email_source=""
+  local jira_auth_mode_value=""
+  local jira_auth_mode_source=""
+  local jira_api_token_value=""
+  local jira_api_token_source=""
 
   jira_name="$(resolve_jira_name "${reference}")"
-  jira_base_url_value="$(jira_base_url "${reference}")"
+  jira_base_url_value="$(jira_display_value "${reference}" "base_url")"
+  jira_base_url_source="$(jira_field_source "${reference}" "base_url")"
+  jira_bearer_token_value="$(jira_display_value "${reference}" "bearer_token")"
+  jira_bearer_token_source="$(jira_field_source "${reference}" "bearer_token")"
+  jira_user_email_value="$(jira_display_value "${reference}" "user_email")"
+  jira_user_email_source="$(jira_field_source "${reference}" "user_email")"
+  jira_auth_mode_value="$(jira_auth_mode "${reference}")"
+  jira_api_token_value="$(jira_display_value "${reference}" "api_token")"
+  jira_api_token_source="$(jira_field_source "${reference}" "api_token")"
+
+  if [[ "${jira_auth_mode_value}" == "bearer_token" ]]; then
+    jira_auth_mode_source="$(jira_field_source "${reference}" "bearer_token")"
+  elif [[ "${jira_auth_mode_value}" == "basic_auth" ]]; then
+    jira_auth_mode_source="$(jira_field_source "${reference}" "user_email"), $(jira_field_source "${reference}" "api_token")"
+  else
+    jira_auth_mode_source="none"
+  fi
+
   printf -- "- Jira config: \`%s\`\n" "${jira_name:-missing}"
-  printf -- "- Jira base URL: \`%s\`\n" "${jira_base_url_value:-missing}"
-  printf -- "- Jira auth mode: \`%s\`\n" "$(jira_auth_mode "${reference}")"
-  printf -- "- Jira API token: \`%s\`\n" "$(jira_api_token_status "${reference}")"
+  printf -- "- Jira base URL: \`%s\` (%s)\n" "${jira_base_url_value}" "${jira_base_url_source}"
+  printf -- "- Jira bearer token: \`%s\` (%s)\n" "${jira_bearer_token_value}" "${jira_bearer_token_source}"
+  printf -- "- Jira user email: \`%s\` (%s)\n" "${jira_user_email_value}" "${jira_user_email_source}"
+  printf -- "- Jira API token: \`%s\` (%s)\n" "${jira_api_token_value}" "${jira_api_token_source}"
+  printf -- "- Jira auth mode: \`%s\` (%s)\n" "${jira_auth_mode_value}" "${jira_auth_mode_source}"
   printf -- "- Jira config source: \`%s\`\n" "$(jira_config_source "${reference}")"
 }
 
@@ -1165,10 +1449,16 @@ default_project_scope() {
 
   current_project_id="$(resolve_project_selector "" || true)"
   if [[ -n "${current_project_id}" ]]; then
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      jiggit_verbose_log "default project scope resolved current repo project ${current_project_id}"
+    fi
     printf '%s\n' "${current_project_id}"
     return 0
   fi
 
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "default project scope falls back to all configured ids: ${JIGGIT_CONFIGURED_IDS[*]:-none}"
+  fi
   printf '%s\n' "${JIGGIT_CONFIGURED_IDS[@]}"
 }
 
@@ -1180,7 +1470,7 @@ resolve_project_selector() {
   local configured_repo_path=""
   local configured_repo_root=""
 
-  if [[ -n "${selector}" && -n "${JIGGIT_PROJECT_SOURCE_BY_ID["${selector}"]+x}" ]]; then
+  if [[ -n "${selector}" && "${selector}" != "." && "${selector}" != */* && -n "${JIGGIT_PROJECT_SOURCE_BY_ID["${selector}"]+x}" ]]; then
     printf '%s\n' "${selector}"
     return 0
   fi
@@ -1235,21 +1525,33 @@ effective_multi_project_selectors() {
   local -a global_selectors=()
 
   if [[ ${#explicit_selectors[@]} -gt 0 ]]; then
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      jiggit_verbose_log "multi-project selectors from explicit args: ${explicit_selectors[*]}"
+    fi
     printf '%s\n' "${explicit_selectors[@]}"
     return 0
   fi
 
   if [[ "${JIGGIT_ALL_PROJECTS:-0}" -eq 1 ]]; then
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      jiggit_verbose_log "multi-project selectors from --all-projects: ${JIGGIT_CONFIGURED_IDS[*]:-none}"
+    fi
     printf '%s\n' "${JIGGIT_CONFIGURED_IDS[@]}"
     return 0
   fi
 
   mapfile -t global_selectors < <(global_project_selectors)
   if [[ ${#global_selectors[@]} -gt 0 ]]; then
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      jiggit_verbose_log "multi-project selectors from --projects: ${global_selectors[*]}"
+    fi
     printf '%s\n' "${global_selectors[@]}"
     return 0
   fi
 
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "multi-project selectors from default scope"
+  fi
   default_project_scope
 }
 
@@ -1394,12 +1696,23 @@ detect_jira_regexes() {
 configured_status_for_repo() {
   local repo_path="${1}"
   local remote_url="${2}"
-  local path_id="${JIGGIT_CONFIGURED_ID_BY_PATH["${repo_path}"]:-}"
+  local path_id=""
   local remote_id=""
+  local project_id=""
 
-  if [[ -n "${remote_url}" ]]; then
-    remote_id="${JIGGIT_CONFIGURED_ID_BY_REMOTE["${remote_url}"]:-}"
-  fi
+  for project_id in "${JIGGIT_CONFIGURED_IDS[@]:-}"; do
+    if [[ -z "${path_id}" && "$(project_repo_path "${project_id}")" == "${repo_path}" ]]; then
+      path_id="${project_id}"
+    fi
+
+    if [[ -n "${remote_url}" && -z "${remote_id}" && "$(project_remote_url "${project_id}")" == "${remote_url}" ]]; then
+      remote_id="${project_id}"
+    fi
+
+    if [[ -n "${path_id}" && -n "${remote_id}" ]]; then
+      break
+    fi
+  done
 
   if [[ -n "${path_id}" && -n "${remote_id}" && "${path_id}" != "${remote_id}" ]]; then
     printf 'ambiguous\n'

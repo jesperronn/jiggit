@@ -24,7 +24,7 @@ fi
 
 # Render help for the jira-issues command.
 jira_issues_usage() {
-  cat <<'EOF'
+  print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit jira-issues [<project|path>] --release <fixVersion>
 
