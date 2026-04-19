@@ -64,10 +64,22 @@ fetch_jira_project_metadata() {
   local auth_reference="${3:-}"
   local -a auth_args=()
   local metadata_url=""
+  local jira_name=""
+  local auth_mode_value=""
+  local auth_source_value=""
 
   metadata_url="$(jira_project_metadata_url "${jira_base_url}" "${jira_project_key}")"
   if declare -F jiggit_verbose_log >/dev/null 2>&1; then
-    jiggit_verbose_log "jira-check metadata ${metadata_url}"
+    jira_name="$(resolve_jira_name "${auth_reference}")"
+    auth_mode_value="$(jira_auth_mode "${auth_reference}")"
+    if [[ "${auth_mode_value}" == "bearer_token" ]]; then
+      auth_source_value="$(jira_field_source "${auth_reference}" "bearer_token")"
+    elif [[ "${auth_mode_value}" == "basic_auth" ]]; then
+      auth_source_value="$(jira_field_source "${auth_reference}" "user_email"), $(jira_field_source "${auth_reference}" "api_token")"
+    else
+      auth_source_value="none"
+    fi
+    jiggit_verbose_log "jira-check metadata jira=${jira_name:-missing} auth=${auth_mode_value} auth-source=${auth_source_value} url=${metadata_url}"
   fi
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
 
@@ -83,6 +95,22 @@ fetch_jira_current_user() {
   local jira_base_url="${1}"
   local auth_reference="${2:-}"
   local -a auth_args=()
+  local jira_name=""
+  local auth_mode_value=""
+  local auth_source_value=""
+
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jira_name="$(resolve_jira_name "${auth_reference}")"
+    auth_mode_value="$(jira_auth_mode "${auth_reference}")"
+    if [[ "${auth_mode_value}" == "bearer_token" ]]; then
+      auth_source_value="$(jira_field_source "${auth_reference}" "bearer_token")"
+    elif [[ "${auth_mode_value}" == "basic_auth" ]]; then
+      auth_source_value="$(jira_field_source "${auth_reference}" "user_email"), $(jira_field_source "${auth_reference}" "api_token")"
+    else
+      auth_source_value="none"
+    fi
+    jiggit_verbose_log "jira-check myself jira=${jira_name:-missing} auth=${auth_mode_value} auth-source=${auth_source_value} url=${jira_base_url%/}/rest/api/2/myself"
+  fi
 
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
 
@@ -301,8 +329,13 @@ render_jira_check_summary() {
   local project_self
   local release_count
 
-  project_name="$(printf '%s\n' "${metadata_json}" | jq -r '.name // "unknown"')"
-  project_self="$(printf '%s\n' "${metadata_json}" | jq -r '.self // "unknown"')"
+  if [[ -n "${metadata_json}" ]]; then
+    project_name="$(printf '%s\n' "${metadata_json}" | jq -r '.name // "unknown"')"
+    project_self="$(printf '%s\n' "${metadata_json}" | jq -r '.self // "unknown"')"
+  else
+    project_name="unknown"
+    project_self="unknown"
+  fi
   release_count="$(printf '%s\n' "${releases_json}" | jq -r 'length')"
 
   print_markdown_h2 "${project_id}" "${C_GREEN}"
@@ -351,6 +384,10 @@ run_jira_check_for_project() {
   local releases_url=""
   local metadata_json=""
   local releases_json=""
+  local metadata_error=""
+  local releases_error=""
+  local metadata_error_file=""
+  local releases_error_file=""
   local access_result=""
   local access_state=""
   local access_detail=""
@@ -391,17 +428,26 @@ run_jira_check_for_project() {
     return 1
   fi
 
-  if ! metadata_json="$(fetch_jira_project_metadata "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>&1)"; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "$(printf '%s' "${metadata_json}" | tr '\n' ' ')" "${metadata_url}" "${releases_url}" "ok" "jiggit jira-check ${project_id}"
-    return 1
+  metadata_error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-jira-check-metadata.XXXXXX")"
+  if ! metadata_json="$(fetch_jira_project_metadata "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>"${metadata_error_file}")"; then
+    metadata_error="$(tr '\n' ' ' < "${metadata_error_file}")"
+    metadata_json=""
   fi
+  rm -f "${metadata_error_file}"
 
-  if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>&1)"; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "$(printf '%s' "${releases_json}" | tr '\n' ' ')" "${metadata_url}" "${releases_url}" "ok" "jiggit jira-check ${project_id}"
+  releases_error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-jira-check-releases.XXXXXX")"
+  if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>"${releases_error_file}")"; then
+    releases_error="$(tr '\n' ' ' < "${releases_error_file}")"
+    rm -f "${releases_error_file}"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${releases_error}" "${metadata_url}" "${releases_url}" "ok" "jiggit jira-check ${project_id}"
     return 1
   fi
+  rm -f "${releases_error_file}"
 
   render_jira_check_summary "${project_id}" "${jira_name}" "${jira_project_key}" "${metadata_json}" "${releases_json}" "${metadata_url}" "${releases_url}"
+  if [[ -n "${metadata_error}" ]]; then
+    printf -- "- Metadata probe: \`warn\` (%s)\n\n" "${metadata_error}"
+  fi
 }
 
 # Print the project ids jira-check should inspect.

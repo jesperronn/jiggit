@@ -198,13 +198,13 @@ EOF
     JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
     JIRA_BASE_URL="https://jira.env.example.test" \
-    JIRA_BEARER_TOKEN="env-bearer-token" \
+    JIRA_API_TOKEN="env-api-token" \
     run_config_main --global
   )"
 
   assert_contains "${output}" "Jira base URL: \`https://jira.env.example.test\` (env: JIRA_BASE_URL)" "prefer env base url and show source"
-  assert_contains "${output}" "Jira bearer token: \`env-bearer-token\` (env: JIRA_BEARER_TOKEN)" "show env-backed bearer token source"
-  assert_contains "${output}" "Jira auth mode: \`bearer_token\` (env: JIRA_BEARER_TOKEN)" "show env-backed auth mode source"
+  assert_contains "${output}" "Jira bearer token: \`env-api-token\` (env: JIRA_API_TOKEN)" "show env api token as bearer token source"
+  assert_contains "${output}" "Jira auth mode: \`bearer_token\` (env: JIRA_API_TOKEN)" "show env api token as auth mode source"
 }
 
 test_run_config_main_hides_same_source_redefinition_noise_from_overrides() {

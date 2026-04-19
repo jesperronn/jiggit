@@ -85,65 +85,31 @@ overview_emit_line() {
   local label="${1}"
   local value="${2}"
   local label_width="${3:-0}"
+  : "${label_width}"
 
-  print_markdown_kv "${label}" "${value}" "${label_width}"
+  printf -- "- %s: %s\n" "${label}" "${value}"
 }
 
 # Render one copy-paste-friendly next-step command.
 overview_emit_next_step() {
   local description="${1}"
   local command_text="${2}"
-  print_markdown_kv "${description}" "${command_text}"
+  printf -- "- %s: %s\n" "${description}" "${command_text}"
+}
+
+# Render one plain dashboard bullet line.
+overview_emit_plain_line() {
+  local label="${1}"
+  local value="${2}"
+  printf -- "- %s: %s\n" "${label}" "${value}"
 }
 
 # Render a short colored issue list for overview using the same fixVersion rules as next-release.
 render_overview_issue_list() {
   local issues_json="${1}"
   local expected_release="${2}"
-  local issue_json=""
-  local issue_state=""
-  local issue_key=""
-  local title=""
-  local status_name=""
-  local fix_version=""
-  local issue_color="${C_DIM}"
-  local rendered_any=0
 
-  while IFS= read -r issue_json; do
-    [[ -z "${issue_json}" ]] && continue
-    issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${expected_release}")"
-    issue_key="$(printf '%s\n' "${issue_json}" | jq -r '.key // "unknown"')"
-    title="$(printf '%s\n' "${issue_json}" | jq -r '.fields.summary // "unknown"')"
-    status_name="$(printf '%s\n' "${issue_json}" | jq -r '.fields.status.name // "unknown"')"
-    fix_version="$(jira_issue_fix_version_display "${issue_json}")"
-
-    case "${issue_state}" in
-      expected-fix-version)
-        if [[ "$(printf '%s\n' "${status_name}" | tr '[:upper:]' '[:lower:]')" == *resolved* || "$(printf '%s\n' "${status_name}" | tr '[:upper:]' '[:lower:]')" == *done* || "$(printf '%s\n' "${status_name}" | tr '[:upper:]' '[:lower:]')" == *closed* ]]; then
-          issue_color="${C_GREEN}"
-        else
-          issue_color="${C_CYAN}"
-        fi
-        ;;
-      missing-fix-version|other-fix-version)
-        issue_color="${C_ORANGE}"
-        ;;
-      *)
-        issue_color="${C_DIM}"
-        ;;
-    esac
-
-    if use_color_output && [[ "${issue_color}" != "${C_DIM}" ]]; then
-      print_colored_line "${issue_color}" "- \`${issue_key}\` ${title} (\`${status_name}\`, fix_version: \`${fix_version}\`)"
-    else
-      printf -- "- \`%s\` %s (\`%s\`, fix_version: \`%s\`)\n" "${issue_key}" "${title}" "${status_name}" "${fix_version}"
-    fi
-    rendered_any=1
-  done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
-
-  if [[ "${rendered_any}" -eq 0 ]]; then
-    printf '_No Jira issues found for this unreleased span._\n'
-  fi
+  render_next_release_issue_lines "${issues_json}" "${expected_release}"
 }
 
 # Render a compact unreleased-issue summary for the next-release section.
@@ -164,10 +130,9 @@ render_overview_next_release_issues() {
   local missing_count=0
   local fetch_failed=0
 
-  print_markdown_h2 "Unreleased Issues" "${C_GREEN}"
-  printf '\n'
-
   if [[ -z "${suggested_version}" || -z "${jira_base_url_value}" ]]; then
+    print_markdown_h2 "Unreleased Issues" "${C_GREEN}"
+    printf '\n'
     overview_emit_line "status" "missing jira config"
     overview_emit_next_step "next step" "jiggit config"
     return 0
@@ -175,6 +140,8 @@ render_overview_next_release_issues() {
 
   issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}" || true)"
   if [[ -z "${issue_keys_text}" ]]; then
+    print_markdown_h2 "Unreleased Issues" "${C_GREEN}"
+    printf '\n'
     overview_emit_line "status" "no jira keys found in commit span"
     overview_emit_next_step "next step" "jiggit env-diff ${project_id} --base prod"
     return 0
@@ -182,16 +149,20 @@ render_overview_next_release_issues() {
 
   mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
   if [[ ${#issue_keys[@]} -eq 0 ]]; then
+    print_markdown_h2 "Unreleased Issues" "${C_GREEN}"
+    printf '\n'
     overview_emit_line "status" "no jira keys found in commit span"
     overview_emit_next_step "next step" "jiggit env-diff ${project_id} --base prod"
     return 0
   fi
 
-  if ! issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}" 2>/dev/null)"; then
+  if ! issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${project_id}" "${issue_keys[@]}" 2>/dev/null)"; then
     fetch_failed=1
   fi
 
   if [[ "${fetch_failed}" -eq 1 ]]; then
+    print_markdown_h2 "Unreleased Issues" "${C_GREEN}"
+    printf '\n'
     overview_emit_line "status" "unable to fetch jira issues"
     overview_emit_next_step "next step" "jiggit jira-check ${project_id}"
     return 0
@@ -200,7 +171,7 @@ render_overview_next_release_issues() {
   while IFS= read -r issue_json; do
     [[ -z "${issue_json}" ]] && continue
     total_count=$((total_count + 1))
-    issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${suggested_version}")"
+    issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${suggested_version}" "${project_id}")"
     case "${issue_state}" in
       expected-fix-version)
         expected_count=$((expected_count + 1))
@@ -212,14 +183,18 @@ render_overview_next_release_issues() {
   done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
 
   if [[ "${total_count}" -eq 0 ]]; then
+    print_markdown_h2 "Unreleased Issues (0)" "${C_GREEN}"
+    printf '\n'
     overview_emit_line "status" "no jira issues returned for commit span"
     return 0
   fi
 
+  print_markdown_h2 "Unreleased Issues (${total_count})" "${C_GREEN}"
+  printf '\n'
   overview_emit_line "issue count" "${total_count}"
   overview_emit_line "issues with expected fixVersion" "${expected_count}"
   overview_emit_line "issues missing expected fixVersion" "${missing_count}"
-  render_overview_issue_list "${issues_json}" "${suggested_version}"
+  render_overview_issue_list "${issues_json}" "${suggested_version}" "${project_id}"
 }
 
 # Render the config section in overview.
@@ -236,9 +211,8 @@ render_overview_config_section() {
   environments="$(project_environments "${project_id}")"
   source_file="$(project_source_file "${project_id}")"
 
-  print_markdown_h2 "${project_id}" "${C_GREEN}"
+  print_markdown_h2 "${project_id} \`${section_command}\`" "${C_GREEN}"
   printf '\n'
-  overview_emit_line "command" "${section_command}"
   overview_emit_line "repo path" "${repo_path:-missing}"
   overview_emit_line "jira project key" "${jira_project_key:-missing}"
   overview_emit_line "environments" "${environments:-none}"
@@ -267,9 +241,8 @@ render_overview_versions() {
     fi
   done
 
-  print_markdown_h2 "Versions" "${C_CYAN}"
+  print_markdown_h2 "Versions \`jiggit env-versions ${project_id}\`" "${C_CYAN}"
   printf '\n'
-  overview_emit_line "command" "jiggit env-versions ${project_id}"
 
   if [[ -z "${environments}" ]]; then
     overview_emit_line "environments" "none"
@@ -333,112 +306,72 @@ render_overview_next_release() {
   local commit_count=""
   local suggested_version=""
   local jira_base_url_value=""
+  local command_text=""
 
-  print_markdown_h2 "Next Release" "${C_MAGENTA}"
+  command_text="jiggit next-release ${project_id} --base prod"
+  print_markdown_h2 "Next Release \`${command_text}\`" "${C_MAGENTA}"
   printf '\n'
-  overview_emit_line "command" "jiggit next-release ${project_id}"
 
   if [[ -z "${repo_path}" || ! -d "${repo_path}" ]]; then
-    overview_emit_line "status" "missing local repo"
-    overview_emit_next_step "next step" "jiggit config"
+    overview_emit_plain_line "status" "missing local repo"
+    printf '\nNext steps:\n'
+    printf -- "- jiggit config\n"
     printf '\n'
     return 0
   fi
 
   if [[ " ${environments} " != *" prod "* ]]; then
-    overview_emit_line "status" "missing prod base"
-    overview_emit_next_step "next step" "jiggit config"
+    overview_emit_plain_line "status" "missing prod base"
+    printf '\nNext steps:\n'
+    printf -- "- jiggit config\n"
     printf '\n'
     return 0
   fi
 
   if ! target_ref="$(default_target_git_ref "${repo_path}" 2>/dev/null)"; then
-    overview_emit_line "status" "unable to resolve target branch"
-    overview_emit_next_step "next step" "jiggit next-release ${project_id}"
+    overview_emit_plain_line "status" "unable to resolve target branch"
+    printf '\nNext steps:\n'
+    printf -- "- %s\n" "${command_text}"
     printf '\n'
     return 0
   fi
 
   if ! base_resolved="$(next_release_resolve_base "${project_id}" "${repo_path}" " ${environments} " "prod" 2>/dev/null)"; then
-    overview_emit_line "status" "missing prod base"
-    overview_emit_next_step "next step" "jiggit config"
+    overview_emit_plain_line "status" "missing prod base"
+    printf '\nNext steps:\n'
+    printf -- "- jiggit config\n"
     printf '\n'
     return 0
   fi
 
   IFS='|' read -r _ base_label _ base_git_ref <<< "${base_resolved}"
   if ! commit_count="$(git -C "${repo_path}" rev-list --count "${base_git_ref}..${target_ref}" 2>/dev/null)"; then
-    overview_emit_line "status" "unable to compare refs"
-    overview_emit_next_step "next step" "jiggit next-release ${project_id}"
+    overview_emit_plain_line "status" "unable to compare refs"
+    printf '\nNext steps:\n'
+    printf -- "- %s\n" "${command_text}"
     printf '\n'
     return 0
   fi
 
-  overview_emit_line "base" "${base_label}"
-  overview_emit_line "base version" "${base_git_ref}"
-  overview_emit_line "target" "${target_ref}"
-  overview_emit_line "commit count ahead" "${commit_count}"
-
   if [[ "${commit_count}" -gt 0 ]]; then
     suggested_version="$(bump_minor_version "${base_git_ref}" || true)"
-    overview_emit_line "status" "release-needed"
+    overview_emit_plain_line "base version (${base_label})" "${base_git_ref}"
+    overview_emit_plain_line "commit count ahead" "${commit_count}"
     if [[ -n "${suggested_version}" ]]; then
-      overview_emit_line "suggested next release" "${suggested_version}"
+      printf -- "- **suggested next release: %s**\n" "${suggested_version}"
     fi
     jira_base_url_value="$(jira_base_url "${project_id}")"
     if [[ -n "$(project_jira_project_key "${project_id}")" && -n "${jira_base_url_value}" ]]; then
       render_overview_next_release_issues "${project_id}" "${repo_path}" "${base_git_ref}" "${target_ref}" "${suggested_version}" "${jira_base_url_value}"
     fi
-    overview_emit_next_step "next step" "jiggit next-release ${project_id}"
-    overview_emit_next_step "investigate diff" "jiggit env-diff ${project_id} --base prod"
-    if [[ -n "$(project_jira_project_key "${project_id}")" && -n "${suggested_version}" && -n "${jira_base_url_value}" ]]; then
-      overview_emit_next_step "assign fixVersion" "jiggit assign-fix-version ${project_id} --release ${suggested_version#v}"
-    fi
+    printf '\nNext steps:\n'
+    printf -- "- jiggit env-diff %s --base prod\n" "${project_id}"
+    printf -- "- %s\n" "${command_text}"
   else
-    overview_emit_line "status" "up-to-date"
+    overview_emit_plain_line "base version (${base_label})" "${base_git_ref}"
+    overview_emit_plain_line "commit count ahead" "${commit_count}"
+    overview_emit_plain_line "status" "up-to-date"
   fi
-  printf '\n'
-}
-
-# Render a compact Jira release summary for one project.
-render_overview_releases() {
-  local project_id="${1}"
-  local jira_project_key="${2}"
-  local releases_json=""
-  local jira_base_url_value=""
-  local release_count=""
-  local top_names=""
-
-  print_markdown_h2 "Releases" "${C_BLUE}"
-  printf '\n'
-  overview_emit_line "command" "jiggit releases ${project_id}"
-
-  jira_base_url_value="$(jira_base_url "${project_id}")"
-  if [[ -z "${jira_project_key}" ]]; then
-    overview_emit_line "status" "missing jira project key"
-    overview_emit_next_step "next step" "jiggit config"
-    printf '\n'
-    return 0
-  fi
-
-  if [[ -z "${jira_base_url_value}" ]]; then
-    overview_emit_line "status" "missing jira base url"
-    overview_emit_next_step "next step" "jiggit config"
-    printf '\n'
-    return 0
-  fi
-
-  if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" 2>/dev/null)"; then
-    overview_emit_line "status" "unable to fetch releases"
-    overview_emit_next_step "next step" "jiggit jira-check ${project_id}"
-    printf '\n'
-    return 0
-  fi
-
-  release_count="$(printf '%s\n' "${releases_json}" | jq -r 'length')"
-  top_names="$(printf '%s\n' "${releases_json}" | jq -r 'sort_by((.released // false), (.archived // false), (.releaseDate // ""), (.name // "")) | reverse | .[:3] | map(.name // "unknown") | join(", ")')"
-  overview_emit_line "count" "${release_count}"
-  overview_emit_line "top releases" "${top_names:-none}"
   printf '\n'
 }
 
@@ -446,17 +379,14 @@ render_overview_releases() {
 render_overview_project() {
   local project_id="${1}"
   local repo_path=""
-  local jira_project_key=""
   local environments=""
 
   repo_path="$(project_repo_path "${project_id}")"
-  jira_project_key="$(project_jira_project_key "${project_id}")"
   environments="$(project_environments "${project_id}")"
 
   render_overview_config_section "${project_id}"
   render_overview_versions "${project_id}" "${environments}"
   render_overview_next_release "${project_id}" "${repo_path}" "${environments}"
-  render_overview_releases "${project_id}" "${jira_project_key}"
 }
 
 # Load config, resolve overview targets, and render one dashboard section per project.

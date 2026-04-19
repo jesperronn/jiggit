@@ -57,13 +57,12 @@ Detect whether a project needs a new release and suggest the next minor version.
 EOF
 }
 
-# Suggest the next minor version while preserving the original segment count.
+# Suggest the next minor version as major.minor.0, without a build segment.
 bump_minor_version() {
   local version_ref="${1:-}"
   local version_core="${version_ref#v}"
   local had_v_prefix=0
   local -a parts=()
-  local index=0
 
   if [[ "${version_ref}" == v* ]]; then
     had_v_prefix=1
@@ -78,16 +77,25 @@ bump_minor_version() {
     parts+=(0)
   fi
 
-  for index in "${!parts[@]}"; do
-    if ! [[ "${parts[${index}]}" =~ ^[0-9]+$ ]]; then
-      return 1
-    fi
-  done
+  if ! [[ "${parts[0]}" =~ ^[0-9]+$ && "${parts[1]}" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  if [[ "${#parts[@]}" -ge 3 && ! "${parts[2]}" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  if [[ "${#parts[@]}" -gt 3 ]]; then
+    local index=0
+    for index in "${!parts[@]}"; do
+      if ! [[ "${parts[${index}]}" =~ ^[0-9]+$ ]]; then
+        return 1
+      fi
+    done
+  fi
 
   parts[1]=$((parts[1] + 1))
-  for (( index=2; index<${#parts[@]}; index+=1 )); do
-    parts[index]=0
-  done
+  parts=("${parts[0]}" "${parts[1]}" "0")
 
   if [[ "${had_v_prefix}" -eq 1 ]]; then
     printf 'v%s\n' "$(IFS=.; printf '%s' "${parts[*]}")"
@@ -219,13 +227,304 @@ normalize_fix_version_name() {
   while [[ "${value}" == [vV]* ]]; do
     value="${value#?}"
   done
+  while [[ "${value}" == *".0" ]]; do
+    value="${value%".0"}"
+  done
   printf '%s\n' "${value}"
+}
+
+# Return candidate version cores for one suggested release by trimming trailing .0 segments.
+next_release_version_variants() {
+  local value=""
+
+  value="${1:-}"
+  while [[ "${value}" == [vV]* ]]; do
+    value="${value#?}"
+  done
+  while [[ -n "${value}" ]]; do
+    printf '%s\n' "${value}"
+    [[ "${value}" == *".0" ]] || break
+    value="${value%".0"}"
+  done
+}
+
+# Return Jira release name candidates for one project and suggested version.
+next_release_project_release_name_candidates() {
+  local project_id="${1}"
+  local suggested_version="${2}"
+  local prefixes=""
+  local prefix=""
+  local variant=""
+
+  prefixes="$(project_jira_release_prefixes "${project_id}")"
+  if [[ -z "${prefixes}" ]]; then
+    next_release_version_variants "${suggested_version}"
+    return 0
+  fi
+
+  for prefix in ${prefixes}; do
+    while IFS= read -r variant; do
+      [[ -z "${variant}" ]] && continue
+      printf '%s%s\n' "${prefix}" "${variant}"
+    done < <(next_release_version_variants "${suggested_version}")
+  done
+}
+
+# Return success when one Jira release name matches a project-scoped release candidate.
+next_release_name_matches_project_candidates() {
+  local project_id="${1}"
+  local suggested_version="${2}"
+  local release_name="${3}"
+  local candidate=""
+
+  while IFS= read -r candidate; do
+    [[ -z "${candidate}" ]] && continue
+    if [[ "${release_name}" == "${candidate}" ]]; then
+      return 0
+    fi
+  done < <(next_release_project_release_name_candidates "${project_id}" "${suggested_version}")
+
+  return 1
+}
+
+# Return success when one Jira release belongs to the current project namespace.
+next_release_release_belongs_to_project() {
+  local project_id="${1}"
+  local release_name="${2}"
+  local prefixes=""
+  local prefix=""
+
+  prefixes="$(project_jira_release_prefixes "${project_id}")"
+  if [[ -z "${prefixes}" ]]; then
+    return 0
+  fi
+
+  for prefix in ${prefixes}; do
+    if [[ "${release_name}" == "${prefix}"* ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Return only the project-relevant Jira releases.
+next_release_project_releases_json() {
+  local project_id="${1}"
+  local releases_json="${3}"
+  local release_json=""
+  local release_name=""
+  local filtered_json="[]"
+
+  while IFS= read -r release_json; do
+    [[ -z "${release_json}" ]] && continue
+    release_name="$(printf '%s\n' "${release_json}" | jq -r '.name // empty')"
+    if next_release_release_belongs_to_project "${project_id}" "${release_name}"; then
+      filtered_json="$(printf '%s\n%s\n' "${filtered_json}" "${release_json}" | jq -s '.[0] + [.[1]]')"
+    fi
+  done < <(printf '%s\n' "${releases_json}" | jq -c '.[]?')
+
+  printf '%s\n' "${filtered_json}"
+}
+
+# Return only active unreleased Jira releases from a versions payload.
+jira_unreleased_releases_json() {
+  local releases_json="${1}"
+
+  printf '%s\n' "${releases_json}" | jq -c '
+    map(select((.archived // false) != true and (.released // false) != true))
+  '
+}
+
+# Return the newest active released Jira release from a versions payload.
+jira_latest_released_release_json() {
+  local releases_json="${1}"
+
+  printf '%s\n' "${releases_json}" | jq -c '
+    map(select((.archived // false) != true and (.released // false) == true))
+    | sort_by((.releaseDate // ""), (.name // ""))
+    | last // empty
+  '
+}
+
+# Return one release inventory payload for next-release display.
+jira_next_release_inventory_json() {
+  local project_id="${1}"
+  local suggested_version="${2}"
+  local releases_json="${3}"
+  local scoped_releases_json=""
+  local unreleased_json=""
+  local latest_released_json=""
+
+  scoped_releases_json="$(next_release_project_releases_json "${project_id}" "" "${releases_json}")"
+  unreleased_json="$(jira_unreleased_releases_json "${scoped_releases_json}")"
+  if [[ "$(printf '%s\n' "${unreleased_json}" | jq -r 'length')" -gt 0 ]]; then
+    printf '%s\n' "${unreleased_json}"
+    return 0
+  fi
+
+  latest_released_json="$(jira_latest_released_release_json "${scoped_releases_json}")"
+  if [[ -n "${latest_released_json}" ]]; then
+    printf '[%s]\n' "${latest_released_json}"
+    return 0
+  fi
+
+  printf '[]\n'
+}
+
+# Return the workflow bucket used for next-release issue grouping.
+next_release_issue_status_bucket() {
+  local status_name="${1:-}"
+  local lowered_status=""
+
+  lowered_status="$(printf '%s\n' "${status_name}" | tr '[:upper:]' '[:lower:]')"
+  case "${lowered_status}" in
+    *resolved*|*done*|*closed*)
+      printf '%s\n' "resolved"
+      ;;
+    *business*validation*)
+      printf '%s\n' "business-validation"
+      ;;
+    *quality*assurance*|qa)
+      printf '%s\n' "quality-assurance"
+      ;;
+    *implement*|*in\ progress*)
+      printf '%s\n' "implement"
+      ;;
+    *reopen*|*re-open*|*open*|*to\ do*)
+      printf '%s\n' "open-reopen"
+      ;;
+    *)
+      printf '%s\n' "open-reopen"
+      ;;
+  esac
+}
+
+# Return the sort rank for one next-release workflow bucket.
+next_release_issue_status_rank() {
+  local bucket="${1:-open-reopen}"
+
+  case "${bucket}" in
+    resolved)
+      printf '%s\n' "1"
+      ;;
+    business-validation)
+      printf '%s\n' "2"
+      ;;
+    quality-assurance)
+      printf '%s\n' "3"
+      ;;
+    implement)
+      printf '%s\n' "4"
+      ;;
+    *)
+      printf '%s\n' "5"
+      ;;
+  esac
+}
+
+# Return the color used for one workflow bucket.
+next_release_issue_status_color() {
+  local bucket="${1:-open-reopen}"
+
+  case "${bucket}" in
+    resolved)
+      printf '%s\n' "${C_GREEN}"
+      ;;
+    business-validation)
+      printf '%s\n' "${C_CYAN}"
+      ;;
+    quality-assurance)
+      printf '%s\n' "${C_BLUE}"
+      ;;
+    implement)
+      printf '%s\n' "${C_MAGENTA}"
+      ;;
+    *)
+      printf '%s\n' ""
+      ;;
+  esac
+}
+
+# Print one next-release issue line with inline segment colors.
+print_next_release_issue_line() {
+  local issue_key="${1}"
+  local subject="${2}"
+  local status_name="${3}"
+  local fix_version="${4}"
+  local fix_version_state="${5}"
+  local status_bucket="${6}"
+  local status_color=""
+  local fix_color=""
+  local fix_bold=""
+
+  if ! use_color_output; then
+    printf '%s status: %s, fix_version: %s, subject: %s\n' \
+      "${issue_key}:" "${status_name}" "${fix_version}" "${subject}"
+    return 0
+  fi
+
+  status_color="$(next_release_issue_status_color "${status_bucket}")"
+  if [[ "${fix_version_state}" == "expected-fix-version" ]]; then
+    fix_color="${C_DIM}"
+    fix_bold=""
+  else
+    fix_color="${C_RED}"
+    fix_bold="${C_BOLD}"
+  fi
+
+  printf '%b%s%b status: ' \
+    "${C_BOLD}${C_CYAN}" "${issue_key}:" "${C_0}"
+  if [[ -n "${status_color}" ]]; then
+    printf '%b%s%b' "${C_BOLD}${status_color}" "${status_name}" "${C_0}"
+  else
+    printf '%s' "${status_name}"
+  fi
+  printf ', fix_version: %b%s%b, subject: %b%s%b\n' \
+    "${fix_bold}${fix_color}" "${fix_version}" "${C_0}" \
+    "${C_GREEN}" "${subject}" "${C_0}"
+}
+
+# Render one-line Jira issues sorted into workflow buckets.
+render_next_release_issue_lines() {
+  local issues_json="${1}"
+  local expected_release="${2}"
+  local project_id="${3:-}"
+  local bucket_name=""
+  local issue_json=""
+  local rendered_any=0
+  local issue_state=""
+  local issue_key=""
+  local title=""
+  local status_name=""
+  local status_bucket=""
+  local fix_version=""
+
+  for bucket_name in resolved business-validation quality-assurance implement open-reopen; do
+    while IFS= read -r issue_json; do
+      [[ -z "${issue_json}" ]] && continue
+      status_name="$(printf '%s\n' "${issue_json}" | jq -r '.fields.status.name // "unknown"')"
+      status_bucket="$(next_release_issue_status_bucket "${status_name}")"
+      [[ "${status_bucket}" == "${bucket_name}" ]] || continue
+      issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${expected_release}" "${project_id}")"
+      issue_key="$(printf '%s\n' "${issue_json}" | jq -r '.key // "unknown"')"
+      title="$(printf '%s\n' "${issue_json}" | jq -r '.fields.summary // "unknown"')"
+      fix_version="$(jira_issue_fix_version_display "${issue_json}")"
+      print_next_release_issue_line "${issue_key}" "${title}" "${status_name}" "${fix_version}" "${issue_state}" "${status_bucket}"
+      rendered_any=1
+    done < <(printf '%s\n' "${issues_json}" | jq -c '.issues | sort_by(.key)[]?')
+  done
+
+  if [[ "${rendered_any}" -eq 0 ]]; then
+    printf '_No Jira issues found for this unreleased span._\n'
+  fi
 }
 
 # Classify one Jira issue relative to the expected next fixVersion.
 next_release_issue_fix_version_state() {
   local issue_json="${1}"
   local expected_release="${2}"
+  local project_id="${3:-}"
   local fix_version_display=""
   local normalized_expected=""
   local normalized_actual=""
@@ -243,6 +542,10 @@ next_release_issue_fix_version_state() {
       printf '%s\n' "expected-fix-version"
       return 0
     fi
+    if [[ -n "${project_id}" ]] && next_release_name_matches_project_candidates "${project_id}" "${expected_release}" "${normalized_actual}"; then
+      printf '%s\n' "expected-fix-version"
+      return 0
+    fi
   done < <(printf '%s\n' "${fix_version_display}" | tr ',' '\n' | sed 's/^ *//; s/ *$//')
 
   printf '%s\n' "other-fix-version"
@@ -252,75 +555,23 @@ next_release_issue_fix_version_state() {
 render_next_release_issue_summary() {
   local issues_json="${1}"
   local expected_release="${2}"
-  local issue_json=""
-  local rendered_any=0
-  local issue_state=""
-  local issue_key=""
-  local title=""
-  local status_name=""
-  local status_name_lower=""
-  local fix_version=""
-  local issue_color="${C_DIM}"
 
   print_markdown_h2 "Unreleased Jira Issues" "${C_GREEN}"
   printf '\n'
-  while IFS= read -r issue_json; do
-    [[ -z "${issue_json}" ]] && continue
-    issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${expected_release}")"
-    issue_key="$(printf '%s\n' "${issue_json}" | jq -r '.key // "unknown"')"
-    title="$(printf '%s\n' "${issue_json}" | jq -r '.fields.summary // "unknown"')"
-    status_name="$(printf '%s\n' "${issue_json}" | jq -r '.fields.status.name // "unknown"')"
-    status_name_lower="$(printf '%s\n' "${status_name}" | tr '[:upper:]' '[:lower:]')"
-    fix_version="$(jira_issue_fix_version_display "${issue_json}")"
-
-    case "${issue_state}" in
-      expected-fix-version)
-        if [[ "${status_name_lower}" == *resolved* || "${status_name_lower}" == *done* || "${status_name_lower}" == *closed* ]]; then
-          issue_color="${C_GREEN}"
-        else
-          issue_color="${C_CYAN}"
-        fi
-        ;;
-      missing-fix-version|other-fix-version)
-        issue_color="${C_ORANGE}"
-        ;;
-      *)
-        issue_color="${C_DIM}"
-        ;;
-    esac
-
-    if use_color_output && [[ "${issue_color}" != "${C_DIM}" ]]; then
-      print_colored_line "${issue_color}" "- \`${issue_key}\`"
-      printf "  - title: \`%s\`\n" "${title}"
-      printf "  - status: \`%s\`\n" "${status_name}"
-      printf "  - fix_version: \`%s\`\n" "${fix_version}"
-    else
-      printf -- "- \`%s\`\n" "${issue_key}"
-      printf "  - title: \`%s\`\n" "${title}"
-      printf "  - status: \`%s\`\n" "${status_name}"
-      printf "  - fix_version: \`%s\`\n" "${fix_version}"
-    fi
-    printf "  - release_match: \`%s\`\n" "${issue_state}"
-    rendered_any=1
-  done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
-
-  if [[ "${rendered_any}" -eq 0 ]]; then
-    printf '_No Jira issues found for this unreleased span._\n'
-  fi
+  render_next_release_issue_lines "${issues_json}" "${expected_release}"
   printf '\n'
 }
 
 # Return success when a Jira releases payload already contains the requested release name.
-jira_release_exists_named() {
-  local releases_json="${1}"
-  local candidate_name="${2}"
-  local normalized_candidate=""
+next_release_project_release_exists() {
+  local project_id="${1}"
+  local suggested_version="${2}"
+  local releases_json="${3}"
   local release_name=""
 
-  normalized_candidate="$(normalize_fix_version_name "${candidate_name}")"
   while IFS= read -r release_name; do
     [[ -z "${release_name}" ]] && continue
-    if [[ "$(normalize_fix_version_name "${release_name}")" == "${normalized_candidate}" ]]; then
+    if next_release_name_matches_project_candidates "${project_id}" "${suggested_version}" "${release_name}"; then
       return 0
     fi
   done < <(printf '%s\n' "${releases_json}" | jq -r '.[]?.name // empty')
@@ -364,9 +615,11 @@ create_jira_release_version() {
 
 # Interactively create the suggested Jira release when it does not already exist.
 maybe_create_next_jira_release() {
-  local jira_base_url_value="${1}"
-  local jira_project_key="${2}"
-  local suggested_version="${3}"
+  local project_id="${1}"
+  local jira_base_url_value="${2}"
+  local jira_project_key="${3}"
+  local suggested_version="${4}"
+  local auth_reference="${5:-}"
   local releases_json=""
   local metadata_json=""
   local project_numeric_id=""
@@ -381,13 +634,18 @@ maybe_create_next_jira_release() {
     return 0
   fi
 
-  if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" 2>/dev/null)"; then
+  if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${auth_reference}" 2>/dev/null)"; then
     printf '%s\n' "warn|unable to fetch existing releases"
     return 0
   fi
 
-  if jira_release_exists_named "${releases_json}" "${suggested_version}"; then
-    printf '%s\n' "already-exists|$(normalize_fix_version_name "${suggested_version}")"
+  if next_release_project_release_exists "${project_id}" "${suggested_version}" "${releases_json}"; then
+    printf '%s\n' "already-exists|$(printf '%s\n' "${releases_json}" | jq -r '.[]?.name // empty' | while IFS= read -r release_name; do
+      if next_release_name_matches_project_candidates "${project_id}" "${suggested_version}" "${release_name}"; then
+        printf '%s\n' "${release_name}"
+        break
+      fi
+    done)"
     return 0
   fi
 
@@ -396,7 +654,7 @@ maybe_create_next_jira_release() {
     return 0
   fi
 
-  release_name_default="$(normalize_fix_version_name "${suggested_version}")"
+  release_name_default="$(next_release_project_release_name_candidates "${project_id}" "${suggested_version}" | head -n 1)"
   choice="$(prompt_input_line "Jira release ${release_name_default} is missing. Create it now? [y/N]: ")"
   case "${choice}" in
     y|Y)
@@ -409,7 +667,7 @@ maybe_create_next_jira_release() {
       ;;
   esac
 
-  if ! metadata_json="$(fetch_jira_project_metadata "${jira_base_url_value}" "${jira_project_key}" 2>/dev/null)"; then
+  if ! metadata_json="$(fetch_jira_project_metadata "${jira_base_url_value}" "${jira_project_key}" "${auth_reference}" 2>/dev/null)"; then
     printf '%s\n' "warn|unable to fetch Jira project metadata"
     return 0
   fi
@@ -421,7 +679,7 @@ maybe_create_next_jira_release() {
   fi
 
   payload="$(build_jira_release_payload "${project_numeric_id}" "${release_name}")"
-  if ! response_json="$(create_jira_release_version "${jira_base_url_value}" "${payload}" 2>/dev/null)"; then
+  if ! response_json="$(create_jira_release_version "${jira_base_url_value}" "${payload}" "${auth_reference}" 2>/dev/null)"; then
     printf '%s\n' "warn|failed to create Jira release"
     return 0
   fi
@@ -432,19 +690,28 @@ maybe_create_next_jira_release() {
 
 # Render the Jira release inventory and the suggested release lookup.
 render_next_release_jira_release_status() {
-  local repo_path="${1}"
-  local suggested_version="${2}"
-  local jira_release_state="${3}"
-  local jira_release_detail="${4}"
-  local releases_json="${5}"
+  local project_id="${1}"
+  local repo_path="${2}"
+  local suggested_version="${3}"
+  local jira_release_state="${4}"
+  local jira_release_detail="${5}"
+  local releases_json="${6}"
+  local inventory_json='[]'
   local jira_release_present="no"
   local git_tag_present="no"
   local combined_state=""
   local release_json=""
   local rendered_any=0
+  local unreleased_count="0"
+  local latest_released_json=""
+  local latest_released_name=""
 
   if [[ "${jira_release_state}" == "ok" ]]; then
-    if jira_release_exists_named "${releases_json}" "${suggested_version}"; then
+    inventory_json="$(jira_next_release_inventory_json "${project_id}" "${suggested_version}" "${releases_json}")"
+    unreleased_count="$(printf '%s\n' "$(next_release_project_releases_json "${project_id}" "${suggested_version}" "${releases_json}")" | jq -r '
+      map(select((.archived // false) != true and (.released // false) != true)) | length
+    ')"
+    if next_release_project_release_exists "${project_id}" "${suggested_version}" "$(jira_unreleased_releases_json "$(next_release_project_releases_json "${project_id}" "${suggested_version}" "${releases_json}")")"; then
       jira_release_present="yes"
     fi
   else
@@ -467,6 +734,17 @@ render_next_release_jira_release_status() {
   if [[ -n "${jira_release_detail}" ]]; then
     printf -- "- detail: \`%s\`\n" "${jira_release_detail}"
   fi
+  if [[ "${jira_release_state}" == "ok" ]]; then
+    printf -- "- unreleased release count: \`%s\`\n" "${unreleased_count}"
+    if [[ "${unreleased_count}" -eq 0 ]]; then
+      latest_released_json="$(jira_latest_released_release_json "$(next_release_project_releases_json "${project_id}" "" "${releases_json}")")"
+      latest_released_name="$(printf '%s\n' "${latest_released_json}" | jq -r '.name // empty')"
+      if [[ -n "${latest_released_name}" ]]; then
+        printf -- "- latest released version: \`%s\`\n" "${latest_released_name}"
+        printf -- "- recommendation: \`create a new unreleased Jira release version\`\n"
+      fi
+    fi
+  fi
   printf -- "- suggested release present: \`%s\`\n" "${jira_release_present}"
   printf -- "- git tag present: \`%s\`\n" "${git_tag_present}"
   printf -- "- combined state: \`%s\`\n\n" "${combined_state}"
@@ -477,12 +755,12 @@ render_next_release_jira_release_status() {
       render_release_entry "${repo_path}" "${release_json}"
       rendered_any=1
     done < <(
-      printf '%s\n' "${releases_json}" \
-        | jq -c 'sort_by((.released // false), (.archived // false), (.releaseDate // ""), (.name // "")) | reverse[]'
+      printf '%s\n' "${inventory_json}" \
+        | jq -c 'sort_by((.releaseDate // ""), (.name // "")) | reverse[]'
     )
 
     if [[ ${rendered_any} -eq 0 ]]; then
-      printf '_No Jira releases found._\n'
+      printf '_No relevant Jira releases found._\n'
     fi
   fi
 
@@ -635,7 +913,7 @@ run_next_release_main() {
   fi
 
   if [[ -n "${jira_project_key}" && -n "${jira_base_url_value}" && -n "${suggested_version}" ]]; then
-    if releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" 2>/dev/null)"; then
+    if releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>/dev/null)"; then
       jira_release_fetch_state="ok"
       jira_release_fetch_detail=""
     fi
@@ -652,7 +930,7 @@ run_next_release_main() {
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "${suggested_version}" "${compare_url}" "release-needed"
     if [[ -n "${jira_project_key}" && -n "${jira_base_url_value}" ]]; then
       if [[ "${jira_release_fetch_state}" == "ok" ]]; then
-        if jira_release_exists_named "${releases_json}" "${suggested_version}"; then
+        if next_release_project_release_exists "${project_id}" "${suggested_version}" "${releases_json}"; then
           jira_release_present="yes"
         else
           jira_release_present="no"
@@ -667,14 +945,11 @@ run_next_release_main() {
         release_matrix_state="$(next_release_release_state "${jira_release_present}" "${git_tag_present}")"
       fi
       render_next_release_release_matrix "${suggested_version}" "${jira_release_present}" "${git_tag_present}" "${release_matrix_state}"
-      render_next_release_jira_release_status "${repo_path}" "${suggested_version}" "${jira_release_fetch_state}" "${jira_release_fetch_detail}" "${releases_json}"
-      jira_release_result="$(maybe_create_next_jira_release "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}")"
-      IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
-      render_next_release_jira_creation_status "${jira_release_state}" "${jira_release_detail}"
+      render_next_release_jira_release_status "${project_id}" "${repo_path}" "${suggested_version}" "${jira_release_fetch_state}" "${jira_release_fetch_detail}" "${releases_json}"
       issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}")"
       if [[ -n "${issue_keys_text}" ]]; then
         mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
-        issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}")"
+        issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${project_id}" "${issue_keys[@]}")"
       fi
       render_next_release_issue_summary "${issues_json}" "${suggested_version}"
     else
@@ -688,7 +963,10 @@ run_next_release_main() {
       render_jira_config_diagnostic
       printf -- "- next step: \`jiggit config\`\n\n"
     fi
-    render_next_release_next_steps "${project_id}" "${suggested_version}" "${jira_project_key}" "${jira_base_url_value}" "${jira_release_state}"
+    render_next_release_next_steps "${project_id}" "${suggested_version}" "${jira_project_key}" "${jira_base_url_value}" ""
+    jira_release_result="$(maybe_create_next_jira_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}" "${project_id}")"
+    IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
+    render_next_release_jira_creation_status "${jira_release_state}" "${jira_release_detail}"
   else
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "" "${compare_url}" "up-to-date"
     render_next_release_next_steps "${project_id}" "" "${jira_project_key}" "${jira_base_url_value}" ""

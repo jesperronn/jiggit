@@ -20,6 +20,7 @@ declare -A JIGGIT_PROJECT_REMOTE_URL_BY_ID=()
 declare -A JIGGIT_PROJECT_JIRA_NAME_BY_ID=()
 declare -A JIGGIT_PROJECT_JIRA_PROJECT_KEY_BY_ID=()
 declare -A JIGGIT_PROJECT_JIRA_REGEXES_BY_ID=()
+declare -A JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_BY_ID=()
 declare -A JIGGIT_PROJECT_ENVIRONMENTS_BY_ID=()
 declare -A JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID=()
 declare -A JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID=()
@@ -29,6 +30,7 @@ declare -A JIGGIT_PROJECT_REMOTE_URL_SOURCE_BY_ID=()
 declare -A JIGGIT_PROJECT_JIRA_NAME_SOURCE_BY_ID=()
 declare -A JIGGIT_PROJECT_JIRA_PROJECT_KEY_SOURCE_BY_ID=()
 declare -A JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID=()
+declare -A JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_SOURCE_BY_ID=()
 declare -A JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID=()
 declare -A JIGGIT_PROJECT_ENV_INFO_URLS_SOURCE_BY_ID=()
 declare -A JIGGIT_PROJECT_INFO_VERSION_EXPR_SOURCE_BY_ID=()
@@ -369,10 +371,11 @@ register_project() {
   local jira_name="${4:-}"
   local jira_project_key="${5:-}"
   local jira_regexes="${6:-}"
-  local environments="${7:-}"
-  local environment_info_urls="${8:-}"
-  local info_version_expr="${9:-}"
-  local source_file="${10:-unknown}"
+  local jira_release_prefixes="${7:-}"
+  local environments="${8:-}"
+  local environment_info_urls="${9:-}"
+  local info_version_expr="${10:-}"
+  local source_file="${11:-unknown}"
 
   if [[ -z "${id}" ]]; then
     return 0
@@ -393,6 +396,7 @@ register_project() {
     [[ "${JIGGIT_PROJECT_JIRA_NAME_BY_ID["${id}"]:-}" != "${jira_name}" ]] && changed_fields+=("jira")
     [[ "${JIGGIT_PROJECT_JIRA_PROJECT_KEY_BY_ID["${id}"]:-}" != "${jira_project_key}" ]] && changed_fields+=("jira_project_key")
     [[ "${JIGGIT_PROJECT_JIRA_REGEXES_BY_ID["${id}"]:-}" != "${jira_regexes}" ]] && changed_fields+=("jira_regexes")
+    [[ "${JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_BY_ID["${id}"]:-}" != "${jira_release_prefixes}" ]] && changed_fields+=("jira_release_prefix")
     [[ "${JIGGIT_PROJECT_ENVIRONMENTS_BY_ID["${id}"]:-}" != "${environments}" ]] && changed_fields+=("environments")
     [[ "${JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID["${id}"]:-}" != "${environment_info_urls}" ]] && changed_fields+=("environment_info_urls")
     [[ "${JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID["${id}"]:-}" != "${info_version_expr}" ]] && changed_fields+=("info_version_expr")
@@ -411,6 +415,7 @@ register_project() {
   JIGGIT_PROJECT_JIRA_NAME_BY_ID["${id}"]="${jira_name}"
   JIGGIT_PROJECT_JIRA_PROJECT_KEY_BY_ID["${id}"]="${jira_project_key}"
   JIGGIT_PROJECT_JIRA_REGEXES_BY_ID["${id}"]="${jira_regexes}"
+  JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_BY_ID["${id}"]="${jira_release_prefixes}"
   JIGGIT_PROJECT_ENVIRONMENTS_BY_ID["${id}"]="${environments}"
   JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID["${id}"]="${environment_info_urls}"
   JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID["${id}"]="${info_version_expr}"
@@ -420,6 +425,7 @@ register_project() {
   JIGGIT_PROJECT_JIRA_NAME_SOURCE_BY_ID["${id}"]="${source_file}"
   JIGGIT_PROJECT_JIRA_PROJECT_KEY_SOURCE_BY_ID["${id}"]="${source_file}"
   JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID["${id}"]="${source_file}"
+  JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_SOURCE_BY_ID["${id}"]="${source_file}"
   JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID["${id}"]="${source_file}"
   JIGGIT_PROJECT_ENV_INFO_URLS_SOURCE_BY_ID["${id}"]="${source_file}"
   JIGGIT_PROJECT_INFO_VERSION_EXPR_SOURCE_BY_ID["${id}"]="${source_file}"
@@ -439,6 +445,7 @@ reset_loaded_projects() {
   JIGGIT_PROJECT_JIRA_NAME_BY_ID=()
   JIGGIT_PROJECT_JIRA_PROJECT_KEY_BY_ID=()
   JIGGIT_PROJECT_JIRA_REGEXES_BY_ID=()
+  JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_BY_ID=()
   JIGGIT_PROJECT_ENVIRONMENTS_BY_ID=()
   JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID=()
   JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID=()
@@ -448,6 +455,7 @@ reset_loaded_projects() {
   JIGGIT_PROJECT_JIRA_NAME_SOURCE_BY_ID=()
   JIGGIT_PROJECT_JIRA_PROJECT_KEY_SOURCE_BY_ID=()
   JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID=()
+  JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_SOURCE_BY_ID=()
   JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID=()
   JIGGIT_PROJECT_ENV_INFO_URLS_SOURCE_BY_ID=()
   JIGGIT_PROJECT_INFO_VERSION_EXPR_SOURCE_BY_ID=()
@@ -626,6 +634,7 @@ parse_projects_toml() {
   local jira_name=""
   local jira_project_key=""
   local jira_regexes=""
+  local jira_release_prefixes=""
   local environments=""
   local environment_info_urls=""
   local info_version_expr=""
@@ -638,7 +647,7 @@ parse_projects_toml() {
 
   flush_current_project() {
     if [[ -n "${current_id}" ]]; then
-      register_project "${current_id}" "${repo_path}" "${remote_url}" "${jira_name}" "${jira_project_key}" "${jira_regexes}" "${environments}" "${environment_info_urls}" "${info_version_expr}" "${config_file}"
+      register_project "${current_id}" "${repo_path}" "${remote_url}" "${jira_name}" "${jira_project_key}" "${jira_regexes}" "${jira_release_prefixes}" "${environments}" "${environment_info_urls}" "${info_version_expr}" "${config_file}"
     fi
   }
 
@@ -664,6 +673,7 @@ parse_projects_toml() {
         remote_url=""
         jira_project_key=""
         jira_regexes=""
+        jira_release_prefixes=""
         environments=""
         environment_info_urls=""
         info_version_expr=""
@@ -702,6 +712,7 @@ parse_projects_toml() {
       jira_name=""
       jira_project_key=""
       jira_regexes=""
+      jira_release_prefixes=""
       environments=""
       environment_info_urls=""
       info_version_expr=""
@@ -756,6 +767,9 @@ parse_projects_toml() {
           ;;
         jira_regexes)
           jira_regexes="$(parse_toml_array_to_words "${value}")"
+          ;;
+        jira_release_prefix)
+          jira_release_prefixes="$(parse_toml_array_to_words "${value}")"
           ;;
         environments)
           environments="$(parse_toml_array_to_words "${value}")"
@@ -919,6 +933,13 @@ project_jira_regexes() {
   printf '%s\n' "${JIGGIT_PROJECT_JIRA_REGEXES_BY_ID["${project_id}"]:-}"
 }
 
+# Return the configured Jira release prefixes for a project id as a space-separated string.
+project_jira_release_prefixes() {
+  local project_id="${1:-}"
+  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  printf '%s\n' "${JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_BY_ID["${project_id}"]:-}"
+}
+
 # Return the configured environments for a project id as a space-separated string.
 project_environments() {
   local project_id="${1:-}"
@@ -961,6 +982,9 @@ project_field_source() {
       ;;
     jira_regexes)
       printf '%s\n' "${JIGGIT_PROJECT_JIRA_REGEXES_SOURCE_BY_ID["${project_id}"]:-unknown}"
+      ;;
+    jira_release_prefix)
+      printf '%s\n' "${JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_SOURCE_BY_ID["${project_id}"]:-unknown}"
       ;;
     environments)
       printf '%s\n' "${JIGGIT_PROJECT_ENVIRONMENTS_SOURCE_BY_ID["${project_id}"]:-unknown}"
@@ -1039,6 +1063,10 @@ jira_bearer_token() {
     printf '%s\n' "${JIRA_BEARER_TOKEN}"
     return 0
   fi
+  if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_API_TOKEN:-}" ]]; then
+    printf '%s\n' "${JIRA_API_TOKEN}"
+    return 0
+  fi
   if [[ -n "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_storage_name}"]:-}" ]]; then
     printf '%s\n' "${JIGGIT_JIRA_BEARER_TOKEN_BY_NAME["${jira_storage_name}"]}"
     return 0
@@ -1104,6 +1132,10 @@ jira_field_source() {
     bearer_token)
       if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_BEARER_TOKEN:-}" ]]; then
         printf '%s\n' "env: JIRA_BEARER_TOKEN"
+        return 0
+      fi
+      if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_API_TOKEN:-}" ]]; then
+        printf '%s\n' "env: JIRA_API_TOKEN"
         return 0
       fi
       printf '%s\n' "${JIGGIT_JIRA_BEARER_TOKEN_SOURCE_BY_NAME["${jira_storage_name}"]:-none}"

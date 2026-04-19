@@ -189,7 +189,8 @@ Show Jira issues belonging to a release.
 
 Behavior:
 - Accept fuzzy fixVersion matching against Jira releases.
-- If exactly one release matches, fetch issues for that release.
+- If exactly one release matches, fetch issues for that exact Jira release name.
+- Release-backed Jira issue fetches should query `project = <key> AND (fixVersion = <release> OR affectedVersion = <release>)`.
 - If multiple releases match, print the matches and exit without fetching issues.
 - Return at least:
   - issue key
@@ -273,6 +274,7 @@ Behavior:
 - Determine start ref from `--from-env` or explicit `--from`.
 - Determine target from an exact local git ref first, otherwise from a uniquely matched Jira release.
 - If a fuzzy Jira release query matches multiple releases, print the matches and exit instead of guessing.
+- When the target resolves to a Jira release, reuse the same shared Jira release issue query logic used by `jiggit jira-issues`.
 - Compute git diff.
 - Parse commits using conventional commit groups.
 - Extract Jira issue keys via configured regexes.
@@ -350,6 +352,7 @@ Make Jira-enriched commands consistent and reusable.
 
 Behavior:
 - Shared issue fetch helpers should always include `fixVersions`.
+- Shared release-backed Jira issue fetch helpers should resolve the exact Jira release name from `/versions` and query both `fixVersion` and `affectedVersion`.
 - Any command that shows Jira issues should render `fix_version: MISSING` when no fixVersion exists.
 - Any command that shows Jira issues should render actual fixVersion value(s) otherwise.
 - When showing unreleased Jira issues relative to the next/upcoming release:

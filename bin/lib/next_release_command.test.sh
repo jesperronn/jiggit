@@ -137,6 +137,7 @@ test_run_next_release_main_defaults_to_prod_and_suggests_minor_bump() {
 
   local repo_dir="${TEST_TMPDIR}/next-release-repo"
   create_repo_for_next_release "${repo_dir}"
+  git -C "${repo_dir}" tag v1.22.0.83
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
   cat > "${projects_file}" <<EOF
@@ -170,22 +171,22 @@ EOF
   assert_contains "${output}" "Target: \`refs/remotes/origin/main\`" "default target to origin main"
   assert_contains "${output}" "Commit count ahead: \`2\`" "count commits ahead of prod"
   assert_contains "${output}" "Status: \`release-needed\`" "render release-needed status"
-  assert_contains "${output}" "Suggested next release: \`v1.3.0.0\`" "suggest next minor release"
+  assert_contains "${output}" "Suggested next release: \`v1.3.0\`" "suggest next minor release"
   assert_contains "${output}" "github.com/example/next-release-repo/compare/" "render compare url"
   assert_contains "${output}" "## Release Matrix" "render release matrix section"
   assert_contains "${output}" "combined state: \`missing-both\`" "render combined missing state"
   assert_contains "${output}" "## Jira Releases" "render jira release inventory"
-  assert_contains "${output}" "\`1.4.0.0\`" "render jira release inventory entry"
+  assert_contains "${output}" "unreleased release count: \`1\`" "render unreleased release count"
+  assert_contains "${output}" "\`1.4.0.0\`" "render unreleased jira release inventory entry"
   assert_contains "${output}" "## Jira Release" "render jira release creation status"
   assert_contains "${output}" "status: \`missing\`" "render jira release creation outcome"
   assert_contains "${output}" "detail: \`run interactively to create it\`" "render interactive creation next step"
   assert_contains "${output}" "## Unreleased Jira Issues" "render unreleased Jira issues section"
-  assert_contains "${output}" "ALPHA-2" "render first unreleased jira issue"
-  assert_contains "${output}" "release_match: \`expected-fix-version\`" "mark issue with expected fix version"
-  assert_contains "${output}" "release_match: \`missing-fix-version\`" "mark issue with missing fix version"
+  assert_contains "${output}" "ALPHA-3: status: Resolved, fix_version: MISSING, subject: Add second feature" "render resolved issue on one line"
+  assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement issue on one line"
   assert_contains "${output}" "## Next Steps" "render next-release next steps section"
   assert_contains "${output}" "jiggit releases next-release-project" "suggest releases command"
-  assert_contains "${fetch_log}" "https://jira.example.test||ALPHA-2 ALPHA-3" "pass all unreleased issue keys with blank auth reference"
+  assert_contains "${fetch_log}" "https://jira.example.test|next-release-project|ALPHA-2 ALPHA-3" "pass all unreleased issue keys with project auth reference"
 }
 
 test_run_next_release_main_can_force_colored_issue_states() {
@@ -219,8 +220,82 @@ EOF
       run_next_release_main next-release-project
   )"
 
-  assert_contains "${output}" $'\e[1m\e[36m- `ALPHA-2`\e[0m' "render in-progress matching issue in cyan"
-  assert_contains "${output}" $'\e[1m\e[38;5;202m- `ALPHA-3`\e[0m' "render missing-fix-version issue in orange"
+  assert_contains "${output}" $'\e[1m\e[36mALPHA-2:\e[0m' "render issue key in cyan"
+  assert_contains "${output}" $'\e[1m\e[35mIn Progress\e[0m' "render implement status in magenta"
+  assert_contains "${output}" $'fix_version: \e[37m1.3.0.0\e[0m' "render matching fix version in gray"
+  assert_contains "${output}" $'\e[1m\e[31mMISSING\e[0m' "render missing fix version in bold red"
+}
+
+test_render_next_release_jira_release_status_falls_back_to_latest_released_when_no_unreleased_exists() {
+  local output
+
+  output="$(
+    render_next_release_jira_release_status "project-a" "/tmp/repo" "v1.3.0.0" "ok" "" '[
+      {"name":"1.1.0.0","released":true,"archived":false,"releaseDate":"2026-01-01"},
+      {"name":"1.2.0.0","released":true,"archived":false,"releaseDate":"2026-02-01"},
+      {"name":"0.9.0.0","released":true,"archived":true,"releaseDate":"2025-12-01"}
+    ]'
+  )"
+
+  assert_contains "${output}" "unreleased release count: \`0\`" "report no unreleased releases"
+  assert_contains "${output}" "latest released version: \`1.2.0.0\`" "show latest released fallback"
+  assert_contains "${output}" "recommendation: \`create a new unreleased Jira release version\`" "recommend creating a new release"
+  assert_contains "${output}" "\`1.2.0.0\`" "render only the latest released entry"
+}
+
+test_next_release_project_releases_json_filters_by_project_prefix() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[next-release-project]
+repo_path = "/tmp/next-release-repo"
+remote_url = "git@github.com:example/next-release-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+jira_release_prefix = ["Udbyderportal_"]
+environments = ["prod"]
+EOF
+
+  JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    load_project_config >/dev/null
+
+  local scoped_json
+  scoped_json="$(
+    next_release_project_releases_json "next-release-project" "" '[
+      {"name":"Unilogin_15.14.0","released":false,"archived":false},
+      {"name":"Udbyderportal_1.23.0","released":false,"archived":false},
+      {"name":"MitUnilogin_2.3.0","released":false,"archived":false}
+    ]'
+  )"
+
+  assert_eq "1" "$(printf '%s\n' "${scoped_json}" | jq -r 'length')" "count only project-scoped releases"
+  assert_contains "${scoped_json}" "Udbyderportal_1.23.0" "keep the matching prefixed release"
+  if [[ "${scoped_json}" == *"Unilogin_15.14.0"* || "${scoped_json}" == *"MitUnilogin_2.3.0"* ]]; then
+    fail "exclude releases that belong to other projects"
+  else
+    pass "exclude releases that belong to other projects"
+  fi
+  if next_release_project_release_exists "next-release-project" "v1.23.0.0" "${scoped_json}"; then
+    pass "recognize matching prefixed jira release as present"
+  else
+    fail "recognize matching prefixed jira release as present"
+  fi
+
+  local issue_state
+  issue_state="$(
+    next_release_issue_fix_version_state \
+      '{"fields":{"fixVersions":[{"name":"Udbyderportal_1.23.0"}]}}' \
+      "v1.23.0.0" \
+      "next-release-project"
+  )"
+  assert_eq "expected-fix-version" "${issue_state}" "treat matching prefixed issue fixVersion as expected"
 }
 
 test_run_next_release_main_can_create_missing_jira_release_interactively() {
@@ -264,10 +339,10 @@ EOF
   create_log="$(cat "${JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG}")"
   assert_contains "${output}" "## Jira Release" "render jira release section"
   assert_contains "${output}" "status: \`created\`" "report created jira release"
-  assert_contains "${output}" "detail: \`1.3.0.0\`" "report created release name"
+  assert_contains "${output}" "detail: \`1.3.0\`" "report created release name"
   assert_contains "${create_log}" "https://jira.example.test" "call Jira release creation endpoint"
   assert_contains "${create_log}" '"projectId": 12345' "send jira project id in release payload"
-  assert_contains "${create_log}" '"name": "1.3.0.0"' "send suggested release name without v prefix"
+  assert_contains "${create_log}" '"name": "1.3.0"' "send suggested release name without v prefix"
 }
 
 test_run_next_release_main_accepts_repo_path_selector_and_reports_up_to_date() {

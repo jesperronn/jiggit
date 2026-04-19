@@ -33,9 +33,21 @@ fetch_jira_releases() {
   local jira_project_key="${2}"
   local auth_reference="${3:-}"
   local -a auth_args=()
+  local jira_name=""
+  local auth_mode_value=""
+  local auth_source_value=""
 
   if declare -F jiggit_verbose_log >/dev/null 2>&1; then
-    jiggit_verbose_log "fetch jira releases project=${jira_project_key} url=${jira_base_url%/}/rest/api/2/project/${jira_project_key}/versions"
+    jira_name="$(resolve_jira_name "${auth_reference}")"
+    auth_mode_value="$(jira_auth_mode "${auth_reference}")"
+    if [[ "${auth_mode_value}" == "bearer_token" ]]; then
+      auth_source_value="$(jira_field_source "${auth_reference}" "bearer_token")"
+    elif [[ "${auth_mode_value}" == "basic_auth" ]]; then
+      auth_source_value="$(jira_field_source "${auth_reference}" "user_email"), $(jira_field_source "${auth_reference}" "api_token")"
+    else
+      auth_source_value="none"
+    fi
+    jiggit_verbose_log "fetch jira releases project=${jira_project_key} jira=${jira_name:-missing} auth=${auth_mode_value} auth-source=${auth_source_value} url=${jira_base_url%/}/rest/api/2/project/${jira_project_key}/versions"
   fi
 
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
@@ -69,6 +81,105 @@ find_matching_releases() {
           printf '%s\n' "${release_json}"
         fi
       done
+}
+
+# Return one best-default Jira release JSON object from a versions payload.
+select_latest_registered_release() {
+  local releases_json="${1}"
+
+  printf '%s\n' "${releases_json}" | jq -c '
+    def latest_by_date_and_name:
+      sort_by((.releaseDate // ""), (.name // "")) | last;
+
+    def active_releases:
+      map(select((.archived // false) != true));
+
+    def unreleased_active_releases:
+      active_releases | map(select((.released // false) != true));
+
+    if (unreleased_active_releases | length) > 0 then
+      unreleased_active_releases | latest_by_date_and_name
+    elif (active_releases | length) > 0 then
+      active_releases | latest_by_date_and_name
+    elif length > 0 then
+      latest_by_date_and_name
+    else
+      empty
+    end
+  '
+}
+
+# Return the default Jira release name from a versions payload.
+select_latest_registered_release_name() {
+  local releases_json="${1}"
+
+  select_latest_registered_release "${releases_json}" | jq -r '.name // empty'
+}
+
+# Return success when one Jira release belongs to the current project namespace.
+release_belongs_to_project() {
+  local project_id="${1}"
+  local release_name="${2}"
+  local prefixes=""
+  local prefix=""
+
+  prefixes="$(project_jira_release_prefixes "${project_id}")"
+  if [[ -z "${prefixes}" ]]; then
+    return 0
+  fi
+
+  for prefix in ${prefixes}; do
+    if [[ "${release_name}" == "${prefix}"* ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Return only Jira releases relevant to the current project namespace.
+project_scoped_releases_json() {
+  local project_id="${1}"
+  local releases_json="${2}"
+  local release_json=""
+  local release_name=""
+  local filtered_json="[]"
+
+  while IFS= read -r release_json; do
+    [[ -z "${release_json}" ]] && continue
+    release_name="$(printf '%s\n' "${release_json}" | jq -r '.name // empty')"
+    if release_belongs_to_project "${project_id}" "${release_name}"; then
+      filtered_json="$(printf '%s\n%s\n' "${filtered_json}" "${release_json}" | jq -s '.[0] + [.[1]]')"
+    fi
+  done < <(printf '%s\n' "${releases_json}" | jq -c '.[]?')
+
+  printf '%s\n' "${filtered_json}"
+}
+
+# Return only latest released plus all unreleased active Jira releases for a project.
+relevant_releases_json() {
+  local project_id="${1}"
+  local releases_json="${2}"
+  local scoped_json=""
+  local unreleased_json=""
+  local latest_released_json=""
+
+  scoped_json="$(project_scoped_releases_json "${project_id}" "${releases_json}")"
+  unreleased_json="$(printf '%s\n' "${scoped_json}" | jq -c '
+    map(select((.archived // false) != true and (.released // false) != true))
+  ')"
+  latest_released_json="$(printf '%s\n' "${scoped_json}" | jq -c '
+    map(select((.archived // false) != true and (.released // false) == true))
+    | sort_by((.releaseDate // ""), (.name // ""))
+    | last // empty
+  ')"
+
+  if [[ -n "${latest_released_json}" ]]; then
+    printf '%s\n%s\n' "${unreleased_json}" "${latest_released_json}" | jq -s '.[0] + [.[1]]'
+    return 0
+  fi
+
+  printf '%s\n' "${unreleased_json}"
 }
 
 # Return success when a Jira release name appears to match a local git tag.
@@ -130,6 +241,7 @@ render_releases_summary() {
   local project_id="${1}"
   local repo_path="${2}"
   local releases_json="${3}"
+  local next_step_command="${4:-}"
   local release_json
   local rendered_any=0
 
@@ -151,6 +263,11 @@ render_releases_summary() {
 
   if [[ ${rendered_any} -eq 0 ]]; then
     printf '_No Jira releases found._\n'
+  fi
+
+  if [[ -n "${next_step_command}" ]]; then
+    printf '\n'
+    printf -- "- next step: \`%s\`\n" "${next_step_command}"
   fi
 }
 
@@ -207,6 +324,8 @@ run_releases_main() {
   local jira_project_key
   local repo_path
   local releases_json
+  local relevant_json
+  local latest_release_name=""
   local jira_base_url_value
 
   jira_project_key="$(project_jira_project_key "${project_id}")"
@@ -227,5 +346,12 @@ run_releases_main() {
     render_releases_failure "${project_id}" "${repo_path}" "unable to fetch releases" "jiggit jira-check ${project_id}"
     return 1
   fi
-  render_releases_summary "${project_id}" "${repo_path}" "${releases_json}"
+
+  relevant_json="$(relevant_releases_json "${project_id}" "${releases_json}")"
+  latest_release_name="$(select_latest_registered_release_name "${relevant_json}")"
+  if [[ -n "${latest_release_name}" ]]; then
+    render_releases_summary "${project_id}" "${repo_path}" "${relevant_json}" "jiggit jira-issues ${project_id} --release ${latest_release_name}"
+  else
+    render_releases_summary "${project_id}" "${repo_path}" "${relevant_json}" "jiggit next-release ${project_id}"
+  fi
 }

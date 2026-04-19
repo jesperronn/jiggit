@@ -12,7 +12,7 @@ if ! declare -F require_program >/dev/null 2>&1 || ! declare -F jira_auth_args >
   source "$(dirname "${BASH_SOURCE[0]}")/jira_create.sh"
 fi
 
-if ! declare -F fetch_jira_releases >/dev/null 2>&1 || ! declare -F find_matching_releases >/dev/null 2>&1; then
+if ! declare -F fetch_jira_releases >/dev/null 2>&1 || ! declare -F find_matching_releases >/dev/null 2>&1 || ! declare -F select_latest_registered_release_name >/dev/null 2>&1; then
   # shellcheck disable=SC1091
   source "$(dirname "${BASH_SOURCE[0]}")/releases_command.sh"
 fi
@@ -26,9 +26,10 @@ fi
 jira_issues_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit jira-issues [<project|path>] --release <fixVersion>
+  jiggit jira-issues [<project|path>] [--release <fixVersion>]
 
 Show Jira issues belonging to a release/fixVersion.
+Defaults to the latest registered Jira release when --release is omitted.
 EOF
 }
 
@@ -57,6 +58,17 @@ jira_issues_url_encode() {
   printf '%s\n' "${encoded}"
 }
 
+# Build the Jira JQL used to fetch issues for one resolved release name.
+build_jira_release_issues_jql() {
+  local jira_project_key="${1}"
+  local release_name="${2}"
+
+  printf 'project = "%s" AND (fixVersion = "%s" OR affectedVersion = "%s") ORDER BY key ASC\n' \
+    "${jira_project_key}" \
+    "${release_name}" \
+    "${release_name}"
+}
+
 # Fetch Jira issues for an exact fixVersion name.
 fetch_jira_issues_for_release() {
   local jira_base_url="${1}"
@@ -67,7 +79,7 @@ fetch_jira_issues_for_release() {
   local jql
   local -a auth_args=()
 
-  jql="project = \"${jira_project_key}\" AND fixVersion = \"${release_name}\" ORDER BY key ASC"
+  jql="$(build_jira_release_issues_jql "${jira_project_key}" "${release_name}")"
   encoded_jql="$(jira_issues_url_encode "${jql}")"
   if declare -F jiggit_verbose_log >/dev/null 2>&1; then
     jiggit_verbose_log "fetch jira issues project=${jira_project_key} release=${release_name}"
@@ -182,12 +194,6 @@ run_jira_issues_main() {
     esac
   done
 
-  if [[ -z "${release_query}" ]]; then
-    printf '--release is required.\n' >&2
-    jira_issues_usage >&2
-    return 1
-  fi
-
   require_program jq
   require_program curl
   load_project_config
@@ -227,6 +233,19 @@ run_jira_issues_main() {
     render_jira_issues_failure "${project_id}" "${release_query}" "unable to fetch releases" "jiggit jira-check ${project_id}"
     return 1
   fi
+
+  if [[ -z "${release_query}" ]]; then
+    release_name="$(select_latest_registered_release_name "${releases_json}")"
+    if [[ -z "${release_name}" ]]; then
+      printf 'No Jira releases are registered for project %s.\n' "${jira_project_key}" >&2
+      return 1
+    fi
+
+    issues_json="$(fetch_jira_issues_for_release "${jira_base_url_value}" "${jira_project_key}" "${release_name}")"
+    render_jira_issues_summary "${project_id}" "${release_name}" "${issues_json}"
+    return 0
+  fi
+
   matching_releases="$(find_matching_releases "${releases_json}" "${release_query}")"
   match_count="$(printf '%s\n' "${matching_releases}" | sed '/^$/d' | wc -l | tr -d ' ')"
 

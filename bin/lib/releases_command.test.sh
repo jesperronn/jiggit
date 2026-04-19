@@ -52,6 +52,13 @@ fetch_jira_releases() {
     "archived": false,
     "releaseDate": "2026-03-30",
     "issuesStatusForFixVersion": { "toDo": 2, "inProgress": 1, "done": 4 }
+  },
+  {
+    "name": "other_9.9.9",
+    "released": false,
+    "archived": false,
+    "releaseDate": "2026-04-01",
+    "issuesStatusForFixVersion": { "toDo": 1, "inProgress": 0, "done": 0 }
   }
 ]
 EOF
@@ -75,6 +82,7 @@ repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/project-a.git"
 jira_project_key = "JIRA"
 jira_regexes = ["JIRA-[0-9]+"]
+jira_release_prefix = ["2."]
 environments = []
 EOF
 
@@ -92,6 +100,12 @@ EOF
   assert_contains "${output}" "issue count: \`7\`" "render issue count"
   assert_contains "${output}" "matches git tag: \`yes\`" "render git tag hint"
   assert_contains "${output}" "\`2.1.0.25\`" "render older release too"
+  assert_contains "${output}" "next step: \`jiggit jira-issues project-a --release 2.1.0.26\`" "render jira-issues next step"
+  if [[ "${output}" == *"other_9.9.9"* ]]; then
+    fail "exclude releases outside the project prefix"
+  else
+    pass "exclude releases outside the project prefix"
+  fi
 
   local fetch_log
   fetch_log="$(sed -n '1,20p' "${TEST_TMPDIR}/fetch.log")"

@@ -101,17 +101,30 @@ jira_auth_args() {
   local bearer_token=""
   local user_email=""
   local api_token=""
+  local auth_mode_value=""
+  local auth_source_value=""
+  local jira_name=""
 
   bearer_token="$(jira_bearer_token "${reference}")"
   user_email="$(jira_user_email "${reference}")"
   api_token="$(jira_api_token "${reference}")"
+  auth_mode_value="$(jira_auth_mode "${reference}")"
+  jira_name="$(resolve_jira_name "${reference}")"
 
   if [[ -n "${bearer_token}" ]]; then
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      auth_source_value="$(jira_field_source "${reference}" "bearer_token")"
+      jiggit_verbose_log "jira auth reference=${reference:-default} jira=${jira_name:-missing} mode=${auth_mode_value} source=${auth_source_value}"
+    fi
     printf '%s\n' "-H" "Authorization: Bearer ${bearer_token}"
     return 0
   fi
 
   if [[ -n "${user_email}" && -n "${api_token}" ]]; then
+    if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+      auth_source_value="$(jira_field_source "${reference}" "user_email"), $(jira_field_source "${reference}" "api_token")"
+      jiggit_verbose_log "jira auth reference=${reference:-default} jira=${jira_name:-missing} mode=${auth_mode_value} source=${auth_source_value}"
+    fi
     printf '%s\n' "--user" "${user_email}:${api_token}"
     return 0
   fi

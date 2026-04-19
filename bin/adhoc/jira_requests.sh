@@ -21,6 +21,10 @@ JIRA_REQUESTS_RAW_OUTPUT=0
 JIRA_REQUESTS_SHORT_OUTPUT=0
 JIRA_REQUESTS_ISSUE_LIMIT=10
 
+# Hardcoded Jira examples for adhoc manual probes.
+readonly JIRA_EXAMPLE_ISSUE_KEY="SKOLELOGIN-13603"
+readonly JIRA_EXAMPLE_RELEASE_NAME="Api-server_1.2.0"
+
 # Fail fast when a required external program is missing.
 require_program() {
   local program="${1}"
@@ -56,10 +60,10 @@ url_encode() {
   printf '%s\n' "${encoded}"
 }
 
-# Return success when PAT auth is configured.
-jira_auth_args() {
+# Return the Authorization header when PAT auth is configured.
+jira_auth_header() {
   if [[ -n "${JIRA_API_TOKEN:-}" ]]; then
-    printf '%s\n' -H "Authorization: Bearer ${JIRA_API_TOKEN}"
+    printf '%s\n' "Authorization: Bearer ${JIRA_API_TOKEN}"
     return 0
   fi
 
@@ -76,7 +80,7 @@ print_dry_run_curl_command() {
 # Run a Jira GET request against a fully qualified URL.
 run_get_request() {
   local url="${1}"
-  local -a auth_args=()
+  local auth_header=""
 
   if [[ "${JIRA_REQUESTS_DRY_RUN}" -eq 1 ]]; then
     print_dry_run_curl_command "${url}"
@@ -84,9 +88,9 @@ run_get_request() {
   fi
 
   require_program curl
-  mapfile -t auth_args < <(jira_auth_args)
+  auth_header="$(jira_auth_header)"
   curl --silent --show-error --fail \
-    "${auth_args[@]}" \
+    -H "${auth_header}" \
     -H "Accept: application/json" \
     "${url}"
 }
@@ -137,7 +141,7 @@ run_search_probe() {
   local base_url="${1}"
   local project_key="${2}"
   local release_name="${3}"
-  local jql="project = \"${project_key}\" AND fixVersion = \"${release_name}\" ORDER BY key ASC"
+  local jql="project = \"${project_key}\" AND (fixVersion = \"${release_name}\" OR affectedVersion = \"${release_name}\") ORDER BY key ASC"
   local encoded_jql
 
   encoded_jql="$(url_encode "${jql}")"
@@ -162,7 +166,7 @@ run_issues_list_probe() {
   local max_results
 
   if [[ "${issue_limit}" -eq 0 ]]; then
-    max_results=1000
+    max_results=20
   else
     max_results="${issue_limit}"
   fi
@@ -333,8 +337,8 @@ run_all_probes() {
   printf '\n'
 
   if run_all_probe_step \
-    "bin/adhoc/jira_requests.sh issues ${project_key}-1" \
-    run_issue_probe "${base_url}" "${project_key}-1"; then
+    "bin/adhoc/jira_requests.sh issues ${JIRA_EXAMPLE_ISSUE_KEY}" \
+    run_issue_probe "${base_url}" "${JIRA_EXAMPLE_ISSUE_KEY}"; then
     rc=0
   else
     rc=$?
@@ -348,8 +352,8 @@ run_all_probes() {
   printf '\n'
 
   if run_all_probe_step \
-    "bin/adhoc/jira_requests.sh search ${project_key} 1.2.3" \
-    run_search_probe "${base_url}" "${project_key}" "1.2.3"; then
+    "bin/adhoc/jira_requests.sh search ${project_key} ${JIRA_EXAMPLE_RELEASE_NAME}" \
+    run_search_probe "${base_url}" "${project_key}" "${JIRA_EXAMPLE_RELEASE_NAME}"; then
     rc=0
   else
     rc=$?
@@ -383,14 +387,14 @@ run_all_probes() {
 usage() {
   cat <<'EOF'
 Usage:
-  jira_requests.sh [--dry-run] [--fail-fast|--no-fail-fast] all
-  jira_requests.sh [--dry-run] [--fail-fast|--no-fail-fast] myself
-  jira_requests.sh [--dry-run] [--fail-fast|--no-fail-fast] project <project-key>
-  jira_requests.sh [--dry-run] [--fail-fast|--no-fail-fast] versions <project-key>
-  jira_requests.sh [--dry-run] [--fail-fast|--no-fail-fast] issues <project-key|issue-key> [--limit <n>]
-  jira_requests.sh [--dry-run] [--fail-fast|--no-fail-fast] search <project-key> <release-name>
-  jira_requests.sh [--dry-run] [--fail-fast|--no-fail-fast] releases <project-key>
-  jira_requests.sh [--dry-run] [--raw] [--fail-fast|--no-fail-fast] <command> ...
+  jira_requests.sh [--dry-run] [--short] [--fail-fast|--no-fail-fast] all
+  jira_requests.sh [--dry-run] [--short] [--fail-fast|--no-fail-fast] myself
+  jira_requests.sh [--dry-run] [--short] [--fail-fast|--no-fail-fast] project <project-key>
+  jira_requests.sh [--dry-run] [--short] [--fail-fast|--no-fail-fast] versions <project-key>
+  jira_requests.sh [--dry-run] [--short] [--fail-fast|--no-fail-fast] issues <project-key|issue-key> [--limit <n>]
+  jira_requests.sh [--dry-run] [--short] [--fail-fast|--no-fail-fast] search <project-key> <release-name>
+  jira_requests.sh [--dry-run] [--short] [--fail-fast|--no-fail-fast] releases <project-key>
+  jira_requests.sh [--dry-run] [--raw] [--short] [--fail-fast|--no-fail-fast] <command> ...
 
 The `all` command runs the recommended sequence once:
   myself -> project -> versions -> issues -> search -> releases
@@ -480,8 +484,8 @@ main() {
       ;;
     myself)
       if run_probe_step \
-        "bin/adhoc/jira_requests.sh project ${JIRA_PROJECT_KEY}" \
-        "refresh PAT and rerun myself" \
+        "bin/adhoc/jira_requests.sh project ${JIRA_PROJECT_KEY} --short" \
+        "bin/adhoc/jira_requests.sh myself --short" \
         run_myself_probe "${JIRA_BASE_URL}"; then
         return 0
       else
@@ -497,8 +501,8 @@ main() {
       fi
       if [[ "${JIRA_REQUESTS_SHORT_OUTPUT}" -eq 1 ]]; then
         if run_probe_step_excerpt \
-          "bin/adhoc/jira_requests.sh versions ${command_args[0]}" \
-          "bin/adhoc/jira_requests.sh project ${command_args[0]}" \
+          "bin/adhoc/jira_requests.sh versions ${command_args[0]} --short" \
+          "bin/adhoc/jira_requests.sh project ${command_args[0]} --short" \
           "project" \
           run_project_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
           return 0
@@ -508,8 +512,8 @@ main() {
         fi
       fi
       if run_probe_step \
-        "bin/adhoc/jira_requests.sh versions ${command_args[0]}" \
-        "check project key and permissions" \
+        "bin/adhoc/jira_requests.sh versions ${command_args[0]} --short" \
+        "bin/adhoc/jira_requests.sh project ${command_args[0]} --short" \
         run_project_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
         return 0
       else
@@ -525,8 +529,8 @@ main() {
       fi
       if [[ "${JIRA_REQUESTS_SHORT_OUTPUT}" -eq 1 ]]; then
         if run_probe_step_excerpt \
-          "run a search once you know a release name" \
-          "check project key and permissions" \
+          "bin/adhoc/jira_requests.sh search ${command_args[0]} ${JIRA_EXAMPLE_RELEASE_NAME} --short" \
+          "bin/adhoc/jira_requests.sh versions ${command_args[0]} --short" \
           "versions" \
           "120" \
           run_versions_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
@@ -537,8 +541,8 @@ main() {
         fi
       fi
       if run_probe_step \
-        "run a search once you know a release name" \
-        "check project key and permissions" \
+        "bin/adhoc/jira_requests.sh search ${command_args[0]} ${JIRA_EXAMPLE_RELEASE_NAME} --short" \
+        "bin/adhoc/jira_requests.sh versions ${command_args[0]} --short" \
         run_versions_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
         return 0
       else
@@ -555,8 +559,8 @@ main() {
       if is_jira_issue_key "${command_args[0]}"; then
         if [[ "${JIRA_REQUESTS_SHORT_OUTPUT}" -eq 1 ]]; then
           if run_probe_step_excerpt \
-            "inspect the issue page in Jira" \
-            "check issue key and permissions" \
+            "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
+            "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
             "issues" \
             run_issue_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
             return 0
@@ -566,8 +570,8 @@ main() {
           fi
         fi
         if run_probe_step \
-          "inspect the issue page in Jira" \
-          "check issue key and permissions" \
+          "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
+          "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
           run_issue_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
           return 0
         else
@@ -581,8 +585,8 @@ main() {
       fi
       if [[ "${JIRA_REQUESTS_SHORT_OUTPUT}" -eq 1 ]]; then
         if run_probe_step_excerpt \
-          "inspect the open issues list in Jira" \
-          "check project key and permissions" \
+          "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
+          "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
           "issues" \
           run_issues_list_probe "${JIRA_BASE_URL}" "${command_args[0]}" "${JIRA_REQUESTS_ISSUE_LIMIT}"; then
           return 0
@@ -592,8 +596,8 @@ main() {
         fi
       fi
       if run_probe_step \
-        "inspect the open issues list in Jira" \
-        "check project key and permissions" \
+        "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
+        "bin/adhoc/jira_requests.sh issues ${command_args[0]} --short" \
         run_issues_list_probe "${JIRA_BASE_URL}" "${command_args[0]}" "${JIRA_REQUESTS_ISSUE_LIMIT}"; then
         return 0
       else
@@ -609,8 +613,8 @@ main() {
       fi
       if [[ "${JIRA_REQUESTS_SHORT_OUTPUT}" -eq 1 ]]; then
         if run_probe_step_excerpt \
-          "inspect the release name and rerun search" \
-          "check project key and permissions" \
+          "bin/adhoc/jira_requests.sh search ${command_args[0]} ${command_args[1]} --short" \
+          "bin/adhoc/jira_requests.sh search ${command_args[0]} ${command_args[1]} --short" \
           "search" \
           run_search_probe "${JIRA_BASE_URL}" "${command_args[0]}" "${command_args[1]}"; then
           return 0
@@ -620,8 +624,8 @@ main() {
         fi
       fi
       if run_probe_step \
-        "inspect the release name and rerun search" \
-        "check project key and permissions" \
+        "bin/adhoc/jira_requests.sh search ${command_args[0]} ${command_args[1]} --short" \
+        "bin/adhoc/jira_requests.sh search ${command_args[0]} ${command_args[1]} --short" \
         run_search_probe "${JIRA_BASE_URL}" "${command_args[0]}" "${command_args[1]}"; then
         return 0
       else
@@ -637,8 +641,8 @@ main() {
       fi
       if [[ "${JIRA_REQUESTS_SHORT_OUTPUT}" -eq 1 ]]; then
         if run_probe_step_excerpt \
-          "review the releases page in Jira" \
-          "check project key and permissions" \
+          "bin/adhoc/jira_requests.sh releases ${command_args[0]} --short" \
+          "bin/adhoc/jira_requests.sh releases ${command_args[0]} --short" \
           "releases" \
           run_releases_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
           return 0
@@ -648,8 +652,8 @@ main() {
         fi
       fi
       if run_probe_step \
-        "review the releases page in Jira" \
-        "check project key and permissions" \
+        "bin/adhoc/jira_requests.sh releases ${command_args[0]} --short" \
+        "bin/adhoc/jira_requests.sh releases ${command_args[0]} --short" \
         run_releases_probe "${JIRA_BASE_URL}" "${command_args[0]}"; then
         return 0
       else

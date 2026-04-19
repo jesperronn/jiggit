@@ -36,6 +36,11 @@ fetch_jira_project_metadata() {
     return 1
   fi
 
+  if [[ "${jira_project_key}" == "VERSIONS_ONLY" ]]; then
+    printf 'simulated metadata 404\n' >&2
+    return 1
+  fi
+
   cat <<'EOF'
 {
   "self": "https://jira.example.test/rest/api/2/project/JIRA",
@@ -62,6 +67,37 @@ fetch_jira_releases() {
   { "name": "2.1.0.27" }
 ]
 EOF
+}
+
+test_run_jira_check_main_treats_release_access_as_sufficient_when_metadata_fails() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[project-a]
+repo_path = "/tmp/project-a"
+remote_url = "git@github.com:example/project-a.git"
+jira_project_key = "VERSIONS_ONLY"
+jira_regexes = ["JIRA-[0-9]+"]
+environments = []
+EOF
+
+  local output
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_jira_check_main project-a
+  )"
+
+  assert_contains "${output}" "Jira project key: \`VERSIONS_ONLY\`" "render jira project key when metadata fetch fails"
+  assert_contains "${output}" "Release count: \`2\`" "still render release count when metadata fetch fails"
+  assert_contains "${output}" "Connectivity: \`ok\`" "treat releases access as sufficient connectivity"
+  assert_contains "${output}" "Metadata probe: \`warn\` (simulated metadata 404" "render metadata warning when metadata fetch fails"
 }
 
 test_run_jira_check_main_renders_connectivity_report() {
@@ -222,6 +258,59 @@ EOF
   assert_contains "${output}" "[verbose] jira-check project=project-a key=JIRA" "render project verbose line"
   assert_contains "${output}" "[verbose] jira-check metadata https://jira.example.test/rest/api/2/project/JIRA" "render metadata verbose line"
   assert_contains "${output}" "[verbose] jira-check releases https://jira.example.test/rest/api/2/project/JIRA/versions" "render releases verbose line"
+}
+
+test_run_jira_check_main_verbose_keeps_probe_json_clean_when_stderr_has_logs() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[project-a]
+repo_path = "/tmp/project-a"
+remote_url = "git@github.com:example/project-a.git"
+jira_project_key = "JIRA"
+jira_regexes = ["JIRA-[0-9]+"]
+environments = []
+EOF
+
+  # shellcheck disable=SC2329
+  fetch_jira_project_metadata() {
+    printf '[verbose] simulated metadata log\n' >&2
+    cat <<'EOF'
+{
+  "self": "https://jira.example.test/rest/api/2/project/JIRA",
+  "key": "JIRA",
+  "name": "Jira Project"
+}
+EOF
+  }
+
+  # shellcheck disable=SC2329
+  fetch_jira_releases() {
+    printf '[verbose] simulated releases log\n' >&2
+    cat <<'EOF'
+[
+  { "name": "2.1.0.26" },
+  { "name": "2.1.0.27" }
+]
+EOF
+  }
+
+  local output
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      JIGGIT_VERBOSE=1 VERBOSE=true \
+      run_jira_check_main project-a 2>&1
+  )"
+
+  assert_contains "${output}" "Jira project name: \`Jira Project\`" "parse metadata json even when stderr has verbose logs"
+  assert_contains "${output}" "Release count: \`2\`" "parse releases json even when stderr has verbose logs"
 }
 
 run_tests "$@"

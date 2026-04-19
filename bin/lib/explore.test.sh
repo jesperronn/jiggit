@@ -160,8 +160,10 @@ EOF
   assert_eq "https://jira.env.example.test" "$(jira_base_url)" "prefer shared jira base url from env"
   assert_eq "dev@example.test" "$(jira_user_email)" "prefer shared jira user email from env"
   assert_eq "env-token" "$(jira_api_token)" "prefer shared jira api token from env"
-  assert_eq "bearer_token" "$(jira_auth_mode)" "keep bearer auth mode when no env bearer override replaces it"
+  assert_eq "env-token" "$(jira_bearer_token)" "treat shared env api token as effective bearer token"
+  assert_eq "bearer_token" "$(jira_auth_mode)" "keep bearer auth mode when shared env api token is used as bearer auth"
   assert_eq "env: JIRA_BASE_URL" "$(jira_field_source "" "base_url")" "report env base url source"
+  assert_eq "env: JIRA_API_TOKEN" "$(jira_field_source "" "bearer_token")" "report env api token as bearer source"
   assert_eq "env: JIRA_API_TOKEN" "$(jira_field_source "" "api_token")" "report env api token source"
 
   unset JIGGIT_PROJECTS_FILE

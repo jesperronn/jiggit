@@ -53,6 +53,11 @@ fetch_project_environment_version() {
 
 # Override Jira releases so overview tests do not require network access.
 fetch_jira_releases() {
+  local jira_base_url="${1}"
+  local jira_project_key="${2}"
+  local auth_reference="${3:-}"
+
+  printf '%s|%s|%s\n' "${jira_base_url}" "${jira_project_key}" "${auth_reference}" >> "${TEST_TMPDIR}/releases.log"
   cat <<'EOF'
 [
   {"name":"v1.3.0.0","released":false,"archived":false,"releaseDate":"2026-03-28"},
@@ -126,8 +131,8 @@ EOF
   )"
 
   assert_contains "${output}" "Unreleased Issues" "render unreleased issues subsection on jira failure"
-  assert_contains "${output}" "\`status\`: \`unable to fetch jira issues\`" "render explicit issue fetch failure"
-  assert_contains "${output}" "\`next step\`: \`jiggit jira-check project-a\`" "suggest jira-check for issue fetch failure"
+  assert_contains "${output}" "status: unable to fetch jira issues" "render explicit issue fetch failure"
+  assert_contains "${output}" "next step: jiggit jira-check project-a" "suggest jira-check for issue fetch failure"
 }
 
 test_run_overview_main_renders_missing_shared_jira_config_diagnostic() {
@@ -207,8 +212,8 @@ EOF
   )"
 
   assert_contains "${output}" "Unreleased Issues" "render unreleased issues subsection without jira keys"
-  assert_contains "${output}" "\`status\`: \`no jira keys found in commit span\`" "render explicit no-jira-keys status"
-  assert_contains "${output}" "\`next step\`: \`jiggit env-diff docs-only --base prod\`" "suggest env-diff when no jira keys are found"
+  assert_contains "${output}" "status: no jira keys found in commit span" "render explicit no-jira-keys status"
+  assert_contains "${output}" "next step: jiggit env-diff docs-only --base prod" "suggest env-diff when no jira keys are found"
 }
 
 test_run_overview_main_defaults_to_current_configured_repo() {
@@ -244,33 +249,30 @@ EOF
   )"
 
   assert_contains "${output}" "# jiggit overview" "render overview heading"
-  assert_contains "${output}" "## project-a" "default to current configured project"
-  assert_contains "${output}" "\`command\`: \`jiggit config\`" "render config section command"
+  assert_contains "${output}" "## project-a \`jiggit config\`" "default to current configured project with command in heading"
   assert_contains "${output}" "Jira base URL: \`https://jira.example.com\`" "render shared jira base url diagnostic"
   assert_contains "${output}" "Jira auth mode: \`bearer_token\`" "render shared jira auth diagnostic"
   assert_contains "${output}" "Jira API token: \`missing\`" "render shared jira token diagnostic"
-  assert_contains "${output}" "\`command\`: \`jiggit env-versions project-a\`" "render versions section command"
-  assert_contains "${output}" "\`prod\`: \`v1.2.0.0\`" "render prod environment version"
-  assert_contains "${output}" "\`prep\`: \`v1.2.0.0\`" "render prep environment version"
-  assert_contains "${output}" "\`command\`: \`jiggit next-release project-a\`" "render next-release section command"
-  assert_contains "${output}" "\`status\`: \`release-needed\`" "render next-release status"
-  assert_contains "${output}" "\`suggested next release\`: \`v1.3.0.0\`" "render suggested next release"
-  assert_contains "${output}" "Unreleased Issues" "render compact unreleased issues subsection"
-  assert_contains "${output}" "\`issue count\`: \`2\`" "render unreleased issue count"
-  assert_contains "${output}" "\`issues with expected fixVersion\`: \`1\`" "render matching fix version count"
-  assert_contains "${output}" "\`issues missing expected fixVersion\`: \`1\`" "render missing fix version count"
-  assert_contains "${output}" "ALPHA-2" "render unreleased issue key detail"
-  assert_contains "${output}" "Add feature" "render unreleased issue title detail"
-  assert_contains "${output}" "fix_version: \`1.3.0.0\`" "render matching unreleased fix version detail"
-  assert_contains "${output}" "fix_version: \`MISSING\`" "render missing unreleased fix version detail"
-  assert_contains "${output}" "\`investigate diff\`: \`jiggit env-diff project-a --base prod\`" "render next-release investigation command"
-  assert_contains "${output}" "\`assign fixVersion\`: \`jiggit assign-fix-version project-a --release 1.3.0.0\`" "render assign-fix-version next step"
-  assert_contains "${output}" "\`command\`: \`jiggit releases project-a\`" "render releases section command"
-  assert_contains "${output}" "\`top releases\`: \`v1.2.0.0, v1.3.0.0\`" "render compact release summary"
+  assert_contains "${output}" "## Versions \`jiggit env-versions project-a\`" "render versions section command in heading"
+  assert_contains "${output}" "prod: v1.2.0.0" "render prod environment version"
+  assert_contains "${output}" "prep: v1.2.0.0" "render prep environment version"
+  assert_contains "${output}" "## Next Release \`jiggit next-release project-a --base prod\`" "render next-release section heading with command"
+  assert_contains "${output}" "- base version (prod): v1.2.0.0" "render compact base version line"
+  assert_contains "${output}" "- commit count ahead: 1" "render compact commit count line"
+  assert_contains "${output}" "- **suggested next release: v1.3.0**" "render bold suggested next release line"
+  assert_contains "${output}" "Unreleased Issues (2)" "render compact unreleased issues subsection with count"
+  assert_contains "${output}" "issue count: 2" "render unreleased issue count"
+  assert_contains "${output}" "issues with expected fixVersion: 1" "render matching fix version count"
+  assert_contains "${output}" "issues missing expected fixVersion: 1" "render missing fix version count"
+  assert_contains "${output}" "ALPHA-3: status: Resolved, fix_version: MISSING, subject: Add second feature" "render resolved unreleased issue detail"
+  assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement unreleased issue detail"
+  assert_contains "${output}" "Next steps:" "render next steps label"
+  assert_contains "${output}" "- jiggit env-diff project-a --base prod" "render next-release diff command"
+  assert_contains "${output}" "- jiggit next-release project-a --base prod" "render next-release create command"
 
   local jira_issues_log
   jira_issues_log="$(sed -n '1,20p' "${TEST_TMPDIR}/jira-issues.log")"
-  assert_contains "${jira_issues_log}" "https://jira.example.com||ALPHA-2" "pass the first unreleased issue key through overview issue fetch"
+  assert_contains "${jira_issues_log}" "https://jira.example.com|project-a|ALPHA-2" "pass the first unreleased issue key through overview issue fetch"
 }
 
 test_run_overview_main_defaults_to_all_projects_outside_configured_repo() {
@@ -312,11 +314,12 @@ EOF
       run_overview_main
   )"
 
-  assert_contains "${output}" "## alpha" "render first project when outside configured repo"
-  assert_contains "${output}" "## beta" "render second project when outside configured repo"
-  assert_contains "${output}" "\`environments\`: \`none\`" "render missing environment summary"
-  assert_contains "${output}" "\`status\`: \`missing prod base\`" "render next-release warning for project without prod"
-  assert_contains "${output}" "\`next step\`: \`jiggit config\`" "suggest config command when prod base is missing"
+  assert_contains "${output}" "## alpha \`jiggit config\`" "render first project when outside configured repo"
+  assert_contains "${output}" "## beta \`jiggit config\`" "render second project when outside configured repo"
+  assert_contains "${output}" "environments: none" "render missing environment summary"
+  assert_contains "${output}" "- status: missing prod base" "render next-release warning for project without prod"
+  assert_contains "${output}" "Next steps:" "render next steps label when prod base is missing"
+  assert_contains "${output}" "- jiggit config" "suggest config command when prod base is missing"
 }
 
 test_run_overview_main_shows_source_hint_for_missing_jira_project_key() {
@@ -346,9 +349,9 @@ EOF
       run_overview_main project-b
   )"
 
-  assert_contains "${output}" "\`jira project key\`: \`missing\`" "render missing jira project key"
-  assert_contains "${output}" "\`source\`: \`${projects_file}\`" "render project source file for missing jira key"
-  assert_contains "${output}" "\`next step\`: \`jiggit config\`" "render config next step adjacent to missing jira key"
+  assert_contains "${output}" "jira project key: missing" "render missing jira project key"
+  assert_contains "${output}" "source: ${projects_file}" "render project source file for missing jira key"
+  assert_contains "${output}" "next step: jiggit config" "render config next step adjacent to missing jira key"
 }
 
 test_run_overview_main_renders_version_diagnostics_for_prod_drift() {
@@ -383,10 +386,10 @@ EOF
   )"
 
   assert_contains "${output}" "Version Diagnostics" "render version diagnostics subsection"
-  assert_contains "${output}" "\`ft  \`: \`v1.22.0.55\`" "pad shorter environment names in versions section"
+  assert_contains "${output}" "ft: v1.22.0.55" "render environment version without padded key formatting"
   assert_contains "${output}" "ft: ahead of prod at major/minor level (v1.22.0.55 vs v1.21.0.132); pending deployment" "render pending deployment diagnostic"
   assert_contains "${output}" "lt: ahead of prod within the same minor (v1.21.0.200 vs v1.21.0.132); new minor release needed" "render same-minor release-needed diagnostic"
-  assert_contains "${output}" "\`next step\`: \`jiggit env-diff project-b --base prod\`" "render version-drift next step"
+  assert_contains "${output}" "next step: jiggit env-diff project-b --base prod" "render version-drift next step"
 }
 
 test_run_overview_main_honors_global_project_selector() {
