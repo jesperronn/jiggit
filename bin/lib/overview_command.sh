@@ -108,8 +108,10 @@ overview_emit_plain_line() {
 render_overview_issue_list() {
   local issues_json="${1}"
   local expected_release="${2}"
+  local project_id="${3:-}"
+  local jira_base_url="${4:-}"
 
-  render_next_release_issue_lines "${issues_json}" "${expected_release}"
+  render_next_release_issue_lines "${issues_json}" "${expected_release}" "${project_id}" "${jira_base_url}"
 }
 
 # Render a compact unreleased-issue summary for the next-release section.
@@ -126,8 +128,7 @@ render_overview_next_release_issues() {
   local issue_json=""
   local issue_state=""
   local total_count=0
-  local expected_count=0
-  local missing_count=0
+  local missing_fix_version_count=0
   local fetch_failed=0
 
   if [[ -z "${suggested_version}" || -z "${jira_base_url_value}" ]]; then
@@ -173,11 +174,8 @@ render_overview_next_release_issues() {
     total_count=$((total_count + 1))
     issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${suggested_version}" "${project_id}")"
     case "${issue_state}" in
-      expected-fix-version)
-        expected_count=$((expected_count + 1))
-        ;;
-      missing-fix-version|other-fix-version)
-        missing_count=$((missing_count + 1))
+      missing-fix-version)
+        missing_fix_version_count=$((missing_fix_version_count + 1))
         ;;
     esac
   done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
@@ -191,10 +189,10 @@ render_overview_next_release_issues() {
 
   print_markdown_h2 "Unreleased Issues (${total_count})" "${C_GREEN}"
   printf '\n'
-  overview_emit_line "issue count" "${total_count}"
-  overview_emit_line "issues with expected fixVersion" "${expected_count}"
-  overview_emit_line "issues missing expected fixVersion" "${missing_count}"
-  render_overview_issue_list "${issues_json}" "${suggested_version}" "${project_id}"
+  render_overview_issue_list "${issues_json}" "${suggested_version}" "${project_id}" "${jira_base_url_value}"
+  if [[ "${missing_fix_version_count}" -gt 0 ]]; then
+    overview_emit_line "add missing fixVersion" "jiggit assign-fix-version ${project_id} --release ${suggested_version#v}"
+  fi
 }
 
 # Render the config section in overview.

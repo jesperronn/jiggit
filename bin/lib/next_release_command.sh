@@ -454,13 +454,24 @@ print_next_release_issue_line() {
   local fix_version="${4}"
   local fix_version_state="${5}"
   local status_bucket="${6}"
+  local issue_url="${7:-}"
   local status_color=""
   local fix_color=""
   local fix_bold=""
+  local issue_key_display="${issue_key}"
+
+  if [[ -n "${issue_url}" ]]; then
+    issue_key_display="[${issue_key}](${issue_url})"
+  fi
 
   if ! use_color_output; then
-    printf '%s status: %s, fix_version: %s, subject: %s\n' \
-      "${issue_key}:" "${status_name}" "${fix_version}" "${subject}"
+    if [[ "${fix_version_state}" == "missing-fix-version" ]]; then
+      printf '%s: status: %s, MISSING fix_version, subject: %s\n' \
+        "${issue_key_display}" "${status_name}" "${subject}"
+    else
+      printf '%s: status: %s, fix_version: %s, subject: %s\n' \
+        "${issue_key_display}" "${status_name}" "${fix_version}" "${subject}"
+    fi
     return 0
   fi
 
@@ -473,16 +484,38 @@ print_next_release_issue_line() {
     fix_bold="${C_BOLD}"
   fi
 
-  printf '%b%s%b status: ' \
-    "${C_BOLD}${C_CYAN}" "${issue_key}:" "${C_0}"
+  if [[ -n "${issue_url}" ]]; then
+    printf '%s: status: ' "${issue_key_display}"
+  else
+    printf '%b%s%b status: ' \
+      "${C_BOLD}${C_CYAN}" "${issue_key_display}:" "${C_0}"
+  fi
   if [[ -n "${status_color}" ]]; then
     printf '%b%s%b' "${C_BOLD}${status_color}" "${status_name}" "${C_0}"
   else
     printf '%s' "${status_name}"
   fi
-  printf ', fix_version: %b%s%b, subject: %b%s%b\n' \
-    "${fix_bold}${fix_color}" "${fix_version}" "${C_0}" \
-    "${C_GREEN}" "${subject}" "${C_0}"
+  if [[ "${fix_version_state}" == "missing-fix-version" ]]; then
+    printf ', %bMISSING fix_version%b, subject: %b%s%b\n' \
+      "${C_BOLD}${C_RED}" "${C_0}" \
+      "${C_GREEN}" "${subject}" "${C_0}"
+  else
+    printf ', fix_version: %b%s%b, subject: %b%s%b\n' \
+      "${fix_bold}${fix_color}" "${fix_version}" "${C_0}" \
+      "${C_GREEN}" "${subject}" "${C_0}"
+  fi
+}
+
+# Return the Jira browse URL for one issue key.
+next_release_issue_browse_url() {
+  local jira_base_url="${1:-}"
+  local issue_key="${2:-}"
+
+  if [[ -z "${jira_base_url}" || -z "${issue_key}" ]]; then
+    return 0
+  fi
+
+  printf '%s/browse/%s\n' "${jira_base_url%/}" "${issue_key}"
 }
 
 # Render one-line Jira issues sorted into workflow buckets.
@@ -490,6 +523,7 @@ render_next_release_issue_lines() {
   local issues_json="${1}"
   local expected_release="${2}"
   local project_id="${3:-}"
+  local jira_base_url="${4:-}"
   local bucket_name=""
   local issue_json=""
   local rendered_any=0
@@ -499,6 +533,7 @@ render_next_release_issue_lines() {
   local status_name=""
   local status_bucket=""
   local fix_version=""
+  local issue_url=""
 
   for bucket_name in resolved business-validation quality-assurance implement open-reopen; do
     while IFS= read -r issue_json; do
@@ -510,7 +545,11 @@ render_next_release_issue_lines() {
       issue_key="$(printf '%s\n' "${issue_json}" | jq -r '.key // "unknown"')"
       title="$(printf '%s\n' "${issue_json}" | jq -r '.fields.summary // "unknown"')"
       fix_version="$(jira_issue_fix_version_display "${issue_json}")"
-      print_next_release_issue_line "${issue_key}" "${title}" "${status_name}" "${fix_version}" "${issue_state}" "${status_bucket}"
+      issue_url=""
+      if [[ "${issue_state}" == "missing-fix-version" ]]; then
+        issue_url="$(next_release_issue_browse_url "${jira_base_url}" "${issue_key}")"
+      fi
+      print_next_release_issue_line "${issue_key}" "${title}" "${status_name}" "${fix_version}" "${issue_state}" "${status_bucket}" "${issue_url}"
       rendered_any=1
     done < <(printf '%s\n' "${issues_json}" | jq -c '.issues | sort_by(.key)[]?')
   done

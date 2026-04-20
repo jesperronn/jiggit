@@ -70,6 +70,28 @@ fetch_env_version_for_url() {
   esac
 }
 
+fetch_jira_issues_by_keys() {
+  local jira_base_url="${1}"
+  local auth_reference="${2:-}"
+  shift 2 || true
+
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${TEST_TMPDIR}/jira-fetch.log"
+  cat <<'EOF'
+{
+  "issues": [
+    {
+      "key": "ALPHA-2",
+      "fields": {
+        "summary": "Repair edge case",
+        "status": {"name": "Done"},
+        "fixVersions": []
+      }
+    }
+  ]
+}
+EOF
+}
+
 test_run_env_diff_main_reports_no_difference_for_equal_versions() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
@@ -114,6 +136,10 @@ test_run_env_diff_main_preserves_requested_base_and_target_environments() {
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
   cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
 [project_a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/env-diff-repo.git"
@@ -135,23 +161,27 @@ EOF
   )"
 
   assert_contains "${output}" "# jiggit env-diff" "render env-diff heading"
-  assert_contains "${output}" "Base: \`prod\`" "render requested base environment"
   assert_contains "${output}" "Target: \`prep\`" "render requested target environment"
-  assert_contains "${output}" "Base resolved ref: \`v1.0.0\`" "render base version"
-  assert_contains "${output}" "Target resolved ref: \`v1.1.0\`" "render target version"
-  assert_contains "${output}" "Normalized range: \`v1.0.0..v1.1.0\`" "render git range from base to target"
-  assert_contains "${output}" 'Commit count: 2' "render commit count"
-  assert_contains "${output}" 'github.com/example/env-diff-repo/compare/' "render compare url"
-  assert_contains "${output}" '## Jira Keys' "render jira key section"
-  assert_contains "${output}" 'ALPHA-2' "render jira key"
+  assert_contains "${output}" "base version (prod): v1.0.0" "render base version"
+  assert_contains "${output}" "target ref: v1.1.0" "render target version"
+  assert_contains "${output}" 'commit count ahead: 2' "render commit count"
+  assert_contains "${output}" '**suggested next release: v1.1.0**' "render suggested next release"
+  assert_contains "${output}" 'suggested release link: https://github.com/example/env-diff-repo/compare/' "render suggested release link"
   assert_contains "${output}" '## Commits By Type' "render grouped commits heading"
+  assert_contains "${output}" 'repair edge case ALPHA-2' "render enriched fix commit line"
   assert_contains "${output}" '## fix' "render fix section"
   assert_contains "${output}" '## docs' "render docs section"
+  assert_contains "${output}" '## Jira Issues' "render jira issues section"
+  assert_contains "${output}" '[ALPHA-2](https://jira.example.test/browse/ALPHA-2): status: Done, MISSING fix_version, subject: Repair edge case' "render linked jira issue with missing fix version"
+  assert_contains "${output}" 'add missing fixVersion: jiggit assign-fix-version project_a --release 1.1.0' "suggest assign-fix-version from env diff"
 
   local fetch_log
   fetch_log="$(sed -n '1,20p' "${TEST_TMPDIR}/fetch.log")"
   assert_contains "${fetch_log}" "prod|https://prod.project-a.example.com/actuator/info|jq -r '.git.branch'" "resolve prod environment version"
   assert_contains "${fetch_log}" "prep|https://prep.project-a.example.com/actuator/info|jq -r '.git.branch'" "resolve prep environment version"
+  local jira_fetch_log
+  jira_fetch_log="$(sed -n '1,20p' "${TEST_TMPDIR}/jira-fetch.log")"
+  assert_contains "${jira_fetch_log}" "https://jira.example.test||ALPHA-2" "fetch jira issues for extracted keys"
 }
 
 test_run_env_diff_main_defaults_target_to_remote_default_branch() {
@@ -182,11 +212,9 @@ EOF
     run_env_diff_main project_a --base prod
   )"
 
-  assert_contains "${output}" "Base: \`prod\`" "render base environment with default target"
   assert_contains "${output}" "Target: \`refs/remotes/origin/main\`" "default target to remote default branch"
-  assert_contains "${output}" "Base resolved ref: \`v1.0.0\`" "render base version with default target"
-  assert_contains "${output}" "Target resolved ref: \`refs/remotes/origin/main\`" "render default target ref as target version"
-  assert_contains "${output}" "Normalized range: \`v1.0.0..refs/remotes/origin/main\`" "render base-to-branch git range"
+  assert_contains "${output}" "base version (prod): v1.0.0" "render base version with default target"
+  assert_contains "${output}" "target ref: refs/remotes/origin/main" "render default target ref as target version"
 }
 
 test_run_env_diff_main_accepts_git_refs_for_base_and_target() {
@@ -218,12 +246,10 @@ EOF
     run_env_diff_main project_a --base prod --target main
   )"
 
-  assert_contains "${output}" "Base: \`prod\`" "prefer configured environment name for base"
   assert_contains "${output}" "Target: \`main\`" "treat non-environment target as git ref"
-  assert_contains "${output}" "Base resolved ref: \`v1.0.0\`" "resolve base environment to deployed version"
-  assert_contains "${output}" "Target resolved ref: \`main\`" "preserve target git ref"
-  assert_contains "${output}" "Normalized range: \`v1.0.0..main\`" "build range using git ref target"
-  assert_contains "${output}" "github.com/example/env-diff-repo/compare/" "render compare url for mixed env and git ref"
+  assert_contains "${output}" "base version (prod): v1.0.0" "resolve base environment to deployed version"
+  assert_contains "${output}" "target ref: main" "preserve target git ref"
+  assert_contains "${output}" "suggested release link: https://github.com/example/env-diff-repo/compare/" "render release link for mixed env and git ref"
 }
 
 run_tests "$@"

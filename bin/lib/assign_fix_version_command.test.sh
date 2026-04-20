@@ -193,4 +193,53 @@ EOF
   fi
 }
 
+test_run_assign_fix_version_main_scopes_release_resolution_by_project_prefix() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/assign-fix-version-repo"
+  create_repo_for_assign_fix_version "${repo_dir}"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[project_a]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/assign-fix-version-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+jira_release_prefix = ["Udbyderportal_"]
+environments = ["prod"]
+EOF
+
+  JIGGIT_TEST_ENV_VERSION_BY_NAME["project_a:prod"]="v1.2.0.0"
+
+  # shellcheck disable=SC2329
+  fetch_jira_releases() {
+    cat <<'EOF'
+[
+  {"name": "Testtjeneste_1.23.0"},
+  {"name": "Udbyderportal_1.23.0"}
+]
+EOF
+  }
+
+  local output
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    run_assign_fix_version_main project_a --release 1.23.0
+  )"
+
+  assert_contains "${output}" "Release: \`Udbyderportal_1.23.0\`" "resolve the project-scoped prefixed release"
+  if [[ "${output}" == *"matched multiple Jira releases"* ]]; then
+    fail "avoid ambiguous release output when only one project-scoped release matches"
+  else
+    pass "avoid ambiguous release output when only one project-scoped release matches"
+  fi
+}
+
 run_tests "$@"

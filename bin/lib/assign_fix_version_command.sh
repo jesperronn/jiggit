@@ -64,12 +64,14 @@ Add a Jira fixVersion to issues in the base-to-target commit span when they do n
 EOF
 }
 
-# Resolve the release argument to one canonical Jira release name, using fuzzy matching.
+# Resolve the release argument to one canonical Jira release name, scoped to the current project when possible.
 resolve_assign_fix_version_release() {
-  local jira_base_url_value="${1}"
-  local jira_project_key="${2}"
-  local release_query="${3}"
+  local project_id="${1}"
+  local jira_base_url_value="${2}"
+  local jira_project_key="${3}"
+  local release_query="${4}"
   local releases_json=""
+  local scoped_releases_json=""
   local matching_releases=""
   local match_count="0"
 
@@ -78,7 +80,8 @@ resolve_assign_fix_version_release() {
     return 0
   fi
 
-  matching_releases="$(find_matching_releases "${releases_json}" "${release_query}")"
+  scoped_releases_json="$(project_scoped_releases_json "${project_id}" "${releases_json}")"
+  matching_releases="$(find_matching_releases "${scoped_releases_json}" "${release_query}")"
   match_count="$(printf '%s\n' "${matching_releases}" | sed '/^$/d' | wc -l | tr -d ' ')"
 
   if [[ "${match_count}" -eq 1 ]]; then
@@ -382,7 +385,7 @@ run_assign_fix_version_main() {
     return 1
   fi
 
-  release_resolution="$(resolve_assign_fix_version_release "${jira_base_url_value}" "${jira_project_key}" "${release_query}")"
+  release_resolution="$(resolve_assign_fix_version_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${release_query}")"
   IFS='|' read -r release_resolution_state release_resolution_detail <<< "${release_resolution}"
   case "${release_resolution_state}" in
     ok) ;;

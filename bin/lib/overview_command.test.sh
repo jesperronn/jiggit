@@ -261,11 +261,14 @@ EOF
   assert_contains "${output}" "- commit count ahead: 1" "render compact commit count line"
   assert_contains "${output}" "- **suggested next release: v1.3.0**" "render bold suggested next release line"
   assert_contains "${output}" "Unreleased Issues (2)" "render compact unreleased issues subsection with count"
-  assert_contains "${output}" "issue count: 2" "render unreleased issue count"
-  assert_contains "${output}" "issues with expected fixVersion: 1" "render matching fix version count"
-  assert_contains "${output}" "issues missing expected fixVersion: 1" "render missing fix version count"
-  assert_contains "${output}" "ALPHA-3: status: Resolved, fix_version: MISSING, subject: Add second feature" "render resolved unreleased issue detail"
+  if [[ "${output}" == *"issue count:"* || "${output}" == *"issues with expected fixVersion:"* || "${output}" == *"issues missing expected fixVersion:"* ]]; then
+    fail "omit unreleased issue summary count lines"
+  else
+    pass "omit unreleased issue summary count lines"
+  fi
+  assert_contains "${output}" "[ALPHA-3](https://jira.example.com/browse/ALPHA-3): status: Resolved, MISSING fix_version, subject: Add second feature" "render linked missing-fix-version issue detail"
   assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement unreleased issue detail"
+  assert_contains "${output}" "add missing fixVersion: jiggit assign-fix-version project-a --release 1.3.0" "suggest assign-fix-version for missing fix versions"
   assert_contains "${output}" "Next steps:" "render next steps label"
   assert_contains "${output}" "- jiggit env-diff project-a --base prod" "render next-release diff command"
   assert_contains "${output}" "- jiggit next-release project-a --base prod" "render next-release create command"

@@ -182,7 +182,7 @@ EOF
   assert_contains "${output}" "status: \`missing\`" "render jira release creation outcome"
   assert_contains "${output}" "detail: \`run interactively to create it\`" "render interactive creation next step"
   assert_contains "${output}" "## Unreleased Jira Issues" "render unreleased Jira issues section"
-  assert_contains "${output}" "ALPHA-3: status: Resolved, fix_version: MISSING, subject: Add second feature" "render resolved issue on one line"
+  assert_contains "${output}" "ALPHA-3: status: Resolved, MISSING fix_version, subject: Add second feature" "render resolved issue on one line"
   assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement issue on one line"
   assert_contains "${output}" "## Next Steps" "render next-release next steps section"
   assert_contains "${output}" "jiggit releases next-release-project" "suggest releases command"
@@ -223,7 +223,7 @@ EOF
   assert_contains "${output}" $'\e[1m\e[36mALPHA-2:\e[0m' "render issue key in cyan"
   assert_contains "${output}" $'\e[1m\e[35mIn Progress\e[0m' "render implement status in magenta"
   assert_contains "${output}" $'fix_version: \e[37m1.3.0.0\e[0m' "render matching fix version in gray"
-  assert_contains "${output}" $'\e[1m\e[31mMISSING\e[0m' "render missing fix version in bold red"
+  assert_contains "${output}" $'\e[1m\e[31mMISSING fix_version\e[0m' "render missing fix version marker in bold red"
 }
 
 test_render_next_release_jira_release_status_falls_back_to_latest_released_when_no_unreleased_exists() {
