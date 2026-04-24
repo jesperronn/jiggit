@@ -157,11 +157,51 @@ test_jiggit_usage_line_highlights_the_subcommand_token() {
 }
 
 test_jiggit_config_accepts_global_verbose_flag() {
+  local tmpdir=""
+  tmpdir="$(mktemp -d /tmp/jiggit-config-verbose.XXXXXX)"
+  trap '[[ -n "${tmpdir:-}" ]] && rm -rf "${tmpdir}"' RETURN
+
+  mkdir -p "${tmpdir}/bin" "${tmpdir}/home/.jiggit"
+
+  cat > "${tmpdir}/projects.toml" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[alpha]
+repo_path = "/tmp/alpha"
+remote_url = "git@github.com:example/alpha.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+environments = []
+EOF
+
+  cat > "${tmpdir}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "__CURL_LOG__"
+printf '{ "name": "Test User" }\n'
+EOF
+
+  sed -i.bak "s|__CURL_LOG__|${tmpdir}/curl.log|g" "${tmpdir}/bin/curl"
+  rm -f "${tmpdir}/bin/curl.bak"
+  chmod +x "${tmpdir}/bin/curl"
+
   local output
-  output="$(bin/jiggit config --verbose 2>&1)"
+  output="$(
+    HOME="${tmpdir}/home" \
+    PATH="${tmpdir}/bin:${PATH}" \
+    JIGGIT_PROJECTS_FILE="${tmpdir}/projects.toml" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${tmpdir}/discovered.toml" \
+    bin/jiggit config --verbose 2>&1
+  )"
 
   assert_contains "${output}" "[verbose] loading project config" "config accepts global --verbose"
   assert_contains "${output}" "# jiggit config" "config still renders normally with verbose"
+  if [[ -f "${tmpdir}/curl.log" ]]; then
+    fail "config should not call curl"
+  else
+    pass "config stays read-only and skips curl"
+  fi
 }
 
 test_jiggit_config_help_lists_global_and_project_args() {
@@ -217,11 +257,12 @@ prod = "https://beta.example.test/info"
 EOF
 
   local output=""
+  # Use a plain shell so local login/profile hooks cannot stall the test.
   output="$(
     PATH="/opt/homebrew/bin:${PATH}" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${tmpdir}/discovered.toml" \
-    /opt/homebrew/bin/bash -lc '
+    /opt/homebrew/bin/bash -c '
       source bin/jiggit source
       fetch_env_version_for_url() {
         printf "mock-%s\n" "$1"

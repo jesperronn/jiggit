@@ -71,6 +71,10 @@ setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-doctor-test.XXXXXX)"
   install_default_fetch_project_environment_version_mock
   install_default_fetch_jira_mocks
+  unset JIRA_BASE_URL
+  unset JIRA_API_TOKEN
+  unset JIRA_BEARER_TOKEN
+  unset JIRA_USER_EMAIL
   # shellcheck disable=SC2034
   JIGGIT_CAN_PROMPT_INTERACTIVELY=false
   # shellcheck disable=SC2034

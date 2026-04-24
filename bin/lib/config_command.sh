@@ -7,7 +7,7 @@ if ! declare -F load_project_config >/dev/null 2>&1; then
   source "$(dirname "${BASH_SOURCE[0]}")/explore.sh"
 fi
 
-if ! declare -F render_jira_check_access_body >/dev/null 2>&1; then
+if ! declare -F render_jira_check_config_summary >/dev/null 2>&1; then
   # shellcheck disable=SC1091
   source "$(dirname "${BASH_SOURCE[0]}")/jira_check_command.sh"
 fi
@@ -90,6 +90,25 @@ render_project_config_entry() {
 }
 
 # Render the shared global config view.
+render_config_jira_summary() {
+  local -a project_ids=("$@")
+  local jira_name=""
+
+  if [[ ${#JIGGIT_JIRA_NAMES[@]} -eq 0 ]]; then
+    render_jira_check_config_summary
+    return 0
+  fi
+
+  while IFS= read -r jira_name; do
+    [[ -z "${jira_name}" ]] && continue
+    print_markdown_h2 "${jira_name}" "${C_MAGENTA}"
+    printf '\n'
+    render_jira_check_config_summary "${jira_name}"
+    printf '\n'
+  done < <(jira_check_jira_names_for_projects "${project_ids[@]}")
+}
+
+# Render the shared global config view.
 render_config_global_summary() {
   local -a selectors=("$@")
   local config_file=""
@@ -112,7 +131,7 @@ render_config_global_summary() {
   print_markdown_h2 "Jira" "${C_MAGENTA}"
   printf '\n'
   mapfile -t project_ids < <(config_resolved_project_ids "${selectors[@]}")
-  render_jira_check_access_body "${project_ids[@]}"
+  render_config_jira_summary "${project_ids[@]}"
 
   if [[ ${#JIGGIT_CONFIG_CONFLICTS[@]} -gt 0 ]]; then
     printf '\n'

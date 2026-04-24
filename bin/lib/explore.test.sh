@@ -15,6 +15,10 @@ setup_tmpdir() {
   JIGGIT_EXPLORE_WRITE_MODE=""
   JIGGIT_PROMPT_INPUT_FILE=""
   JIGGIT_CAN_PROMPT_INTERACTIVELY="false"
+  unset JIRA_BASE_URL
+  unset JIRA_API_TOKEN
+  unset JIRA_BEARER_TOKEN
+  unset JIRA_USER_EMAIL
 }
 
 cleanup_tmpdir() {

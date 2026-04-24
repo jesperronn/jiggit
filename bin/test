@@ -14,6 +14,18 @@ Use `--verbose` to show per-test `RUN` lines from the test files.
 EOF
 }
 
+# Print one shell-escaped rerun command for a failed test file.
+print_rerun_command() {
+  local verbose="${1:-0}"
+  local test_file="${2:-}"
+
+  printf 'bin/test'
+  if [[ "${verbose}" -eq 1 ]]; then
+    printf ' --verbose'
+  fi
+  printf ' %q\n' "${test_file}"
+}
+
 # Return the explicit test file list or discover all colocated shell tests.
 collect_test_files() {
   if [[ $# -gt 0 ]]; then
@@ -33,7 +45,13 @@ run_test_file() {
   else
     printf '==> %s\n' "${test_file}"
   fi
-  BASH_TEST_VERBOSE="${verbose}" bash "${test_file}"
+
+  if [[ ! -x "${test_file}" ]]; then
+    printf 'Test file is not executable: %s\n' "${test_file}" >&2
+    return 1
+  fi
+
+  BASH_TEST_VERBOSE="${verbose}" "${test_file}"
 }
 
 # Resolve requested tests and run them in a stable sorted order.
@@ -67,9 +85,11 @@ run_main() {
 
   local test_file
   local failures=0
+  local -a failed_files=()
   for test_file in "${test_files[@]}"; do
     if ! run_test_file "${test_file}" "${verbose}"; then
       failures=$((failures + 1))
+      failed_files+=("${test_file}")
     fi
   done
 
@@ -87,6 +107,11 @@ run_main() {
   else
     printf 'TEST SUMMARY: %d test file(s) failed\n' "${failures}" >&2
   fi
+  printf 'Rerun failed files:\n' >&2
+  for test_file in "${failed_files[@]}"; do
+    printf '  ' >&2
+    print_rerun_command "${verbose}" "${test_file}" >&2
+  done
   return 2
 }
 

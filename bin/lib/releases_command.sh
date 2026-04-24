@@ -53,7 +53,8 @@ fetch_jira_releases() {
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
 
   curl --silent --show-error --fail \
-    --connect-timeout 2 \
+    --connect-timeout 1 \
+    --max-time 2 \
     "${auth_args[@]}" \
     -H "Accept: application/json" \
     "${jira_base_url%/}/rest/api/2/project/${jira_project_key}/versions"

@@ -122,7 +122,7 @@ test_jira_requests_dry_run_prints_commands_without_calling_curl() {
   local output
   output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" --dry-run all 2>&1)"
 
-  assert_contains "${output}" "curl --silent --show-error --fail -H 'Authorization: Bearer \$JIRA_API_TOKEN'" "print redacted curl command"
+  assert_contains "${output}" "curl --silent --show-error --fail --connect-timeout 1 --max-time 2 -H 'Authorization: Bearer \$JIRA_API_TOKEN'" "print redacted curl command"
   assert_contains "${output}" "/rest/api/2/myself" "print myself request"
   assert_contains "${output}" "/rest/api/2/project/SKOLELOGIN" "print project request"
   assert_contains "${output}" "/rest/api/2/project/SKOLELOGIN/versions" "print versions request"

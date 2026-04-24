@@ -74,7 +74,7 @@ jira_auth_header() {
 # Render a redacted curl command for dry-run output.
 print_dry_run_curl_command() {
   local url="${1}"
-  printf "curl --silent --show-error --fail -H 'Authorization: Bearer \$JIRA_API_TOKEN' -H 'Accept: application/json' %q\n" "${url}"
+  printf "curl --silent --show-error --fail --connect-timeout 1 --max-time 2 -H 'Authorization: Bearer \$JIRA_API_TOKEN' -H 'Accept: application/json' %q\n" "${url}"
 }
 
 # Run a Jira GET request against a fully qualified URL.
@@ -90,6 +90,8 @@ run_get_request() {
   require_program curl
   auth_header="$(jira_auth_header)"
   curl --silent --show-error --fail \
+    --connect-timeout 1 \
+    --max-time 2 \
     -H "${auth_header}" \
     -H "Accept: application/json" \
     "${url}"

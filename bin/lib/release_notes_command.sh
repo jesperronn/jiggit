@@ -217,6 +217,8 @@ fetch_jira_issues_by_keys() {
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
 
   curl --silent --show-error --fail \
+    --connect-timeout 1 \
+    --max-time 2 \
     "${auth_args[@]}" \
     -H "Accept: application/json" \
     "${jira_base_url%/}/rest/api/2/search?jql=${encoded_jql}&fields=summary,status,labels,fixVersions"

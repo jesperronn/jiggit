@@ -10,6 +10,10 @@ TEST_TMPDIR=""
 
 setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-jira-create-test.XXXXXX)"
+  unset JIRA_BASE_URL
+  unset JIRA_API_TOKEN
+  unset JIRA_BEARER_TOKEN
+  unset JIRA_USER_EMAIL
 }
 
 cleanup_tmpdir() {

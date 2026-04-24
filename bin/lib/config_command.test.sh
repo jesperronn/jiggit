@@ -203,8 +203,14 @@ EOF
   )"
 
   assert_contains "${output}" "Jira base URL: \`https://jira.env.example.test\` (env: JIRA_BASE_URL)" "prefer env base url and show source"
-  assert_contains "${output}" "Jira bearer token: \`env-api-token\` (env: JIRA_API_TOKEN)" "show env api token as bearer token source"
+  assert_contains "${output}" "Jira bearer token: \`env-a****token\` (env: JIRA_API_TOKEN)" "show masked env api token as bearer token source"
   assert_contains "${output}" "Jira auth mode: \`bearer_token\` (env: JIRA_API_TOKEN)" "show env api token as auth mode source"
+  assert_contains "${output}" "Jira API token: \`env-a****token\` (env: JIRA_API_TOKEN)" "show masked env api token in api token field"
+  if [[ -f "${TEST_TMPDIR}/fetch.log" ]]; then
+    fail "config should not probe Jira auth"
+  else
+    pass "config stays read-only and skips Jira auth probes"
+  fi
 }
 
 test_run_config_main_hides_same_source_redefinition_noise_from_overrides() {

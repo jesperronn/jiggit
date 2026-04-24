@@ -84,7 +84,8 @@ fetch_jira_project_metadata() {
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
 
   curl --silent --show-error --fail \
-    --connect-timeout 2 \
+    --connect-timeout 1 \
+    --max-time 2 \
     "${auth_args[@]}" \
     -H "Accept: application/json" \
     "${metadata_url}"
@@ -115,7 +116,8 @@ fetch_jira_current_user() {
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
 
   curl --silent --show-error --fail \
-    --connect-timeout 2 \
+    --connect-timeout 1 \
+    --max-time 2 \
     "${auth_args[@]}" \
     -H "Accept: application/json" \
     "${jira_base_url%/}/rest/api/2/myself"

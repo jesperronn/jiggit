@@ -17,6 +17,10 @@ setup_tmpdir() {
   JIGGIT_TEST_ASSIGN_FIX_VERSION_FETCH_LOG="${TEST_TMPDIR}/fetch.log"
   JIGGIT_PROMPT_INPUT_FILE=""
   JIGGIT_CAN_PROMPT_INTERACTIVELY=false
+  unset JIRA_BASE_URL
+  unset JIRA_API_TOKEN
+  unset JIRA_BEARER_TOKEN
+  unset JIRA_USER_EMAIL
 }
 
 cleanup_tmpdir() {

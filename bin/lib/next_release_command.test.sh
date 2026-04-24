@@ -15,6 +15,10 @@ setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-next-release-test.XXXXXX)"
   JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG="${TEST_TMPDIR}/create-release.log"
   JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG="${TEST_TMPDIR}/fetch-issues.log"
+  unset JIRA_BASE_URL
+  unset JIRA_API_TOKEN
+  unset JIRA_BEARER_TOKEN
+  unset JIRA_USER_EMAIL
   # shellcheck disable=SC2034
   JIGGIT_CAN_PROMPT_INTERACTIVELY="false"
   # shellcheck disable=SC2034

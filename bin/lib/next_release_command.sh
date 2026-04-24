@@ -644,6 +644,8 @@ create_jira_release_version() {
   mapfile -t auth_args < <(jira_auth_args "${auth_reference}")
 
   curl --silent --show-error --fail \
+    --connect-timeout 1 \
+    --max-time 2 \
     "${auth_args[@]}" \
     -H "Accept: application/json" \
     -H "Content-Type: application/json" \

@@ -1189,6 +1189,25 @@ jira_api_token_status() {
   printf '%s\n' 'missing'
 }
 
+# Return a masked token display value that keeps only the first and last five chars.
+mask_secret_for_display() {
+  local value="${1:-}"
+  local value_length=0
+
+  if [[ -z "${value}" ]]; then
+    printf '%s\n' "missing"
+    return 0
+  fi
+
+  value_length=${#value}
+  if [[ "${value_length}" -le 10 ]]; then
+    printf '%s\n' "****"
+    return 0
+  fi
+
+  printf '%s****%s\n' "${value:0:5}" "${value:value_length-5:5}"
+}
+
 # Return one Jira field value or a stable missing marker for display output.
 jira_display_value() {
   local reference="${1:-}"
@@ -1201,12 +1220,16 @@ jira_display_value() {
       ;;
     bearer_token)
       value="$(jira_bearer_token "${reference}")"
+      printf '%s\n' "$(mask_secret_for_display "${value}")"
+      return 0
       ;;
     user_email)
       value="$(jira_user_email "${reference}")"
       ;;
     api_token)
       value="$(jira_api_token "${reference}")"
+      printf '%s\n' "$(mask_secret_for_display "${value}")"
+      return 0
       ;;
     *)
       value=""
