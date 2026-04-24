@@ -97,7 +97,7 @@ EOF
   assert_contains "${output}" "\`prod\`: \`v1.2.3\` from \`https://prod.project-a.example.com/actuator/info\`" "render normalized prod version"
   assert_contains "${output}" "\`prep\`: \`v1.2.4\` from \`https://prep.project-a.example.com/actuator/info\`" "render normalized prep version"
   assert_contains "${output}" "prep: ahead of prod within the same minor (v1.2.4 vs v1.2.3); new minor release needed" "render same-minor drift diagnostic"
-  assert_contains "${output}" "jiggit env-diff project-a --base prod" "render env-diff next step"
+  assert_contains "${output}" "jiggit changes project-a --base prod" "render changes next step"
   assert_contains "${output}" "jiggit next-release project-a" "render next-release next step"
 
   local fetch_log
@@ -248,7 +248,7 @@ EOF
   assert_contains "${output}" "\`JIRA-1\`" "render first unreleased issue"
   assert_contains "${output}" "fix_version: \`1.3.0\`" "render populated fix version in unreleased issue list"
   assert_contains "${output}" "fix_version: \`MISSING\`" "render missing fix version in unreleased issue list"
-  assert_contains "${output}" "jiggit jira-issues project-a --release 1.3.0" "render jira-issues next step from drift section"
+  assert_contains "${output}" "jiggit changes project-a --from-env prod --to 1.3.0" "render changes next step from drift section"
 
   local issue_key_log
   issue_key_log="$(sed -n '1,20p' "${TEST_TMPDIR}/issue-keys.log")"

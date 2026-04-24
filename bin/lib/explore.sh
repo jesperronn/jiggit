@@ -288,10 +288,10 @@ render_toml_array_upsert_preview() {
   printf '%s = %s\n' "${key_name}" "$(toml_array_from_words "${words_text}")"
 }
 
-# Render help for the explore subcommand.
+# Render help for the setup explore flow.
 explore_usage() {
   print_jiggit_usage_block <<'EOF'
-Usage: jiggit explore [--verbose] [--dry-run] [--append|--replace] <dir> [<dir> ...]
+Usage: jiggit setup explore [--verbose] [--dry-run] [--append|--replace] <dir> [<dir> ...]
 
 Options:
   --verbose   Print discovery progress and shell commands to stderr.
@@ -2029,7 +2029,7 @@ render_explore_summary() {
   local warning
   local line
 
-  print_markdown_h1 "jiggit explore"
+  print_markdown_h1 "jiggit setup explore"
   printf '\n'
   printf -- "- Discovery file: \`%s\`\n" "${output_file}"
   if [[ "${dry_run}" -eq 1 ]]; then

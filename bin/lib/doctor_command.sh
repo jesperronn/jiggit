@@ -34,7 +34,6 @@ doctor_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
   jiggit doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]
-  jiggit diagnostics [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]
 
 Run health checks for configured projects. Defaults to all configured projects.
 EOF
@@ -412,7 +411,7 @@ render_doctor_project() {
       doctor_emit_next_step "review effective config" "jiggit config"
     fi
     if [[ "${show_jira_next_step}" -eq 1 ]]; then
-      doctor_emit_next_step "repair Jira setup" "jiggit jira-setup"
+      doctor_emit_next_step "repair Jira setup" "jiggit setup jira"
       doctor_emit_next_step "verify Jira access" "jiggit jira-check ${project_id}"
     fi
     if [[ "${show_env_next_step}" -eq 1 ]]; then

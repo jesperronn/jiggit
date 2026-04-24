@@ -51,13 +51,6 @@ test_jiggit_help_lists_jira_check_command() {
   assert_contains "${output}" "jiggit jira-check [<project|path>] [--all]" "help lists jira-check command"
 }
 
-test_jiggit_help_lists_jira_issues_command() {
-  local output
-  output="$(bin/jiggit help)"
-
-  assert_contains "${output}" "jiggit jira-issues [<project|path>] --release <fixVersion>" "help lists jira-issues command"
-}
-
 test_jiggit_help_lists_next_release_command() {
   local output
   output="$(bin/jiggit help)"
@@ -65,25 +58,11 @@ test_jiggit_help_lists_next_release_command() {
   assert_contains "${output}" "jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>]" "help lists next-release command"
 }
 
-test_jiggit_help_lists_overview_command() {
+test_jiggit_help_lists_dash_command() {
   local output
   output="$(bin/jiggit help)"
 
-  assert_contains "${output}" "jiggit overview [<project|path> ...]" "help lists overview command"
-}
-
-test_jiggit_help_lists_dash_alias() {
-  local output
-  output="$(bin/jiggit help)"
-
-  assert_contains "${output}" "jiggit dash [<project|path> ...]" "help lists dash alias"
-}
-
-test_jiggit_help_lists_release_notes_command() {
-  local output
-  output="$(bin/jiggit help)"
-
-  assert_contains "${output}" "jiggit release-notes [<project|path>] --target <git-ref|release>" "help lists release-notes command"
+  assert_contains "${output}" "jiggit dash [<project|path> ...]" "help lists dash command"
 }
 
 test_jiggit_help_lists_env_versions_command() {
@@ -93,11 +72,13 @@ test_jiggit_help_lists_env_versions_command() {
   assert_contains "${output}" "jiggit env-versions [<project|path>]" "help lists env-versions command"
 }
 
-test_jiggit_help_lists_env_diff_command() {
+test_jiggit_help_lists_changes_command() {
   local output
   output="$(bin/jiggit help)"
 
-  assert_contains "${output}" "jiggit env-diff [<project|path>] --base <env|git-ref>" "help lists env-diff command"
+  assert_contains "${output}" "jiggit changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]" "help lists changes base mode"
+  assert_contains "${output}" "jiggit changes [<project|path>] --from <git-ref> [--to <git-ref|release>] [--verbose]" "help lists changes range mode"
+  assert_contains "${output}" "jiggit changes [<project|path>] --from-env <env> [--to <git-ref|release>] [--verbose]" "help lists changes release mode"
 }
 
 test_jiggit_help_lists_doctor_command() {
@@ -107,19 +88,13 @@ test_jiggit_help_lists_doctor_command() {
   assert_contains "${output}" "jiggit doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]" "help lists doctor command"
 }
 
-test_jiggit_help_lists_diagnostics_alias() {
+test_jiggit_help_lists_setup_command() {
   local output
   output="$(bin/jiggit help)"
 
-  assert_contains "${output}" "jiggit diagnostics [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]" "help lists diagnostics alias"
-}
-
-test_jiggit_diagnostics_alias_runs_doctor_help() {
-  local output
-  output="$(bin/jiggit diagnostics --help)"
-
-  assert_contains "${output}" "Run health checks for configured projects." "diagnostics alias dispatches to doctor"
-  assert_contains "${output}" "jiggit diagnostics [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]" "diagnostics help includes global flag"
+  assert_contains "${output}" "jiggit setup" "help lists setup command"
+  assert_contains "${output}" "jiggit setup jira [<jira-name>] [--verbose]" "help lists setup jira mode"
+  assert_contains "${output}" "jiggit setup explore [--verbose] [--dry-run] [--append|--replace] <dir> [<dir> ...]" "help lists setup explore mode"
 }
 
 test_jiggit_help_lists_releases_command() {
@@ -162,7 +137,7 @@ test_usage_renders_colored_help_when_color_is_enabled() {
 
   assert_contains "${output}" $'\033[1;36mUsage:\033[0m' "usage colors top-level headings"
   assert_contains "${output}" $'\033[1;95mjiggit\033[0m' "usage colors the jiggit command name purple"
-  assert_contains "${output}" $'\033[1;36mcompare\033[0m' "usage colors subcommands separately"
+  assert_contains "${output}" $'\033[1;36mchanges\033[0m' "usage colors subcommands separately"
   assert_contains "${output}" $'\033[2m[\033[0m\033[2m<\033[0m\033[35mproject|path\033[0m\033[2m>\033[0m\033[2m]\033[0m' "usage dims brackets around placeholders"
   assert_contains "${output}" $'\033[2m[\033[0m\033[1;32m--verbose\033[0m\033[2m]\033[0m' "usage keeps optional flags green inside brackets"
   assert_contains "${output}" $'\033[1;32m--verbose\033[0m' "usage colors option labels"
@@ -174,11 +149,11 @@ test_jiggit_usage_line_highlights_the_subcommand_token() {
   JIGGIT_COLOR_ENABLED=1
 
   local output
-  output="$(explore_usage)"
+  output="$(setup_usage)"
 
-  assert_contains "${output}" $'Usage: \033[1;95mjiggit\033[0m \033[1;36mexplore\033[0m' "usage line styles jiggit and bolds the subcommand token"
+  assert_contains "${output}" $'\033[1;95mjiggit\033[0m \033[1;36msetup\033[0m' "usage line styles jiggit and bolds the subcommand token"
   assert_contains "${output}" $'\033[2m<\033[0m\033[35mdir\033[0m\033[2m>\033[0m' "usage line colors parameter placeholders"
-  assert_contains "${output}" $'  \033[1;32m--verbose\033[0m \033[1;36mPrint\033[0m discovery progress and shell commands to stderr.' "usage options color their names"
+  assert_contains "${output}" $'\033[1;95mjiggit\033[0m \033[1;36msetup\033[0m explore' "usage lists setup explore mode"
 }
 
 test_jiggit_config_accepts_global_verbose_flag() {
@@ -193,7 +168,7 @@ test_jiggit_config_help_lists_global_and_project_args() {
   local output
   output="$(bin/jiggit help)"
 
-  assert_contains "${output}" "jiggit config [--global|--no-projects] [<project|path> ...]" "help lists config project args and global flag"
+  assert_contains "${output}" "jiggit config [--global|--no-projects|--all] [<project|path> ...]" "help lists config project args and global flag"
 }
 
 test_jiggit_dash_dash_version_prints_version() {
@@ -270,11 +245,11 @@ test_parse_opts_defaults_to_help_when_no_args_are_provided() {
 
 test_parse_opts_extracts_global_project_selectors_before_command() {
   reset_jiggit_state
-  parse_opts --projects alpha,beta overview
+  parse_opts --projects alpha,beta dash
   parse_prereqs
 
   # shellcheck disable=SC2031
-  assert_eq "overview" "${JIGGIT_STRIPPED_ARGS[0]}" "parse_opts keeps the command after global selectors"
+  assert_eq "dash" "${JIGGIT_STRIPPED_ARGS[0]}" "parse_opts keeps the command after global selectors"
   # shellcheck disable=SC2031
   assert_eq "alpha,beta" "${JIGGIT_PROJECT_SELECTORS}" "parse_prereqs exports project selectors"
 }

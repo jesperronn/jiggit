@@ -831,12 +831,12 @@ render_next_release_next_steps() {
   print_markdown_h2 "Next Steps" "${C_CYAN}"
   printf '\n'
   printf -- "- review existing Jira releases: \`jiggit releases %s\`\n" "${project_id}"
-  printf -- "- inspect the production diff: \`jiggit env-diff %s --base prod\`\n" "${project_id}"
+  printf -- "- inspect the production diff: \`jiggit changes %s --base prod\`\n" "${project_id}"
   if [[ -z "${jira_project_key}" || -z "${jira_base_url_value}" ]]; then
     printf -- "- review effective config: \`jiggit config\`\n"
   fi
   if [[ -n "${jira_project_key}" && -n "${suggested_version}" ]]; then
-    printf -- "- inspect issues for the suggested release: \`jiggit jira-issues %s --release %s\`\n" "${project_id}" "${suggested_version#v}"
+    printf -- "- inspect issues for the suggested release: \`jiggit changes %s --from-env prod --to %s\`\n" "${project_id}" "${suggested_version#v}"
     printf -- "- assign the fixVersion across commit-linked issues: \`jiggit assign-fix-version %s --release %s\`\n" "${project_id}" "${suggested_version#v}"
   fi
   if [[ "${jira_release_state}" == "missing" || "${jira_release_state}" == "warn" ]]; then
@@ -943,7 +943,7 @@ run_next_release_main() {
 
   IFS='|' read -r base_kind base_label base_value base_git_ref <<< "${base_resolved}"
   if ! commit_count="$(git -C "${repo_path}" rev-list --count "${base_git_ref}..${target_ref}" 2>/dev/null)"; then
-    render_next_release_failure "${project_id}" "${repo_path}" "unable to compare refs" "jiggit env-diff ${project_id} --base ${base_operand}"
+    render_next_release_failure "${project_id}" "${repo_path}" "unable to compare refs" "jiggit changes ${project_id} --base ${base_operand}"
     return 1
   fi
 

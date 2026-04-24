@@ -284,7 +284,7 @@ render_jira_check_access_body() {
   if [[ ${#JIGGIT_JIRA_NAMES[@]} -eq 0 ]]; then
     render_jira_check_config_summary
     printf -- "- jira access: \`warn\` (missing Jira config)\n"
-    printf -- "- next step: \`jiggit jira-setup\`\n"
+    printf -- "- next step: \`jiggit setup jira\`\n"
     return 0
   fi
 
@@ -303,7 +303,7 @@ render_jira_check_access_body() {
     printf -- "- jira access: \`%s\` (%s)\n" "${access_status_display}" "${access_detail}"
     case "${access_state}" in
       missing-config|failed)
-        printf -- "- next step: \`jiggit jira-setup\`\n"
+        printf -- "- next step: \`jiggit setup jira\`\n"
         if [[ "${access_state}" == "failed" ]]; then
           printf -- "- verify Jira access once: \`bin/adhoc/jira_requests.sh myself\`\n"
         fi
@@ -360,7 +360,7 @@ render_jira_check_failure() {
   local metadata_url="${5:-unknown}"
   local releases_url="${6:-unknown}"
   local auth_status="${7:-fail}"
-  local next_step_command="${8:-jiggit jira-setup}"
+  local next_step_command="${8:-jiggit setup jira}"
 
   print_markdown_h2 "${project_id}" "${C_ORANGE}"
   printf '\n'
@@ -405,12 +405,12 @@ run_jira_check_for_project() {
   fi
 
   if [[ -z "${jira_name}" ]]; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit jira-setup"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit setup jira"
     return 1
   fi
 
   if [[ -z "${jira_base_url_value}" ]]; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit jira-setup"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit setup jira"
     return 1
   fi
 
@@ -424,7 +424,7 @@ run_jira_check_for_project() {
   fi
 
   if [[ "${access_state}" == "missing-config" ]]; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${access_detail}" "${metadata_url}" "${releases_url}" "${access_state}" "jiggit jira-setup"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${access_detail}" "${metadata_url}" "${releases_url}" "${access_state}" "jiggit setup jira"
     return 1
   fi
 

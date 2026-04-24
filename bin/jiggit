@@ -212,7 +212,7 @@ jiggit_render_help_line() {
     "    --"*)
       jiggit_render_help_tokens "${line}" "option"
       ;;
-    "  help"|"  version, --version"|"  assign-fix-version "*|"  changelog "*|"  config "*|"  compare "*|"  dash "*|"  doctor "*|"  diagnostics "*|"  env-diff "*|"  env-versions "*|"  explore "*|"  jira-check "*|"  jira-setup "*|"  jira-create "*|"  jira-issues "*|"  next-release "*|"  overview "*|"  release-notes "*|"  releases "*)
+    "  help"|"  version, --version"|"  assign-fix-version "*|"  changes "*|"  config "*|"  dash "*|"  doctor "*|"  env-versions "*|"  jira-check "*|"  jira-create "*|"  next-release "*|"  releases "*|"  setup"*)
       jiggit_render_help_tokens "${line}" "command"
       ;;
     *)
@@ -271,25 +271,22 @@ Usage:
   jiggit [--projects=<project[,project...]>] [--all-projects] [--verbose] <command> ...
   jiggit --version
   jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--verbose]
+  jiggit changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
+  jiggit changes [<project|path>] --from <git-ref> [--to <git-ref|release>] [--verbose]
+  jiggit changes [<project|path>] --from-env <env> [--to <git-ref|release>] [--verbose]
   jiggit help
   jiggit version
-  jiggit changelog [<project|path>] --from <git-ref> --to <git-ref> [--verbose]
-  jiggit config [--global|--no-projects] [<project|path> ...] [--verbose]
-  jiggit compare [<project|path>] --from <git-ref> --to <git-ref> [--verbose]
+  jiggit config [--global|--no-projects|--all] [<project|path> ...] [--verbose]
   jiggit dash [<project|path> ...] [--verbose]
   jiggit doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
-  jiggit diagnostics [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
-  jiggit env-diff [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
   jiggit env-versions [<project|path>] [--verbose]
-  jiggit explore [--verbose] [--dry-run] [--append|--replace] <dir> [<dir> ...]
   jiggit jira-check [<project|path>] [--all] [--verbose]
-  jiggit jira-setup [<jira-name>] [--verbose]
   jiggit jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run] [--verbose]
-  jiggit jira-issues [<project|path>] --release <fixVersion> [--verbose]
   jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--verbose]
-  jiggit overview [<project|path> ...] [--verbose]
-  jiggit release-notes [<project|path>] --target <git-ref|release> [--from-env <env>] [--from <git-ref>] [--verbose]
   jiggit releases [<project|path>] [--verbose]
+  jiggit setup
+  jiggit setup jira [<jira-name>] [--verbose]
+  jiggit setup explore [--verbose] [--dry-run] [--append|--replace] <dir> [<dir> ...]
 
 Commands:
   Global flags:
@@ -314,66 +311,41 @@ Commands:
     Add the chosen Jira fixVersion to issues in the base-to-target commit span
     when they do not already have it.
 
-  changelog [<project|path>] --from <git-ref> --to <git-ref> [--verbose]
-    Show a Markdown changelog grouped by conventional commit type.
+  changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
+    Show either the deployment diff from a base environment/ref, or
+    release-oriented notes for a chosen range.
 
-  config [--global|--no-projects] [<project|path> ...] [--verbose]
+  config [--global|--no-projects|--all] [<project|path> ...] [--verbose]
     Show the effective merged config and where each project entry came from.
 
-  compare [<project|path>] --from <git-ref> --to <git-ref> [--verbose]
-    Show a Markdown compare report with normalized refs, commit count,
-    Jira keys, and compare URL when available.
-
   dash [<project|path> ...] [--verbose]
-    Alias for `overview`.
+    Show a read-only dashboard for one configured project or all configured
+    projects.
 
   doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
-    Alias: `diagnostics`.
-
     Run health checks for configured projects. Defaults to all configured
     projects. In interactive mode, missing config can be scaffolded with a preview before writing.
-
-  diagnostics [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
-    Run health checks for configured projects. Defaults to all configured
-    projects. In interactive mode, missing config can be scaffolded with a preview before writing.
-
-  env-diff [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
-    Show the code difference between a base environment and a target
-    environment or latest git ref.
 
   env-versions [<project|path>] [--verbose]
     Show deployed versions for the project's configured environments.
 
-  explore [--verbose] [--dry-run] [--append|--replace] <dir> [<dir> ...]
-    Scan directories for git repositories and generate reviewable
-    candidate entries in ~/.jiggit/discovered_projects.toml.
-
   jira-check [<project|path>] [--all] [--verbose]
     Verify Jira connectivity and project access for the configured project.
-
-  jira-setup [<jira-name>] [--verbose]
-    Interactively create or repair Jira auth config.
 
   jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run] [--verbose]
     Create a Jira issue in the configured Jira project based on a
     commit message from the project's git repository.
 
-  jira-issues [<project|path>] --release <fixVersion> [--verbose]
-    Show Jira issues for a release/fixVersion, using fuzzy release matching.
-
   next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--verbose]
     Detect whether a project needs a new release and suggest the next
     minor version from the configured base.
 
-  overview [<project|path> ...] [--verbose]
-    Show a read-only dashboard for one configured project or all configured
-    projects.
-
-  release-notes [<project|path>] --target <git-ref|release> [--from-env <env>] [--from <git-ref>] [--verbose]
-    Generate git-first release notes enriched with Jira metadata.
-
   releases [<project|path>] [--verbose]
     List Jira releases/fixVersions for the configured Jira project.
+
+  setup
+    Run guided setup flows. Use `jiggit setup jira` for Jira auth and
+    `jiggit setup explore` for project discovery.
 USAGE
 }
 
@@ -479,17 +451,13 @@ dispatch_command() {
       shift || true
       run_assign_fix_version_main "$@"
       ;;
-    changelog)
+    changes)
       shift || true
-      run_changelog_main "$@"
+      run_env_diff_main "$@"
       ;;
     config)
       shift || true
       run_config_main "$@"
-      ;;
-    compare)
-      shift || true
-      run_compare_main "$@"
       ;;
     dash)
       shift || true
@@ -499,53 +467,29 @@ dispatch_command() {
       shift || true
       run_doctor_main "$@"
       ;;
-    diagnostics)
-      shift || true
-      run_doctor_main "$@"
-      ;;
-    env-diff)
-      shift || true
-      run_env_diff_main "$@"
-      ;;
     env-versions)
       shift || true
       run_env_versions_main "$@"
-      ;;
-    explore)
-      shift || true
-      run_explore_main "$@"
       ;;
     jira-check)
       shift || true
       run_jira_check_main "$@"
       ;;
-    jira-setup)
-      shift || true
-      run_jira_setup_main "$@"
-      ;;
     jira-create)
       shift || true
       run_jira_create_main "$@"
-      ;;
-    jira-issues)
-      shift || true
-      run_jira_issues_main "$@"
       ;;
     next-release)
       shift || true
       run_next_release_main "$@"
       ;;
-    overview)
-      shift || true
-      run_overview_main "$@"
-      ;;
-    release-notes)
-      shift || true
-      run_release_notes_main "$@"
-      ;;
     releases)
       shift || true
       run_releases_main "$@"
+      ;;
+    setup)
+      shift || true
+      run_setup_main "$@"
       ;;
     *)
       jiggit_error "Unknown command: ${command}"
@@ -566,14 +510,8 @@ jiggit_run_main() {
 
 # Source the subcommand implementations at top level so shared declare'd state
 # remains global across sourced helper files.
-# shellcheck source=bin/lib/explore.sh
-source "${JIGGIT_REPO_ROOT}/bin/lib/explore.sh"
 # shellcheck source=bin/lib/assign_fix_version_command.sh
 source "${JIGGIT_REPO_ROOT}/bin/lib/assign_fix_version_command.sh"
-# shellcheck source=bin/lib/changelog_command.sh
-source "${JIGGIT_REPO_ROOT}/bin/lib/changelog_command.sh"
-# shellcheck source=bin/lib/compare_command.sh
-source "${JIGGIT_REPO_ROOT}/bin/lib/compare_command.sh"
 # shellcheck source=bin/lib/config_command.sh
 source "${JIGGIT_REPO_ROOT}/bin/lib/config_command.sh"
 # shellcheck source=bin/lib/doctor_command.sh
@@ -586,10 +524,6 @@ source "${JIGGIT_REPO_ROOT}/bin/lib/env_versions_command.sh"
 source "${JIGGIT_REPO_ROOT}/bin/lib/jira_create.sh"
 # shellcheck source=bin/lib/jira_check_command.sh
 source "${JIGGIT_REPO_ROOT}/bin/lib/jira_check_command.sh"
-# shellcheck source=bin/lib/jira_setup_command.sh
-source "${JIGGIT_REPO_ROOT}/bin/lib/jira_setup_command.sh"
-# shellcheck source=bin/lib/jira_issues_command.sh
-source "${JIGGIT_REPO_ROOT}/bin/lib/jira_issues_command.sh"
 # shellcheck source=bin/lib/next_release_command.sh
 source "${JIGGIT_REPO_ROOT}/bin/lib/next_release_command.sh"
 # shellcheck source=bin/lib/overview_command.sh
@@ -598,6 +532,8 @@ source "${JIGGIT_REPO_ROOT}/bin/lib/overview_command.sh"
 source "${JIGGIT_REPO_ROOT}/bin/lib/release_notes_command.sh"
 # shellcheck source=bin/lib/releases_command.sh
 source "${JIGGIT_REPO_ROOT}/bin/lib/releases_command.sh"
+# shellcheck source=bin/lib/setup_command.sh
+source "${JIGGIT_REPO_ROOT}/bin/lib/setup_command.sh"
 
 # Reclaim the public entrypoint name after sourcing helpers that may define run_main.
 usage() {

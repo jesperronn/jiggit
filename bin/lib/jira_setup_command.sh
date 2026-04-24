@@ -17,11 +17,11 @@ if ! declare -F jira_auth_args >/dev/null 2>&1; then
   source "$(dirname "${BASH_SOURCE[0]}")/jira_create.sh"
 fi
 
-# Render help for the jira-setup command.
+# Render help for the setup jira flow.
 jira_setup_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit jira-setup [<jira-name>]
+  jiggit setup jira [<jira-name>]
 
 Interactively create or repair Jira auth config.
 EOF
@@ -182,12 +182,12 @@ run_jira_setup_main() {
   fi
 
   if [[ $# -gt 1 ]]; then
-    printf 'jiggit jira-setup accepts at most one Jira name.\n' >&2
+    printf 'jiggit setup jira accepts at most one Jira name.\n' >&2
     return 1
   fi
 
   if ! can_prompt_interactively; then
-    printf 'jiggit jira-setup requires an interactive terminal.\n' >&2
+    printf 'jiggit setup jira requires an interactive terminal.\n' >&2
     return 1
   fi
 
@@ -197,7 +197,7 @@ run_jira_setup_main() {
   target_file="$(jira_setup_target_file "${jira_name}")"
   envrc_file="$(jira_setup_envrc_file)"
 
-  print_markdown_h1 "jiggit jira-setup"
+  print_markdown_h1 "jiggit setup jira"
   printf '\n'
   printf -- "- Jira config: \`%s\`\n" "${jira_name}"
   printf -- "- target file: \`%s\`\n" "${target_file}"

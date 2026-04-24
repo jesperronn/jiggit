@@ -350,7 +350,7 @@ run_releases_main() {
   relevant_json="$(relevant_releases_json "${project_id}" "${releases_json}")"
   latest_release_name="$(select_latest_registered_release_name "${relevant_json}")"
   if [[ -n "${latest_release_name}" ]]; then
-    render_releases_summary "${project_id}" "${repo_path}" "${relevant_json}" "jiggit jira-issues ${project_id} --release ${latest_release_name}"
+    render_releases_summary "${project_id}" "${repo_path}" "${relevant_json}" "jiggit changes ${project_id} --from-env prod --to ${latest_release_name}"
   else
     render_releases_summary "${project_id}" "${repo_path}" "${relevant_json}" "jiggit next-release ${project_id}"
   fi

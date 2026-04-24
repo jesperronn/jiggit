@@ -100,7 +100,7 @@ EOF
   assert_contains "${output}" "issue count: \`7\`" "render issue count"
   assert_contains "${output}" "matches git tag: \`yes\`" "render git tag hint"
   assert_contains "${output}" "\`2.1.0.25\`" "render older release too"
-  assert_contains "${output}" "next step: \`jiggit jira-issues project-a --release 2.1.0.26\`" "render jira-issues next step"
+  assert_contains "${output}" "next step: \`jiggit changes project-a --from-env prod --to 2.1.0.26\`" "render changes next step"
   if [[ "${output}" == *"other_9.9.9"* ]]; then
     fail "exclude releases outside the project prefix"
   else

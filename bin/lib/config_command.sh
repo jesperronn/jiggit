@@ -21,24 +21,43 @@ fi
 config_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit config [--global|--no-projects] [<project|path> ...]
+  jiggit config [--global|--no-projects|--all] [<project|path> ...]
 
-Show the effective merged project configuration, including source files and override warnings.
+Show either the shared global config, the project-specific config, or both.
 EOF
+}
+
+# Resolve the project ids to use for Jira and project rendering.
+config_resolved_project_ids() {
+  local selector=""
+  local project_id=""
+
+  if [[ $# -gt 0 ]]; then
+    for selector in "$@"; do
+      project_id="$(resolve_project_selector "${selector}" || true)"
+      if [[ -z "${project_id}" ]]; then
+        project_id="${selector}"
+      fi
+      printf '%s\n' "${project_id}"
+    done
+    return 0
+  fi
+
+  effective_multi_project_selectors
 }
 
 # Render one project entry from the effective merged config.
 render_project_config_entry() {
   local project_id="${1}"
-  local repo_path
-  local remote_url
-  local jira_name
-  local jira_project_key
-  local jira_regexes
-  local environments
-  local environment_info_urls
-  local info_version_expr
-  local source_file
+  local repo_path=""
+  local remote_url=""
+  local jira_name=""
+  local jira_project_key=""
+  local jira_regexes=""
+  local environments=""
+  local environment_info_urls=""
+  local info_version_expr=""
+  local source_file=""
 
   repo_path="$(project_repo_path "${project_id}")"
   remote_url="$(project_remote_url "${project_id}")"
@@ -70,18 +89,14 @@ render_project_config_entry() {
   printf "  - source: \`%s\`\n" "${source_file:-unknown}"
 }
 
-# Render the merged config report, including loaded config files and overrides.
-render_config_summary() {
-  local show_projects="${1:-1}"
-  shift || true
+# Render the shared global config view.
+render_config_global_summary() {
   local -a selectors=("$@")
-  local project_id
-  local selector
-  local config_file
-  local conflict
+  local config_file=""
+  local conflict=""
   local -a project_ids=()
 
-  print_markdown_h1 "jiggit config"
+  print_markdown_h1 "jiggit config --global"
   printf '\n'
   print_markdown_h2 "Loaded Config Files" "${C_CYAN}"
   printf '\n'
@@ -96,44 +111,8 @@ render_config_summary() {
   printf '\n'
   print_markdown_h2 "Jira" "${C_MAGENTA}"
   printf '\n'
-  if [[ ${#selectors[@]} -gt 0 ]]; then
-    for selector in "${selectors[@]}"; do
-      project_id="$(resolve_project_selector "${selector}" || true)"
-      if [[ -n "${project_id}" ]]; then
-        project_ids+=("${project_id}")
-      fi
-    done
-  else
-    mapfile -t project_ids < <(effective_multi_project_selectors)
-  fi
+  mapfile -t project_ids < <(config_resolved_project_ids "${selectors[@]}")
   render_jira_check_access_body "${project_ids[@]}"
-
-  if [[ "${show_projects}" -eq 1 ]]; then
-    printf '\n'
-    print_markdown_h2 "Projects" "${C_BLUE}"
-    printf '\n'
-
-    if [[ ${#selectors[@]} -gt 0 ]]; then
-      project_ids=()
-      for selector in "${selectors[@]}"; do
-        project_id="$(resolve_project_selector "${selector}" || true)"
-        if [[ -z "${project_id}" ]]; then
-          project_id="${selector}"
-        fi
-        project_ids+=("${project_id}")
-      done
-    else
-      mapfile -t project_ids < <(effective_multi_project_selectors)
-    fi
-
-    if [[ ${#project_ids[@]} -eq 0 ]]; then
-      printf '_No projects configured._\n'
-    else
-      for project_id in "${project_ids[@]}"; do
-        render_project_config_entry "${project_id}"
-      done
-    fi
-  fi
 
   if [[ ${#JIGGIT_CONFIG_CONFLICTS[@]} -gt 0 ]]; then
     printf '\n'
@@ -145,8 +124,50 @@ render_config_summary() {
   fi
 }
 
-# Load config and print the effective merged view.
+# Render the project-specific config view without repeating global settings.
+render_config_projects_summary() {
+  local -a selectors=("$@")
+  local project_id=""
+  local -a project_ids=()
+
+  print_markdown_h1 "jiggit config"
+  printf '\n'
+  print_markdown_h2 "Projects" "${C_BLUE}"
+  printf '\n'
+
+  mapfile -t project_ids < <(config_resolved_project_ids "${selectors[@]}")
+  if [[ ${#project_ids[@]} -eq 0 ]]; then
+    printf '_No projects configured._\n'
+    return 0
+  fi
+
+  for project_id in "${project_ids[@]}"; do
+    render_project_config_entry "${project_id}"
+  done
+}
+
+# Render the requested config view.
+render_config_summary() {
+  local show_global="${1:-0}"
+  local show_projects="${2:-1}"
+  shift 2 || true
+  local -a selectors=("$@")
+
+  if [[ "${show_global}" -eq 1 ]]; then
+    render_config_global_summary "${selectors[@]}"
+  fi
+
+  if [[ "${show_projects}" -eq 1 ]]; then
+    if [[ "${show_global}" -eq 1 ]]; then
+      printf '\n'
+    fi
+    render_config_projects_summary "${selectors[@]}"
+  fi
+}
+
+# Load config and print the requested config view.
 run_config_main() {
+  local show_global=1
   local show_projects=1
   local -a selectors=()
 
@@ -158,7 +179,13 @@ run_config_main() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
       --global|--no-projects)
+        show_global=1
         show_projects=0
+        shift
+        ;;
+      --all)
+        show_global=1
+        show_projects=1
         shift
         ;;
       -h|--help)
@@ -173,5 +200,5 @@ run_config_main() {
   done
 
   load_project_config
-  render_config_summary "${show_projects}" "${selectors[@]}"
+  render_config_summary "${show_global}" "${show_projects}" "${selectors[@]}"
 }

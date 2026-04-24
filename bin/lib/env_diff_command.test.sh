@@ -160,7 +160,7 @@ EOF
     run_env_diff_main project_a --base prod --target prep
   )"
 
-  assert_contains "${output}" "# jiggit env-diff" "render env-diff heading"
+  assert_contains "${output}" "# jiggit changes" "render changes heading"
   assert_contains "${output}" "Target: \`prep\`" "render requested target environment"
   assert_contains "${output}" "base version (prod): v1.0.0" "render base version"
   assert_contains "${output}" "target ref: v1.1.0" "render target version"

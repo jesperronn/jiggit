@@ -34,10 +34,10 @@ fi
 
 JIGGIT_ENV_DIFF_VERBOSE=0
 
-# Print verbose env-diff logs when requested.
+# Print verbose changes logs when requested.
 env_diff_debug() {
   if [[ "${JIGGIT_ENV_DIFF_VERBOSE:-0}" -eq 1 ]]; then
-    printf '[env-diff] %s\n' "$*" >&2
+    printf '[changes] %s\n' "$*" >&2
   fi
 }
 
@@ -51,13 +51,15 @@ env_diff_require_next_release_helpers() {
   source "${JIGGIT_ROOT}/bin/lib/next_release_command.sh"
 }
 
-# Render help for the env-diff subcommand.
+# Render help for the changes subcommand.
 env_diff_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit env-diff [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
+  jiggit changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
+  jiggit changes [<project|path>] --from <git-ref> [--to <git-ref|release>] [--verbose]
+  jiggit changes [<project|path>] --from-env <env> [--to <git-ref|release>] [--verbose]
 
-Show the code difference between a base environment and a target environment or latest git ref.
+Show either the deployment diff from a base environment/ref, or release-oriented notes for a chosen range.
 EOF
 }
 
@@ -448,7 +450,7 @@ render_env_diff_summary() {
   local jira_fetch_status="${14}"
   local jira_base_url_value="${15}"
 
-  print_markdown_h1 "jiggit env-diff"
+  print_markdown_h1 "jiggit changes"
   printf '\n'
   printf -- "- Repo path: \`%s\`\n" "${repo_path}"
   printf -- "- Target: \`%s\`\n" "${target_label}"
@@ -482,6 +484,9 @@ run_env_diff_main() {
 
   local base_input=""
   local target_input=""
+  local from_env=""
+  local from_ref=""
+  local to_ref=""
 
   while [[ $# -gt 0 ]]; do
     case "${1}" in
@@ -491,6 +496,18 @@ run_env_diff_main() {
         ;;
       --target)
         target_input="${2:-}"
+        shift 2
+        ;;
+      --from-env)
+        from_env="${2:-}"
+        shift 2
+        ;;
+      --from)
+        from_ref="${2:-}"
+        shift 2
+        ;;
+      --to)
+        to_ref="${2:-}"
         shift 2
         ;;
       --verbose)
@@ -511,12 +528,40 @@ run_env_diff_main() {
   done
 
   if [[ -z "${base_input}" ]]; then
-    printf '--base is required.\n' >&2
+    if [[ -n "${from_env}" || -n "${from_ref}" || -n "${to_ref}" ]]; then
+      :
+    else
+      printf 'Either --base or --from/--from-env is required.\n' >&2
+      env_diff_usage >&2
+      return 1
+    fi
+  fi
+
+  if [[ -n "${base_input}" && ( -n "${from_env}" || -n "${from_ref}" || -n "${to_ref}" ) ]]; then
+    printf 'Use either --base/--target or --from/--to mode, not both.\n' >&2
     env_diff_usage >&2
     return 1
   fi
 
   load_project_config
+
+  if [[ -n "${from_env}" || -n "${from_ref}" || -n "${to_ref}" ]]; then
+    local -a release_mode_args=()
+
+    if [[ -z "${from_env}" && -z "${from_ref}" ]]; then
+      printf 'Either --from-env or --from is required in release mode.\n' >&2
+      env_diff_usage >&2
+      return 1
+    fi
+
+    [[ -n "${project_selector:-}" ]] && release_mode_args+=("${project_selector}")
+    [[ -n "${from_env}" ]] && release_mode_args+=(--from-env "${from_env}")
+    [[ -n "${from_ref}" ]] && release_mode_args+=(--from "${from_ref}")
+    release_mode_args+=(--target "${to_ref:-HEAD}")
+
+    JIGGIT_ENV_DIFF_RELEASE_MODE=1 run_release_notes_main "${release_mode_args[@]}"
+    return $?
+  fi
 
   local project_id
   if ! project_selector="$(effective_single_project_selector "${project_selector}")"; then
@@ -580,7 +625,7 @@ run_env_diff_main() {
   fi
 
   if [[ -n "${target_input}" && "${base_norm}" == "${target_norm}" ]]; then
-    print_markdown_h1 "jiggit env-diff"
+    print_markdown_h1 "jiggit changes"
     printf '\n'
     printf -- "- Project: \`%s\`\n" "${project_id}"
     printf -- "- Base: \`%s\`\n" "${base_label}"

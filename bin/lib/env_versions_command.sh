@@ -425,7 +425,7 @@ render_env_version_diagnostics() {
   printf '\n'
   print_markdown_h2 "Next Steps" "${C_CYAN}"
   printf '\n'
-  printf -- "- compare production with the default target: \`jiggit env-diff %s --base prod\`\n" "${project_id}"
+  printf -- "- compare production with the default target: \`jiggit changes %s --base prod\`\n" "${project_id}"
   printf -- "- review the next release suggestion: \`jiggit next-release %s\`\n\n" "${project_id}"
 }
 
@@ -568,14 +568,14 @@ render_env_versions_unreleased_issues() {
   issue_keys_text="$(compare_issue_keys "${repo_path}" "${prod_version}..${target_ref}" "${project_id}" || true)"
   if [[ -z "${issue_keys_text}" ]]; then
     printf -- "- Status: \`no jira keys found in commit span\`\n"
-    printf -- "- Next step: \`jiggit env-diff %s --base prod\`\n\n" "${project_id}"
+    printf -- "- Next step: \`jiggit changes %s --base prod\`\n\n" "${project_id}"
     return 0
   fi
 
   mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
   if [[ ${#issue_keys[@]} -eq 0 ]]; then
     printf -- "- Status: \`no jira keys found in commit span\`\n"
-    printf -- "- Next step: \`jiggit env-diff %s --base prod\`\n\n" "${project_id}"
+    printf -- "- Next step: \`jiggit changes %s --base prod\`\n\n" "${project_id}"
     return 0
   fi
 
@@ -586,7 +586,7 @@ render_env_versions_unreleased_issues() {
   fi
 
   render_env_versions_issue_summary "${issues_json}" "${suggested_version}"
-  printf -- "- Next step: \`jiggit jira-issues %s --release %s\`\n\n" "${project_id}" "${suggested_version#v}"
+  printf -- "- Next step: \`jiggit changes %s --from-env prod --to %s\`\n\n" "${project_id}" "${suggested_version#v}"
 }
 
 # Load config, query configured environments, and print the version report.

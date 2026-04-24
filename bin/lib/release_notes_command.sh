@@ -52,6 +52,16 @@ Generate git-first release notes enriched with Jira metadata.
 EOF
 }
 
+# Return the display name for release-notes mode when reused by another command.
+release_notes_command_name() {
+  if [[ "${JIGGIT_ENV_DIFF_RELEASE_MODE:-0}" == "1" ]]; then
+    printf 'jiggit changes\n'
+    return 0
+  fi
+
+  printf 'jiggit release-notes\n'
+}
+
 # Return 0 when the given input can be resolved locally as an exact git ref.
 release_notes_has_exact_git_ref() {
   local repo_path="${1}"
@@ -353,7 +363,7 @@ render_release_notes_summary() {
   local target_release_name="${8:-}"
   local release_issues_json="${9:-}"
 
-  print_markdown_h1 "jiggit release-notes"
+  print_markdown_h1 "$(release_notes_command_name)"
   printf '\n'
   printf -- "- Project: \`%s\`\n" "${project_id}"
   printf -- "- Repo path: \`%s\`\n" "${repo_path}"

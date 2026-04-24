@@ -288,9 +288,9 @@ render_assign_fix_version_next_steps() {
 
   print_markdown_h2 "Next Steps" "${C_CYAN}"
   printf '\n'
-  printf -- "- review release issues: \`jiggit jira-issues %s --release %s\`\n" "${project_id}" "${release_name}"
+  printf -- "- review release issues: \`jiggit changes %s --from-env prod --to %s\`\n" "${project_id}" "${release_name}"
   printf -- "- inspect the release summary: \`jiggit next-release %s\`\n" "${project_id}"
-  printf -- "- review the production diff: \`jiggit env-diff %s --base prod\`\n\n" "${project_id}"
+  printf -- "- review the production diff: \`jiggit changes %s --base prod\`\n\n" "${project_id}"
 }
 
 # Load config, resolve a Jira release, and add it to issues missing that fixVersion.

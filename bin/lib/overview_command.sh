@@ -48,7 +48,7 @@ fi
 overview_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit overview [<project|path> ...]
+  jiggit dash [<project|path> ...]
 
 Show a read-only dashboard for one configured project or all configured projects.
 EOF
@@ -144,7 +144,7 @@ render_overview_next_release_issues() {
     print_markdown_h2 "Unreleased Issues" "${C_GREEN}"
     printf '\n'
     overview_emit_line "status" "no jira keys found in commit span"
-    overview_emit_next_step "next step" "jiggit env-diff ${project_id} --base prod"
+    overview_emit_next_step "next step" "jiggit changes ${project_id} --base prod"
     return 0
   fi
 
@@ -153,7 +153,7 @@ render_overview_next_release_issues() {
     print_markdown_h2 "Unreleased Issues" "${C_GREEN}"
     printf '\n'
     overview_emit_line "status" "no jira keys found in commit span"
-    overview_emit_next_step "next step" "jiggit env-diff ${project_id} --base prod"
+    overview_emit_next_step "next step" "jiggit changes ${project_id} --base prod"
     return 0
   fi
 
@@ -195,10 +195,18 @@ render_overview_next_release_issues() {
   fi
 }
 
-# Render the config section in overview.
+# Render the shared global config section in overview once.
+render_overview_global_config_section() {
+  print_markdown_h2 "\`jiggit config --global\`" "${C_CYAN}"
+  printf '\n'
+  render_jira_config_diagnostic
+  printf '\n'
+}
+
+# Render the project-specific config section in overview.
 render_overview_config_section() {
   local project_id="${1}"
-  local section_command="jiggit config"
+  local section_command="jiggit config ${project_id}"
   local repo_path=""
   local jira_project_key=""
   local environments=""
@@ -214,7 +222,6 @@ render_overview_config_section() {
   overview_emit_line "repo path" "${repo_path:-missing}"
   overview_emit_line "jira project key" "${jira_project_key:-missing}"
   overview_emit_line "environments" "${environments:-none}"
-  render_jira_config_diagnostic
   if [[ -z "${jira_project_key}" ]]; then
     overview_emit_line "source" "${source_file:-unknown}"
     overview_emit_next_step "next step" "${section_command}"
@@ -287,7 +294,7 @@ render_overview_versions() {
           ;;
       esac
     done
-    overview_emit_next_step "next step" "jiggit env-diff ${project_id} --base prod"
+    overview_emit_next_step "next step" "jiggit changes ${project_id} --base prod"
   fi
   printf '\n'
 }
@@ -363,7 +370,7 @@ render_overview_next_release() {
       render_overview_next_release_issues "${project_id}" "${repo_path}" "${base_git_ref}" "${target_ref}" "${suggested_version}" "${jira_base_url_value}"
     fi
     printf '\nNext steps:\n'
-    printf -- "- jiggit env-diff %s --base prod\n" "${project_id}"
+    printf -- "- jiggit changes %s --base prod\n" "${project_id}"
     printf -- "- %s\n" "${command_text}"
   else
     overview_emit_plain_line "base version (${base_label})" "${base_git_ref}"
@@ -406,8 +413,9 @@ run_overview_main() {
   done
 
   load_project_config
-  print_markdown_h1 "jiggit overview"
+  print_markdown_h1 "jiggit dash"
   printf '\n'
+  render_overview_global_config_section
 
   if declare -F jiggit_verbose_log >/dev/null 2>&1; then
     jiggit_verbose_log "overview project loop starting"
