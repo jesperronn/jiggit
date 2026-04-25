@@ -33,12 +33,23 @@ if ! declare -F print_markdown_h1 >/dev/null 2>&1; then
 fi
 
 JIGGIT_ENV_DIFF_VERBOSE=0
+JIGGIT_ENV_DIFF_RENDER_COLOR_MODE="auto"
 
 # Print verbose changes logs when requested.
 env_diff_debug() {
   if [[ "${JIGGIT_ENV_DIFF_VERBOSE:-0}" -eq 1 ]]; then
     printf '[changes] %s\n' "$*" >&2
   fi
+}
+
+# Return success when env-diff commit lines should include ANSI styling.
+env_diff_use_color_output() {
+  case "${JIGGIT_ENV_DIFF_RENDER_COLOR_MODE:-auto}" in
+    always) return 0 ;;
+    never) return 1 ;;
+  esac
+
+  use_color_output
 }
 
 # Load next-release helpers lazily to avoid recursive sourcing during module load.
@@ -191,7 +202,12 @@ env_diff_parse_commit_subject() {
     return 0
   fi
 
-  printf 'other|||%s\n' "${subject_line}"
+  printf 'other||%s|\n' "${subject_line}"
+}
+
+# Return the ANSI style used for dimmed commit SHAs in env-diff output.
+env_diff_sha_style() {
+  printf '%b' $'\033[2m\033[37m'
 }
 
 # Return success when a commit should be treated as breaking.
@@ -256,6 +272,39 @@ env_diff_commit_type_color() {
   esac
 }
 
+# Return the best available display width for compact one-line commit entries.
+env_diff_terminal_columns() {
+  local columns="${COLUMNS:-}"
+
+  if [[ -z "${columns}" && -t 1 ]]; then
+    columns="$(tput cols 2>/dev/null || true)"
+  fi
+
+  if [[ ! "${columns}" =~ ^[0-9]+$ ]]; then
+    columns=80
+  fi
+
+  printf '%s\n' "${columns}"
+}
+
+# Truncate one piece of display text so commit lines stay on one visible line.
+env_diff_truncate_text() {
+  local text="${1:-}"
+  local limit="${2:-0}"
+
+  if [[ "${limit}" -le 0 || ${#text} -le ${limit} ]]; then
+    printf '%s\n' "${text}"
+    return 0
+  fi
+
+  if [[ "${limit}" -le 3 ]]; then
+    printf '%.*s\n' "${limit}" "..."
+    return 0
+  fi
+
+  printf '%s...\n' "${text:0:limit-3}"
+}
+
 # Render one enriched commit line for env-diff.
 env_diff_render_commit_entry() {
   local commit_type="${1}"
@@ -263,39 +312,44 @@ env_diff_render_commit_entry() {
   local commit_subject="${3}"
   local jira_key="${4}"
   local commit_hash="${5}"
-  local type_color=""
-  local type_label="${commit_type}"
-  local scope_text=""
-  local jira_text=""
-  local sha_text=""
+  local columns=""
+  local subject_limit=0
+  local display_subject=""
+  local display_jira_key=""
+  local reserved_width=0
 
-  type_color="$(env_diff_commit_type_color "${commit_type}")"
-  if [[ -n "${commit_scope}" ]]; then
-    scope_text="(${commit_scope}):"
-  fi
+  columns="$(env_diff_terminal_columns)"
+  reserved_width=$((2 + 1 + ${#commit_hash}))
   if [[ -n "${jira_key}" ]]; then
-    jira_text="${jira_key}"
+    display_jira_key="[${jira_key}]"
+    reserved_width=$((reserved_width + 1 + ${#display_jira_key}))
   fi
-  sha_text="${commit_hash}"
 
-  if ! use_color_output; then
-    printf -- "- %s %s %s" "${type_label}" "${scope_text}" "${commit_subject}"
-    if [[ -n "${jira_text}" ]]; then
-      printf ' %s' "${jira_text}"
+  subject_limit=$((columns - reserved_width))
+  if [[ "${subject_limit}" -lt 24 ]]; then
+    subject_limit=24
+  fi
+
+  display_subject="${commit_subject}"
+  if [[ -n "${commit_scope}" ]]; then
+    display_subject="${commit_scope}: ${display_subject}"
+  fi
+  display_subject="$(env_diff_truncate_text "${display_subject}" "${subject_limit}")"
+
+  if ! env_diff_use_color_output; then
+    printf '* %s %s' "${commit_hash}" "${display_subject}"
+    if [[ -n "${display_jira_key}" ]]; then
+      printf ' %s' "${display_jira_key}"
     fi
-    printf ' %s\n' "${sha_text}"
+    printf '\n'
     return 0
   fi
 
-  printf -- '- %b%s%b ' "${C_BOLD}${type_color}" "${type_label}" "${C_0}"
-  if [[ -n "${scope_text}" ]]; then
-    printf '%b%s%b ' "${C_BOLD}${type_color}" "${scope_text}" "${C_0}"
+  printf '* %b%s%b %s' "$(env_diff_sha_style)" "${commit_hash}" "${C_0}" "${display_subject}"
+  if [[ -n "${display_jira_key}" ]]; then
+    printf ' %b%s%b' "${C_BOLD}${C_CYAN}" "${display_jira_key}" "${C_0}"
   fi
-  printf '%s' "${commit_subject}"
-  if [[ -n "${jira_text}" ]]; then
-    printf ' %b%s%b' "${C_BOLD}${C_CYAN}" "${jira_text}" "${C_0}"
-  fi
-  printf ' %b%s%b\n' "${C_DIM}" "${sha_text}" "${C_0}"
+  printf '\n'
 }
 
 # Build grouped changelog buckets from a git range.
@@ -325,6 +379,8 @@ env_diff_grouped_commit_items() {
 
   while IFS= read -r -d $'\036' line; do
     [[ -z "${line}" ]] && continue
+    line="${line#$'\n'}"
+    line="${line#$'\r'}"
     commit_hash="${line%%$'\x1f'*}"
     line="${line#*$'\x1f'}"
     subject_line="${line%%$'\x1f'*}"
@@ -368,17 +424,34 @@ env_diff_grouped_commit_items() {
 }
 
 # Render grouped commit sections for env-diff.
+render_env_diff_commit_section() {
+  local section_name="${1}"
+  local section_items="${2:-}"
+  local item
+
+  [[ -z "${section_items}" ]] && return 0
+
+  print_markdown_h2 "${section_name}" "${C_CYAN}"
+  printf '\n'
+  while IFS= read -r item; do
+    [[ -z "${item}" ]] && continue
+    printf '%s\n' "${item}"
+  done <<< "${section_items}"
+  printf '\n'
+}
+
+# Render grouped commit sections for env-diff.
 render_env_diff_commit_groups() {
   print_markdown_h2 "Commits By Type" "${C_MAGENTA}"
   printf '\n'
-  render_changelog_section "breaking" "${JIGGIT_ENV_DIFF_BREAKING_ITEMS}"
-  render_changelog_section "feat" "${JIGGIT_ENV_DIFF_FEAT_ITEMS}"
-  render_changelog_section "fix" "${JIGGIT_ENV_DIFF_FIX_ITEMS}"
-  render_changelog_section "docs" "${JIGGIT_ENV_DIFF_DOCS_ITEMS}"
-  render_changelog_section "refactor" "${JIGGIT_ENV_DIFF_REFACTOR_ITEMS}"
-  render_changelog_section "test" "${JIGGIT_ENV_DIFF_TEST_ITEMS}"
-  render_changelog_section "chore" "${JIGGIT_ENV_DIFF_CHORE_ITEMS}"
-  render_changelog_section "other" "${JIGGIT_ENV_DIFF_OTHER_ITEMS}"
+  render_env_diff_commit_section "breaking" "${JIGGIT_ENV_DIFF_BREAKING_ITEMS}"
+  render_env_diff_commit_section "feat" "${JIGGIT_ENV_DIFF_FEAT_ITEMS}"
+  render_env_diff_commit_section "fix" "${JIGGIT_ENV_DIFF_FIX_ITEMS}"
+  render_env_diff_commit_section "docs" "${JIGGIT_ENV_DIFF_DOCS_ITEMS}"
+  render_env_diff_commit_section "refactor" "${JIGGIT_ENV_DIFF_REFACTOR_ITEMS}"
+  render_env_diff_commit_section "test" "${JIGGIT_ENV_DIFF_TEST_ITEMS}"
+  render_env_diff_commit_section "chore" "${JIGGIT_ENV_DIFF_CHORE_ITEMS}"
+  render_env_diff_commit_section "other" "${JIGGIT_ENV_DIFF_OTHER_ITEMS}"
 }
 
 # Render Jira issues for env-diff using next-release fixVersion rules.
@@ -458,7 +531,8 @@ render_env_diff_summary() {
   printf -- "- target ref: %s\n" "${target_value}"
   printf -- "- commit count ahead: %s\n" "${commit_count}"
   if [[ -n "${suggested_version}" ]]; then
-    printf -- "- **suggested next release: %s**\n" "${suggested_version}"
+    printf -- "- %b**suggested next release: %s**%b\n" "${C_BOLD}" "${suggested_version}" "${C_0}"
+    printf -- "- create it now: \`jiggit next-release %s\`\n" "${project_id}"
   fi
   if [[ -n "${suggested_release_url}" ]]; then
     printf -- "- suggested release link: %s\n" "${suggested_release_url}"
@@ -595,6 +669,12 @@ run_env_diff_main() {
   local jira_base_url_value=""
   local suggested_version=""
   local suggested_release_url=""
+
+  if use_color_output; then
+    JIGGIT_ENV_DIFF_RENDER_COLOR_MODE="always"
+  else
+    JIGGIT_ENV_DIFF_RENDER_COLOR_MODE="never"
+  fi
 
   repo_path="$(project_repo_path "${project_id}")"
   configured_environments=" $(project_environments "${project_id}") "

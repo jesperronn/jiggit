@@ -73,6 +73,19 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local hay="$1"
+  local needle="$2"
+  local msg="${3:-}"
+  if [[ "$hay" == *"$needle"* ]]; then
+    fail "$msg: expected not to contain '$needle'"
+    return 2
+  else
+    pass "$msg"
+    return 0
+  fi
+}
+
 # Run a syntax check on a script (bash -n)
 syntax_check() {
   local script="$1"

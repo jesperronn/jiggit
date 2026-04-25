@@ -10,6 +10,7 @@ TEST_TMPDIR=""
 
 setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-env-diff-test.XXXXXX)"
+  unset JIGGIT_COLOR_OUTPUT
   unset JIRA_BASE_URL
   unset JIRA_API_TOKEN
   unset JIRA_BEARER_TOKEN
@@ -38,7 +39,7 @@ create_repo_for_env_diff() {
 
   printf 'two\n' >> "${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
-  git -C "${repo_dir}" commit -m "ALPHA-2 fix: repair edge case" >/dev/null 2>&1
+  git -C "${repo_dir}" commit -m "ALPHA-2 fix: repair edge case in callback parsing when the response payload contains nested continuation markers and trailing metadata that should be clipped for display" >/dev/null 2>&1
 
   printf 'three\n' >> "${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
@@ -102,6 +103,8 @@ test_run_env_diff_main_reports_no_difference_for_equal_versions() {
 
   local repo_dir="${TEST_TMPDIR}/env-diff-repo"
   create_repo_for_env_diff "${repo_dir}"
+  local fix_sha
+  fix_sha="$(git -C "${repo_dir}" rev-parse --short HEAD~1)"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
   cat > "${projects_file}" <<EOF
@@ -137,6 +140,8 @@ test_run_env_diff_main_preserves_requested_base_and_target_environments() {
 
   local repo_dir="${TEST_TMPDIR}/env-diff-repo"
   create_repo_for_env_diff "${repo_dir}"
+  local fix_sha
+  fix_sha="$(git -C "${repo_dir}" rev-parse --short HEAD~1)"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
   cat > "${projects_file}" <<EOF
@@ -170,9 +175,14 @@ EOF
   assert_contains "${output}" "target ref: v1.1.0" "render target version"
   assert_contains "${output}" 'commit count ahead: 2' "render commit count"
   assert_contains "${output}" '**suggested next release: v1.1.0**' "render suggested next release"
+  assert_contains "${output}" "create it now: \`jiggit next-release project_a\`" "render suggested release call to action"
   assert_contains "${output}" 'suggested release link: https://github.com/example/env-diff-repo/compare/' "render suggested release link"
   assert_contains "${output}" '## Commits By Type' "render grouped commits heading"
-  assert_contains "${output}" 'repair edge case ALPHA-2' "render enriched fix commit line"
+  assert_contains "${output}" "* ${fix_sha} repair edge case in callback parsing" "render single-line bullet commit with leading sha"
+  assert_contains "${output}" '[ALPHA-2]' "render jira issue suffix"
+  assert_contains "${output}" "${fix_sha} repair edge case in callback parsing" "render leading sha before subject"
+  assert_not_contains "${output}" "[ALPHA-2] ${fix_sha}" "render jira issue after subject instead of before sha"
+  assert_not_contains "${output}" 'nested continuation markers and trailing metadata that should be clipped for display' "truncate long commit subject"
   assert_contains "${output}" '## fix' "render fix section"
   assert_contains "${output}" '## docs' "render docs section"
   assert_contains "${output}" '## Jira Issues' "render jira issues section"
@@ -186,6 +196,68 @@ EOF
   local jira_fetch_log
   jira_fetch_log="$(sed -n '1,20p' "${TEST_TMPDIR}/jira-fetch.log")"
   assert_contains "${jira_fetch_log}" "https://jira.example.test||ALPHA-2" "fetch jira issues for extracted keys"
+}
+
+test_env_diff_parse_commit_subject_preserves_non_conventional_subject() {
+  local commit_type=""
+  local commit_scope=""
+  local commit_subject=""
+  local breaking_marker=""
+
+  IFS='|' read -r commit_type commit_scope commit_subject breaking_marker <<< "$(env_diff_parse_commit_subject 'Ship provider rewrite')"
+
+  assert_eq "other" "${commit_type}" "classify non-conventional subject as other"
+  assert_eq "" "${commit_scope}" "keep non-conventional scope empty"
+  assert_eq "Ship provider rewrite" "${commit_subject}" "preserve non-conventional subject text"
+  assert_eq "" "${breaking_marker}" "keep non-conventional breaking marker empty"
+}
+
+test_env_diff_render_commit_entry_renders_breaking_subject_and_jira() {
+  local output
+
+  output="$(JIGGIT_COLOR_OUTPUT=never env_diff_render_commit_entry 'breaking' '' 'Ship provider rewrite' 'STILLOGIN-999' 'b842944a')"
+
+  assert_contains "${output}" '* b842944a Ship provider rewrite [STILLOGIN-999]' "render breaking commit with sha subject and jira on one line"
+}
+
+test_run_env_diff_main_can_color_commit_suffixes_and_release_callout() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/env-diff-repo"
+  create_repo_for_env_diff "${repo_dir}"
+  local fix_sha
+  fix_sha="$(git -C "${repo_dir}" rev-parse --short HEAD~1)"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[project_a]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/env-diff-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+environments = ["prod", "prep"]
+info_version_expr = "jq -r '.git.branch'"
+
+[project_a.environment_info_urls]
+prod = "https://prod.project-a.example.com/actuator/info"
+prep = "https://prep.project-a.example.com/actuator/info"
+EOF
+
+  local output
+  output="$(
+    JIGGIT_COLOR_OUTPUT=always \
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    run_env_diff_main project_a --base prod --target prep
+  )"
+
+  assert_contains "${output}" '* ' "preserve bullet prefix on single-line commit entry"
+  assert_contains "${output}" $'* \e[2m\e[37m'"${fix_sha}"$'\e[0m repair edge case in callback parsing' "render leading dimmed sha before plain subject"
+  assert_contains "${output}" $'\e[1m\e[36m[ALPHA-2]\e[0m' "render jira issue suffix with jira accent color"
+  assert_not_contains "${output}" $'\e[1m\e[34m## docs\e[0m' "keep docs section heading out of docs color"
+  assert_contains "${output}" "${fix_sha}" "render sha text"
+  assert_contains "${output}" $'\e[1m**suggested next release: v1.1.0**\e[0m' "render ansi bold suggested release"
 }
 
 test_run_env_diff_main_defaults_target_to_remote_default_branch() {

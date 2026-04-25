@@ -427,6 +427,41 @@ EOF
   assert_contains "${discovered_contents}" 'prep = "https://prep.example.com/actuator/info"' "write prompted prep info url"
 }
 
+test_explore_can_skip_discovered_project_interactively() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/skip-me"
+  create_repo "${repo_dir}" "git@example.com:org/skip-me.git" "SKIP-1 feat: one"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[jira]
+base_url = "https://jira.example.com"
+bearer_token = "token-123"
+EOF
+
+  local discovered_file="${TEST_TMPDIR}/discovered.toml"
+  local output
+  cat > "${TEST_TMPDIR}/explore-input.txt" <<'EOF'
+!
+EOF
+
+  output="$(
+    JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/explore-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
+      run_explore_main --replace "${repo_dir}"
+  )"
+
+  local discovered_contents
+  discovered_contents="$(cat "${discovered_file}")"
+  assert_contains "${output}" 'Skipped interactively: 1' "report skipped project count"
+  assert_contains "${output}" "action: \`skipped interactively\`" "report skipped project action in summary"
+  assert_not_contains "${discovered_contents}" '[skip-me]' "omit skipped project from discovery file"
+}
+
 test_write_discovery_file_appends_when_requested() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN

@@ -1864,6 +1864,25 @@ EOF
 }
 
 # Prompt for additional config values for a newly discovered project candidate.
+candidate_completion_skip_token() {
+  printf '%s\n' "__JIGGIT_SKIP_PROJECT__"
+}
+
+# Return success when interactive candidate completion requests skipping the project.
+candidate_completion_requests_skip() {
+  local response="${1:-}"
+
+  case "$(trim "${response}")" in
+    '!'|skip|SKIP)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Prompt for additional config values for a newly discovered project candidate.
 collect_candidate_completion() {
   local project_id="${1}"
   local jira_project_key=""
@@ -1877,7 +1896,11 @@ collect_candidate_completion() {
     return 0
   fi
 
-  jira_project_key="$(prompt_input_line "Jira project key for ${project_id} (leave empty to skip): ")"
+  jira_project_key="$(prompt_input_line "Jira project key for ${project_id} (leave empty to skip fields, enter ! to skip project): ")"
+  if candidate_completion_requests_skip "${jira_project_key}"; then
+    printf '%s\n\n\n' "$(candidate_completion_skip_token)"
+    return 0
+  fi
 
   environments="$(prompt_input_line "Configured environments for ${project_id} (space-separated, leave empty to skip): ")"
   environments="$(trim "${environments}")"
@@ -2046,8 +2069,9 @@ render_explore_summary() {
   local discovered_count="${2}"
   local configured_count="${3}"
   local ambiguous_count="${4}"
-  local dry_run="${5}"
-  shift 5 || true
+  local skipped_count="${5}"
+  local dry_run="${6}"
+  shift 6 || true
   local -a repo_lines=("$@")
   local warning
   local line
@@ -2061,6 +2085,7 @@ render_explore_summary() {
   printf -- '- Newly discovered: %s\n' "${discovered_count}"
   printf -- '- Already configured: %s\n' "${configured_count}"
   printf -- '- Ambiguous: %s\n' "${ambiguous_count}"
+  printf -- '- Skipped interactively: %s\n' "${skipped_count}"
   printf '\n'
   print_markdown_h2 "Repositories" "${C_BLUE}"
   printf '\n'
@@ -2166,7 +2191,10 @@ run_explore_main() {
   local discovered_count=0
   local configured_count=0
   local ambiguous_count=0
+  local skipped_count=0
   local output_file
+  local project_id
+  local repo_action="queued"
 
   JIGGIT_DISCOVERY_WARNINGS=()
   mapfile -t JIGGIT_DISCOVERED_REPOS < <(find_git_repos "${JIGGIT_EXPLORE_DIRECTORIES[@]}")
@@ -2177,10 +2205,12 @@ run_explore_main() {
   for repo in "${JIGGIT_DISCOVERED_REPOS[@]}"; do
     remote_url="$(git_origin_url "${repo}")"
     repo_name="$(basename "${repo}")"
+    project_id="$(slugify_repo_name "${repo_name}")"
     jira_regexes="$(detect_jira_regexes "${repo}")"
     status="$(configured_status_for_repo "${repo}" "${remote_url}")"
     tags="$(sample_tags "${repo}")"
     commits="$(sample_commits "${repo}" | paste -sd ' | ' -)"
+    repo_action="none"
     explore_debug "Inspecting ${repo_name}: status=${status} origin=${remote_url:-missing}"
 
     if [[ "${status}" == "already-configured" ]]; then
@@ -2190,13 +2220,19 @@ run_explore_main() {
       JIGGIT_DISCOVERY_WARNINGS+=("Ambiguous existing config match for ${repo}")
     else
       discovered_count=$((discovered_count + 1))
-      mapfile -t candidate_completion < <(collect_candidate_completion "$(slugify_repo_name "${repo_name}")")
+      mapfile -t candidate_completion < <(collect_candidate_completion "${project_id}")
       candidate_jira_project_key="${candidate_completion[0]:-}"
-      candidate_environments="${candidate_completion[1]:-}"
-      candidate_environment_info_urls="${candidate_completion[2]:-}"
-      candidate_info_version_expr="${candidate_completion[3]:-}"
-      candidate_entry="$(build_candidate_entry "${repo}" "${remote_url}" "${repo_name}" "${jira_regexes}" "${candidate_jira_project_key}" "${candidate_environments}" "${candidate_environment_info_urls}" "${candidate_info_version_expr}")"
-      candidate_entries+=("${candidate_entry}")
+      if [[ "${candidate_jira_project_key}" == "$(candidate_completion_skip_token)" ]]; then
+        skipped_count=$((skipped_count + 1))
+        repo_action="skipped interactively"
+      else
+        candidate_environments="${candidate_completion[1]:-}"
+        candidate_environment_info_urls="${candidate_completion[2]:-}"
+        candidate_info_version_expr="${candidate_completion[3]:-}"
+        candidate_entry="$(build_candidate_entry "${repo}" "${remote_url}" "${repo_name}" "${jira_regexes}" "${candidate_jira_project_key}" "${candidate_environments}" "${candidate_environment_info_urls}" "${candidate_info_version_expr}")"
+        candidate_entries+=("${candidate_entry}")
+        repo_action="queued"
+      fi
     fi
 
     if [[ -n "${jira_regexes}" && "${jira_regexes}" == *" "* ]]; then
@@ -2210,6 +2246,9 @@ run_explore_main() {
     repo_lines+=("  - tags: \`${tags:-none}\`")
     repo_lines+=("  - jira regexes: \`${jira_regexes:-${JIGGIT_FALLBACK_JIRA_REGEX}}\`")
     repo_lines+=("  - sample commits: \`${commits:-none}\`")
+    if [[ "${repo_action}" != "none" ]]; then
+      repo_lines+=("  - action: \`${repo_action}\`")
+    fi
   done
 
   output_file="$(resolve_discovery_file_path)"
@@ -2219,5 +2258,5 @@ run_explore_main() {
     explore_debug "Dry run enabled; not writing ${output_file}"
   fi
 
-  render_explore_summary "${output_file}" "${discovered_count}" "${configured_count}" "${ambiguous_count}" "${JIGGIT_EXPLORE_DRY_RUN}" "${repo_lines[@]}"
+  render_explore_summary "${output_file}" "${discovered_count}" "${configured_count}" "${ambiguous_count}" "${skipped_count}" "${JIGGIT_EXPLORE_DRY_RUN}" "${repo_lines[@]}"
 }

@@ -58,7 +58,7 @@ render_changelog_section() {
   printf '\n'
   while IFS= read -r item; do
     [[ -z "${item}" ]] && continue
-    printf -- '- %s\n' "${item}"
+    printf -- '* %s\n' "${item}"
   done <<< "${section_items}"
   printf '\n'
 }

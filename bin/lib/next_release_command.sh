@@ -524,7 +524,6 @@ render_next_release_issue_lines() {
   local expected_release="${2}"
   local project_id="${3:-}"
   local jira_base_url="${4:-}"
-  local bucket_name=""
   local issue_json=""
   local rendered_any=0
   local issue_state=""
@@ -535,24 +534,32 @@ render_next_release_issue_lines() {
   local fix_version=""
   local issue_url=""
 
-  for bucket_name in resolved business-validation quality-assurance implement open-reopen; do
-    while IFS= read -r issue_json; do
-      [[ -z "${issue_json}" ]] && continue
-      status_name="$(printf '%s\n' "${issue_json}" | jq -r '.fields.status.name // "unknown"')"
-      status_bucket="$(next_release_issue_status_bucket "${status_name}")"
-      [[ "${status_bucket}" == "${bucket_name}" ]] || continue
-      issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${expected_release}" "${project_id}")"
-      issue_key="$(printf '%s\n' "${issue_json}" | jq -r '.key // "unknown"')"
-      title="$(printf '%s\n' "${issue_json}" | jq -r '.fields.summary // "unknown"')"
-      fix_version="$(jira_issue_fix_version_display "${issue_json}")"
-      issue_url=""
-      if [[ "${issue_state}" == "missing-fix-version" ]]; then
-        issue_url="$(next_release_issue_browse_url "${jira_base_url}" "${issue_key}")"
-      fi
-      print_next_release_issue_line "${issue_key}" "${title}" "${status_name}" "${fix_version}" "${issue_state}" "${status_bucket}" "${issue_url}"
-      rendered_any=1
-    done < <(printf '%s\n' "${issues_json}" | jq -c '.issues | sort_by(.key)[]?')
-  done
+  while IFS= read -r issue_json; do
+    [[ -z "${issue_json}" ]] && continue
+    status_name="$(printf '%s\n' "${issue_json}" | jq -r '.fields.status.name // "unknown"')"
+    status_bucket="$(next_release_issue_status_bucket "${status_name}")"
+    issue_state="$(next_release_issue_fix_version_state "${issue_json}" "${expected_release}" "${project_id}")"
+    issue_key="$(printf '%s\n' "${issue_json}" | jq -r '.key // "unknown"')"
+    title="$(printf '%s\n' "${issue_json}" | jq -r '.fields.summary // "unknown"')"
+    fix_version="$(jira_issue_fix_version_display "${issue_json}")"
+    issue_url=""
+    if [[ "${issue_state}" == "missing-fix-version" ]]; then
+      issue_url="$(next_release_issue_browse_url "${jira_base_url}" "${issue_key}")"
+    fi
+    print_next_release_issue_line "${issue_key}" "${title}" "${status_name}" "${fix_version}" "${issue_state}" "${status_bucket}" "${issue_url}"
+    rendered_any=1
+  done < <(
+    printf '%s\n' "${issues_json}" | jq -c '
+      .issues
+      | sort_by([
+          (if (.fields.status.name // "") | ascii_downcase | test("resolved|done|closed") then 1
+           elif (.fields.status.name // "") | ascii_downcase | test("business.*validation") then 2
+           elif (.fields.status.name // "") | ascii_downcase | test("quality.*assurance|^qa$") then 3
+           elif (.fields.status.name // "") | ascii_downcase | test("implement|in progress") then 4
+           else 5 end),
+          .key
+        ])[]?'
+  )
 
   if [[ "${rendered_any}" -eq 0 ]]; then
     printf '_No Jira issues found for this unreleased span._\n'

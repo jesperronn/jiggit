@@ -250,20 +250,19 @@ EOF
       run_overview_main
   )"
 
-  assert_contains "${output}" "# jiggit dash" "render dash heading"
   assert_contains "${output}" "## Global Jira" "render global jira heading"
   assert_contains "${output}" "status: configured" "render compact configured global jira status"
   assert_contains "${output}" "base url: https://jira.example.com" "render shared jira base url diagnostic"
   assert_contains "${output}" "auth mode: bearer_token" "render shared jira auth diagnostic"
   assert_contains "${output}" "## project-a" "default to current configured project"
-  assert_contains "${output}" "### Versions" "render versions subsection heading"
-  assert_contains "${output}" "prod: v1.2.0.0" "render prod environment version"
-  assert_contains "${output}" "prep: v1.2.0.0" "render prep environment version"
-  assert_contains "${output}" "### Release" "render release subsection heading"
-  assert_contains "${output}" "- base version (prod): v1.2.0.0" "render compact base version line"
-  assert_contains "${output}" "- commit count ahead: 1" "render compact commit count line"
-  assert_contains "${output}" "- suggested next release: v1.3.0" "render suggested next release line"
+  assert_contains "${output}" "prod,prep: v1.2.0.0" "render grouped environment versions in single-project mode"
+  assert_contains "${output}" "- release: 1 commit ahead, next v1.3.0" "render flattened release summary line"
   assert_contains "${output}" "Unreleased Issues (2)" "render compact unreleased issues subsection with count"
+  if [[ "${output}" == *$'\n- issues: 2 unreleased\n'* ]]; then
+    fail "omit redundant detailed unreleased issue summary line"
+  else
+    pass "omit redundant detailed unreleased issue summary line"
+  fi
   if [[ "${output}" == *"issue count:"* || "${output}" == *"issues with expected fixVersion:"* || "${output}" == *"issues missing expected fixVersion:"* ]]; then
     fail "omit unreleased issue summary count lines"
   else
@@ -272,7 +271,7 @@ EOF
   assert_contains "${output}" "[ALPHA-3](https://jira.example.com/browse/ALPHA-3): status: Resolved, MISSING fix_version, subject: Add second feature" "render linked missing-fix-version issue detail"
   assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement unreleased issue detail"
   assert_contains "${output}" "add missing fixVersion: jiggit assign-fix-version project-a --release 1.3.0" "suggest assign-fix-version for missing fix versions"
-  assert_contains "${output}" "changes: jiggit changes project-a --base prod" "render next-release diff command"
+  assert_contains "${output}" "changes: jiggit changes project-a --base prod" "render shared diff command"
   assert_contains "${output}" "details: jiggit next-release project-a --base prod" "render next-release create command"
 
   local jira_issues_log
@@ -477,11 +476,14 @@ EOF
       run_overview_main project-b
   )"
 
-  assert_contains "${output}" "Version Diagnostics" "render version diagnostics subsection"
-  assert_contains "${output}" "ft: v1.22.0.55" "render environment version without padded key formatting"
-  assert_contains "${output}" "ft: ahead of prod at major/minor level (v1.22.0.55 vs v1.21.0.132); pending deployment" "render pending deployment diagnostic"
-  assert_contains "${output}" "lt: ahead of prod within the same minor (v1.21.0.200 vs v1.21.0.132); new minor release needed" "render same-minor release-needed diagnostic"
-  assert_contains "${output}" "details: jiggit changes project-b --base prod" "render version-drift next step"
+  if [[ "${output}" == *"Version Diagnostics"* ]]; then
+    fail "omit separate version diagnostics heading in single-project mode"
+  else
+    pass "omit separate version diagnostics heading in single-project mode"
+  fi
+  assert_contains "${output}" "ft: v1.22.0.55; ahead of prod at major/minor level (vs v1.21.0.132); pending deployment" "render pending deployment inline with grouped version output"
+  assert_contains "${output}" "lt: v1.21.0.200; ahead of prod within the same minor (vs v1.21.0.132); new minor release needed" "render same-minor release-needed inline with grouped version output"
+  assert_contains "${output}" "changes: jiggit changes project-b --base prod" "render version-drift next step"
 }
 
 test_run_overview_main_honors_global_project_selector() {

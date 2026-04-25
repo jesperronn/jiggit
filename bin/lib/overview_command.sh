@@ -147,6 +147,100 @@ overview_print_subheading() {
   fi
 }
 
+# Print one grouped version line with optional prod-relative diagnostic suffix.
+overview_emit_grouped_version_line() {
+  local environment_names="${1}"
+  local value="${2}"
+  local prod_version="${3:-}"
+  local relation=""
+  local line=""
+
+  line="- ${environment_names}: ${value}"
+  if [[ -z "${prod_version}" || "${environment_names}" == *"prod"* || -z "${value}" || "${value}" == ERROR:* ]]; then
+    printf '%s\n' "${line}"
+    return 0
+  fi
+
+  relation="$(classify_env_version_against_prod "${prod_version}" "${value}")"
+  case "${relation}" in
+    same-minor-different-build)
+      print_colored_line "${C_RED}" "${line}; ahead of prod within the same minor (vs ${prod_version}); new minor release needed"
+      ;;
+    ahead-major-minor)
+      print_colored_line "${C_ORANGE}" "${line}; ahead of prod at major/minor level (vs ${prod_version}); pending deployment"
+      ;;
+    behind-major-minor)
+      print_colored_line "${C_CYAN}" "${line}; behind prod at major/minor level (vs ${prod_version})"
+      ;;
+    *)
+      printf '%s\n' "${line}"
+      ;;
+  esac
+}
+
+# Render grouped environment versions for the single-project view.
+overview_render_grouped_versions() {
+  local project_id="${1}"
+  local environments="${2}"
+  local environment_name=""
+  local value=""
+  local prod_version=""
+  local group_value=""
+  local rendered_any=0
+  local saw_error=0
+  local -a group_names=()
+
+  if [[ -z "${environments}" ]]; then
+    overview_emit_line "environments" "none"
+    overview_emit_next_step "details" "jiggit config ${project_id}"
+    return 0
+  fi
+
+  if prod_version="$(fetch_project_environment_version "${project_id}" "prod" 2>/dev/null)"; then
+    if [[ "${prod_version}" == ERROR:* ]]; then
+      prod_version=""
+    fi
+  else
+    prod_version=""
+  fi
+
+  for environment_name in ${environments}; do
+    if value="$(fetch_project_environment_version "${project_id}" "${environment_name}" 2>/dev/null)"; then
+      :
+    else
+      value="$(printf '%s' "${value:-unable to resolve}" | tr '\n' ' ')"
+      saw_error=1
+    fi
+
+    if [[ -z "${group_value}" ]]; then
+      group_value="${value}"
+      group_names=("${environment_name}")
+      continue
+    fi
+
+    if [[ "${value}" == "${group_value}" ]]; then
+      group_names+=("${environment_name}")
+      continue
+    fi
+
+    overview_emit_grouped_version_line "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}" "${prod_version}"
+    rendered_any=1
+    group_value="${value}"
+    group_names=("${environment_name}")
+  done
+
+  if [[ "${rendered_any}" -eq 1 || -n "${group_value}" ]]; then
+    overview_emit_grouped_version_line "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}" "${prod_version}"
+  fi
+
+  if [[ "${saw_error}" -eq 1 ]]; then
+    overview_emit_next_step "details" "jiggit env-versions ${project_id}"
+  fi
+  if [[ -n "${prod_version}" ]]; then
+    overview_emit_next_step "changes" "jiggit changes ${project_id} --base prod"
+  fi
+}
+
 # Return a compact environment-version summary for one project.
 overview_versions_summary_text() {
   local project_id="${1}"
@@ -253,7 +347,6 @@ render_overview_next_release_issues() {
   local total_count=0
   local missing_fix_version_count=0
   local fetch_failed=0
-  local compact_issue_status=""
 
   if [[ -z "${suggested_version}" || -z "${jira_base_url_value}" ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
@@ -322,12 +415,6 @@ render_overview_next_release_issues() {
   fi
 
   if [[ "${detail_mode}" == "detailed" ]]; then
-    compact_issue_status="${total_count} unreleased"
-    if [[ "${missing_fix_version_count}" -gt 0 ]]; then
-      compact_issue_status="${compact_issue_status}, ${missing_fix_version_count} missing fixVersion"
-    fi
-    overview_emit_attention_line "issues" "${compact_issue_status}"
-    printf '\n'
     overview_print_subheading "Unreleased Issues (${total_count})"
     printf '\n'
     render_overview_issue_list "${issues_json}" "${suggested_version}" "${project_id}" "${jira_base_url_value}"
@@ -372,69 +459,7 @@ render_overview_global_config_section() {
 render_overview_versions() {
   local project_id="${1}"
   local environments="${2}"
-  local environment_name=""
-  local value=""
-  local prod_version=""
-  local relation=""
-  local saw_error=0
-  local label_width=0
-
-  for environment_name in ${environments}; do
-    if [[ ${#environment_name} -gt ${label_width} ]]; then
-      label_width=${#environment_name}
-    fi
-  done
-
-  overview_print_subheading "Versions"
-  printf '\n'
-
-  if [[ -z "${environments}" ]]; then
-    overview_emit_line "environments" "none"
-    overview_emit_next_step "details" "jiggit config ${project_id}"
-    printf '\n'
-    return 0
-  fi
-
-  for environment_name in ${environments}; do
-    if value="$(fetch_project_environment_version "${project_id}" "${environment_name}" 2>/dev/null)"; then
-      overview_emit_line "${environment_name}" "${value}" "${label_width}"
-      if [[ "${environment_name}" == "prod" ]]; then
-        prod_version="${value}"
-      fi
-    else
-      value="$(printf '%s' "${value:-unable to resolve}" | tr '\n' ' ')"
-      overview_emit_line "${environment_name}" "${value:-unable to resolve}" "${label_width}"
-      saw_error=1
-    fi
-  done
-
-  if [[ "${saw_error}" -eq 1 ]]; then
-    overview_emit_next_step "details" "jiggit env-versions ${project_id}"
-  fi
-
-  if [[ -n "${prod_version}" ]]; then
-    printf '\n'
-    overview_print_subheading "Version Diagnostics"
-    printf '\n'
-    for environment_name in ${environments}; do
-      [[ "${environment_name}" == "prod" ]] && continue
-      value="$(fetch_project_environment_version "${project_id}" "${environment_name}" 2>/dev/null || true)"
-      [[ -z "${value}" || "${value}" == ERROR:* ]] && continue
-      relation="$(classify_env_version_against_prod "${prod_version}" "${value}")"
-      case "${relation}" in
-        same-minor-different-build)
-          print_colored_line "${C_RED}" "- ${environment_name}: ahead of prod within the same minor (${value} vs ${prod_version}); new minor release needed"
-          ;;
-        ahead-major-minor)
-          print_colored_line "${C_ORANGE}" "- ${environment_name}: ahead of prod at major/minor level (${value} vs ${prod_version}); pending deployment"
-          ;;
-        behind-major-minor)
-          print_colored_line "${C_CYAN}" "- ${environment_name}: behind prod at major/minor level (${value} vs ${prod_version})"
-          ;;
-      esac
-    done
-    overview_emit_next_step "details" "jiggit changes ${project_id} --base prod"
-  fi
+  overview_render_grouped_versions "${project_id}" "${environments}"
   printf '\n'
 }
 
@@ -454,12 +479,9 @@ render_overview_next_release() {
   local releases_json=""
   local jira_release_summary=""
   local command_text=""
+  local commit_label="commits"
 
   command_text="jiggit next-release ${project_id} --base prod"
-  if [[ "${detail_mode}" == "detailed" ]]; then
-    overview_print_subheading "Release"
-    printf '\n'
-  fi
 
   if [[ -z "${repo_path}" || ! -d "${repo_path}" ]]; then
     overview_emit_plain_line "release" "missing local repo"
@@ -496,14 +518,17 @@ render_overview_next_release() {
     printf '\n'
     return 0
   fi
+  if [[ "${commit_count}" == "1" ]]; then
+    commit_label="commit"
+  fi
 
   if [[ "${commit_count}" -gt 0 ]]; then
     suggested_version="$(bump_minor_version "${base_git_ref}" || true)"
     if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_emit_plain_line "base version (${base_label})" "${base_git_ref}"
-      overview_emit_plain_line "commit count ahead" "${commit_count}"
       if [[ -n "${suggested_version}" ]]; then
-        printf -- "- suggested next release: %s\n" "${suggested_version}"
+        overview_emit_plain_line "release" "${commit_count} ${commit_label} ahead, next ${suggested_version}"
+      else
+        overview_emit_plain_line "release" "${commit_count} ${commit_label} ahead"
       fi
     else
       jira_base_url_value="$(jira_base_url "${project_id}")"
@@ -531,14 +556,9 @@ render_overview_next_release() {
       render_overview_next_release_issues "${project_id}" "${repo_path}" "${base_git_ref}" "${target_ref}" "${suggested_version}" "${jira_base_url_value}" "${detail_mode}"
     fi
     overview_emit_next_step "details" "${command_text}"
-    if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_emit_next_step "changes" "jiggit changes ${project_id} --base prod"
-    fi
   else
     if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_emit_plain_line "base version (${base_label})" "${base_git_ref}"
-      overview_emit_plain_line "commit count ahead" "${commit_count}"
-      overview_emit_plain_line "status" "up-to-date"
+      overview_emit_plain_line "release" "up-to-date at ${base_git_ref}"
     else
       overview_emit_plain_line "release" "up-to-date at ${base_git_ref}"
     fi
@@ -637,8 +657,6 @@ run_overview_main() {
   JIGGIT_OVERVIEW_PROJECT_COUNT="${#project_ids[@]}"
   export JIGGIT_OVERVIEW_PROJECT_COUNT
 
-  print_markdown_h1 "jiggit dash"
-  printf '\n'
   render_overview_global_config_section
 
   if declare -F jiggit_verbose_log >/dev/null 2>&1; then
