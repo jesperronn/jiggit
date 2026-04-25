@@ -119,6 +119,26 @@ test_run_setup_prompts_for_path_selection_when_multiple_dirs_are_writable() {
   assert_contains "${output}" "- link dir: \`${TEST_TMPDIR}/two\`" "setup uses the selected PATH directory"
 }
 
+test_run_setup_accepts_double_digit_selection_with_carriage_return() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local dir_name
+  for dir_name in one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen; do
+    mkdir -p "${TEST_TMPDIR}/${dir_name}"
+  done
+
+  local output
+  output="$(
+    printf '12\r\n' | PATH="${TEST_TMPDIR}/one:${TEST_TMPDIR}/two:${TEST_TMPDIR}/three:${TEST_TMPDIR}/four:${TEST_TMPDIR}/five:${TEST_TMPDIR}/six:${TEST_TMPDIR}/seven:${TEST_TMPDIR}/eight:${TEST_TMPDIR}/nine:${TEST_TMPDIR}/ten:${TEST_TMPDIR}/eleven:${TEST_TMPDIR}/twelve:${TEST_TMPDIR}/thirteen:${TEST_TMPDIR}/fourteen:${TEST_TMPDIR}/fifteen:/usr/bin:/bin" \
+      HOME="${TEST_TMPDIR}" \
+      bash bin/setup 2>&1
+  )"
+
+  assert_contains "${output}" "Selection [1-15]:" "setup renders the double-digit selection prompt"
+  assert_contains "${output}" "- link dir: \`${TEST_TMPDIR}/twelve\`" "setup accepts a double-digit selection from tty-style input"
+}
+
 test_run_setup_fails_when_no_writable_path_dir_exists() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
