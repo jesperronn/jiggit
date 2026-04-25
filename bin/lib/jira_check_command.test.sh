@@ -103,8 +103,8 @@ EOF
 
   assert_contains "${output}" "Jira project key: \`VERSIONS_ONLY\`" "render jira project key when metadata fetch fails"
   assert_contains "${output}" "Releases: \`0 released, 2 unreleased -- 2.1.0.27\`" "still render release summary when metadata fetch fails"
-  assert_contains "${output}" "Connectivity: \`ok\`" "treat releases access as sufficient connectivity"
-  assert_contains "${output}" "Metadata probe: \`warn\` (simulated metadata 404" "render metadata warning when metadata fetch fails"
+  assert_contains "${output}" "Connectivity: \`✅ OK\`" "treat releases access as sufficient connectivity"
+  assert_contains "${output}" "Metadata probe: \`⚠️ WARN\` (simulated metadata 404" "render metadata warning when metadata fetch fails"
 }
 
 test_run_jira_check_main_renders_connectivity_report() {
@@ -138,8 +138,8 @@ EOF
   assert_contains "${output}" "Releases: \`0 released, 2 unreleased -- 2.1.0.27\`" "render release summary"
   assert_contains "${output}" "Metadata URL: \`https://jira.example.test/rest/api/2/project/JIRA\`" "render metadata url"
   assert_contains "${output}" "Releases URL: \`https://jira.example.test/rest/api/2/project/JIRA/versions\`" "render releases url"
-  assert_contains "${output}" "Auth: \`ok\`" "render auth status"
-  assert_contains "${output}" "Connectivity: \`ok\`" "render connectivity status"
+  assert_contains "${output}" "Auth: \`✅ OK\`" "render auth status"
+  assert_contains "${output}" "Connectivity: \`✅ OK\`" "render connectivity status"
 
   local fetch_log
   fetch_log="$(sed -n '1,20p' "${TEST_TMPDIR}/fetch.log")"
@@ -231,7 +231,7 @@ EOF
     assert_contains "${output}" "# jiggit jira-check" "render jira-check heading for --all"
     assert_contains "${output}" "## project-a" "render successful project section during --all"
     assert_contains "${output}" "## broken-project" "render failing project section during --all"
-    assert_contains "${output}" "Connectivity: \`fail\`" "render failure state for broken project"
+    assert_contains "${output}" "Connectivity: \`❌ FAIL\`" "render failure state for broken project"
   fi
 
   assert_contains "${output}" "Jira project key: \`JIRA\`" "render healthy project jira key during --all"

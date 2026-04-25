@@ -241,6 +241,7 @@ test_render_next_release_jira_release_status_falls_back_to_latest_released_when_
     ]'
   )"
 
+  assert_contains "${output}" "status: \`✅ OK\`" "render ok status with checkmark"
   assert_contains "${output}" "unreleased release count: \`0\`" "report no unreleased releases"
   assert_contains "${output}" "latest released version: \`1.2.0.0\`" "show latest released fallback"
   assert_contains "${output}" "recommendation: \`create a new unreleased Jira release version\`" "recommend creating a new release"

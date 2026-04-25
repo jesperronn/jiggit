@@ -145,21 +145,28 @@ jira_setup_write_toml_value() {
 jira_setup_validate_once() {
   local jira_name="${1}"
   local jira_base_url_value=""
+  local ok_status=""
+  local warn_status=""
+  local fail_status=""
+
+  ok_status="$(render_status_label "ok")"
+  warn_status="$(render_status_label "warn")"
+  fail_status="$(render_status_label "fail")"
 
   jira_base_url_value="$(jira_base_url "${jira_name}")"
   if [[ -z "${jira_base_url_value}" || "$(jira_auth_mode "${jira_name}")" == "missing" ]]; then
-    printf -- "- validation: \`warn\` (missing Jira auth or base URL)\n"
+    printf -- "- validation: \`%s\` (missing Jira auth or base URL)\n" "${warn_status}"
     printf -- "- next step: \`jiggit jira-check\`\n"
     return 0
   fi
 
   if fetch_jira_current_user "${jira_base_url_value}" "${jira_name}" >/dev/null 2>&1; then
-    printf -- "- validation: \`ok\` (auth probe succeeded)\n"
+    printf -- "- validation: \`%s\` (auth probe succeeded)\n" "${ok_status}"
     printf -- "- next step: \`jiggit jira-check\`\n"
     return 0
   fi
 
-  printf -- "- validation: \`fail\` (auth probe failed)\n"
+  printf -- "- validation: \`%s\` (auth probe failed)\n" "${fail_status}"
   printf -- "- next step: \`jiggit jira-check\`\n"
   return 1
 }

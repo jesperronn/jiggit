@@ -282,10 +282,13 @@ render_jira_check_access_body() {
   local access_state=""
   local access_detail=""
   local access_status_display=""
+  local rendered_access_status=""
+  local warn_status=""
 
   if [[ ${#JIGGIT_JIRA_NAMES[@]} -eq 0 ]]; then
     render_jira_check_config_summary
-    printf -- "- jira access: \`warn\` (missing Jira config)\n"
+    warn_status="$(render_status_label "warn")"
+    printf -- "- jira access: \`%s\` (missing Jira config)\n" "${warn_status}"
     printf -- "- next step: \`jiggit setup jira\`\n"
     return 0
   fi
@@ -302,7 +305,8 @@ render_jira_check_access_body() {
     if [[ "${access_status_display}" == "failed" ]]; then
       access_status_display="fail"
     fi
-    printf -- "- jira access: \`%s\` (%s)\n" "${access_status_display}" "${access_detail}"
+    rendered_access_status="$(render_status_label "${access_status_display}")"
+    printf -- "- jira access: \`%s\` (%s)\n" "${rendered_access_status}" "${access_detail}"
     case "${access_state}" in
       missing-config|failed)
         printf -- "- next step: \`jiggit setup jira\`\n"
@@ -330,6 +334,9 @@ render_jira_check_summary() {
   local release_summary=""
   local project_name
   local project_self
+  local ok_status=""
+
+  ok_status="$(render_status_label "ok")"
 
   if [[ -n "${metadata_json}" ]]; then
     project_name="$(printf '%s\n' "${metadata_json}" | jq -r '.name // "unknown"')"
@@ -349,8 +356,8 @@ render_jira_check_summary() {
   printf -- "- Metadata URL: \`%s\`\n" "${metadata_url}"
   printf -- "- Releases URL: \`%s\`\n" "${releases_url}"
   printf -- "- Releases: \`%s\`\n" "${release_summary}"
-  printf -- "- Auth: \`ok\`\n"
-  printf -- "- Connectivity: \`ok\`\n\n"
+  printf -- "- Auth: \`%s\`\n" "${ok_status}"
+  printf -- "- Connectivity: \`%s\`\n\n" "${ok_status}"
 }
 
 # Render a failed Jira connectivity report for one project.
@@ -363,6 +370,11 @@ render_jira_check_failure() {
   local releases_url="${6:-unknown}"
   local auth_status="${7:-fail}"
   local next_step_command="${8:-jiggit setup jira}"
+  local rendered_auth_status=""
+  local fail_status=""
+
+  rendered_auth_status="$(render_status_label "${auth_status}")"
+  fail_status="$(render_status_label "fail")"
 
   print_markdown_h2 "${project_id}" "${C_ORANGE}"
   printf '\n'
@@ -370,8 +382,8 @@ render_jira_check_failure() {
   printf -- "- Jira project key: \`%s\`\n" "${jira_project_key}"
   printf -- "- Metadata URL: \`%s\`\n" "${metadata_url}"
   printf -- "- Releases URL: \`%s\`\n" "${releases_url}"
-  printf -- "- Auth: \`%s\`\n" "${auth_status}"
-  printf -- "- Connectivity: \`fail\`\n"
+  printf -- "- Auth: \`%s\`\n" "${rendered_auth_status}"
+  printf -- "- Connectivity: \`%s\`\n" "${fail_status}"
   printf -- "- Error: \`%s\`\n" "${failure_message}"
   printf -- "- Next step: \`%s\`\n\n" "${next_step_command}"
 }
@@ -448,7 +460,7 @@ run_jira_check_for_project() {
 
   render_jira_check_summary "${project_id}" "${jira_name}" "${jira_project_key}" "${metadata_json}" "${releases_json}" "${metadata_url}" "${releases_url}"
   if [[ -n "${metadata_error}" ]]; then
-    printf -- "- Metadata probe: \`warn\` (%s)\n\n" "${metadata_error}"
+    printf -- "- Metadata probe: \`%s\` (%s)\n\n" "$(render_status_label "warn")" "${metadata_error}"
   fi
 }
 

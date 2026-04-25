@@ -44,8 +44,11 @@ doctor_emit_check() {
   local label="${1}"
   local status="${2}"
   local detail="${3:-}"
+  local rendered_status=""
 
-  printf -- "- %s: \`%s\`" "${label}" "${status}"
+  rendered_status="$(render_status_label "${status}")"
+
+  printf -- "- %s: \`%s\`" "${label}" "${rendered_status}"
   if [[ -n "${detail}" ]]; then
     printf " (%s)" "${detail}"
   fi
@@ -67,12 +70,14 @@ doctor_emit_next_step() {
 # Render the Jira access probe result once per doctor run using jira-check diagnostics.
 render_doctor_jira_access() {
   local jira_output=""
+  local fail_status=""
 
   print_markdown_h2 "Jira Access" "${C_MAGENTA}"
   printf '\n'
   jira_output="$(render_jira_check_access_body)"
   printf '%s' "${jira_output}"
-  if [[ "${jira_output}" == *"jira access: \`fail\`"* || "${jira_output}" == *"jira access: \`missing-prereq\`"* ]]; then
+  fail_status="$(render_status_label "fail")"
+  if [[ "${jira_output}" == *"jira access: \`${fail_status}\`"* || "${jira_output}" == *"jira access: \`missing-prereq\`"* ]]; then
     JIGGIT_DOCTOR_SAW_FAILURE=1
   fi
   printf '\n'

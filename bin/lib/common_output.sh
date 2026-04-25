@@ -58,6 +58,13 @@ print_markdown_h2() {
   print_colored_line "${color_code}" "## ${text}"
 }
 
+# Print a third-level Markdown heading with console styling.
+print_markdown_h3() {
+  local text="${1:-}"
+  local color_code="${2:-${C_BLUE}}"
+  print_colored_line "${color_code}" "### ${text}"
+}
+
 # Print a highlighted project item line with console styling.
 print_markdown_project_item() {
   local project_id="${1:-}"
@@ -76,6 +83,29 @@ print_markdown_kv() {
   fi
 
   printf -- "- \`%s\`: \`%s\`\n" "${padded_key}" "${value}"
+}
+
+# Convert internal status tokens into user-facing status labels.
+render_status_label() {
+  local status="${1:-}"
+
+  case "${status}" in
+    ok)
+      printf '✅ OK'
+      ;;
+    warn)
+      printf '⚠️ WARN'
+      ;;
+    fail|failed)
+      printf '❌ FAIL'
+      ;;
+    error)
+      printf '❌ ERROR'
+      ;;
+    *)
+      printf '%s' "${status}"
+      ;;
+  esac
 }
 
 # Print a usage line that bolds the jiggit subcommand token when present.
@@ -136,15 +166,16 @@ _testcolors() {
   echo -e "${C_0}"
 
   info text printed as info
-  ok text printed as ok
-  warn text printed as warn
-  error text printed as error
-  ok text printed as ok
+  ok text printed as ✅ OK
+  warn text printed as ⚠️ WARN
+  error text printed as ❌ ERROR
+  ok text printed as ✅ OK
   debug debugtext THIS MUST BE HIDDEN
   VERBOSE=true debug debugtext which must be shown
   debug debugtext THIS MUST BE HIDDEN
   print_markdown_h1 "example"
   print_markdown_h2 "section" "${C_MAGENTA}"
+  print_markdown_h3 "subsection" "${C_BLUE}"
   print_markdown_project_item "demo-project"
 }
 
@@ -158,13 +189,13 @@ function info {
   echo -e "[INFO] $1" >&2
 }
 function ok {
-  echo -e "${C_GREEN}[OK] $1${C_0}" >&2
+  echo -e "${C_BOLD}${C_GREEN}✅ [OK] $1${C_0}" >&2
 }
 function warn {
-  echo -e "${C_ORANGE}[WARN] $1${C_0}" >&2
+  echo -e "${C_BOLD}${C_ORANGE}⚠️ [WARN] $1${C_0}" >&2
 }
 function error {
-  echo -e "${C_RED}${C_BOLD}[ERROR] $1${C_0}" >&2
+  echo -e "${C_RED}${C_BOLD}❌ [ERROR] $1${C_0}" >&2
 }
 
 

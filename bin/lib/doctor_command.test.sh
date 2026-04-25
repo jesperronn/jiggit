@@ -163,10 +163,10 @@ EOF
   assert_contains "${output}" "# jiggit doctor" "render doctor heading"
   assert_contains "${output}" "## project-a" "check first configured project"
   assert_contains "${output}" "## project-b" "default to all configured projects"
-  assert_contains "${output}" "env prod: \`ok\` (v2.1.0.26)" "render environment version check"
-  assert_contains "${output}" "jira releases: \`ok\` (0 released, 1 unreleased -- 2.1.0.26)" "render jira releases summary"
+  assert_contains "${output}" "env prod: \`✅ OK\` (v2.1.0.26)" "render environment version check"
+  assert_contains "${output}" "jira releases: \`✅ OK\` (0 released, 1 unreleased -- 2.1.0.26)" "render jira releases summary"
   assert_contains "${output}" "command: \`jiggit doctor project-a\`" "render per-project doctor command hint"
-  assert_contains "${output}" "jiggit: \`warn\` (not directly callable; run bin/setup)" "render jiggit PATH warning"
+  assert_contains "${output}" "jiggit: \`⚠️ WARN\` (not directly callable; run bin/setup)" "render jiggit PATH warning"
   assert_contains "${output}" "make jiggit directly callable: \`bin/setup\`" "render jiggit setup next step"
 }
 
@@ -248,7 +248,7 @@ EOF
     run_doctor_main project-a
   )"
 
-  assert_contains "${output}" "jira releases: \`ok\` (1 released, 1 unreleased -- ProjectA_2.1.0.26)" "summarize only project-scoped jira releases"
+  assert_contains "${output}" "jira releases: \`✅ OK\` (1 released, 1 unreleased -- ProjectA_2.1.0.26)" "summarize only project-scoped jira releases"
 }
 
 test_run_doctor_main_fail_fast_stops_after_first_project_failure() {
@@ -356,7 +356,7 @@ EOF
   else
     pass "doctor should fail when the shared Jira auth probe fails"
     assert_contains "${output}" "## Jira Access" "render Jira Access section"
-    assert_contains "${output}" "jira access: \`fail\` (auth probe failed; later Jira checks skipped)" "render failed Jira auth probe"
+    assert_contains "${output}" "jira access: \`❌ FAIL\` (auth probe failed; later Jira checks skipped)" "render failed Jira auth probe"
     assert_contains "${output}" "verify Jira access once: \`bin/adhoc/jira_requests.sh myself\`" "suggest a single auth probe"
     assert_contains "${output}" "jira project: \`unknown\` (skipped after Jira auth failure)" "mark jira project check unknown after auth failure"
     assert_contains "${output}" "jira releases: \`unknown\` (skipped after Jira auth failure)" "mark jira releases check unknown after auth failure"
@@ -394,7 +394,7 @@ EOF
   )"
 
   assert_contains "${output}" "## missing-project" "render explicit unknown project section"
-  assert_contains "${output}" "project config: \`fail\` (unknown project)" "render unknown project failure"
+  assert_contains "${output}" "project config: \`❌ FAIL\` (unknown project)" "render unknown project failure"
 }
 
 test_run_doctor_main_fails_when_shared_jira_config_is_missing() {
@@ -423,8 +423,8 @@ EOF
     fail "fail doctor when shared jira config is missing"
   else
     pass "fail doctor when shared jira config is missing"
-    assert_contains "${output}" "jira project: \`fail\` (missing Jira config)" "render missing shared jira config as failure"
-    assert_contains "${output}" "jira releases: \`fail\` (missing Jira config)" "render missing shared jira release config as failure"
+    assert_contains "${output}" "jira project: \`❌ FAIL\` (missing Jira config)" "render missing shared jira config as failure"
+    assert_contains "${output}" "jira releases: \`❌ FAIL\` (missing Jira config)" "render missing shared jira release config as failure"
     assert_contains "${output}" "Next Steps" "render next steps heading for missing jira config"
   assert_contains "${output}" "review effective config: \`jiggit config\`" "suggest config command for missing jira config"
   fi
@@ -487,7 +487,7 @@ EOF
     run_doctor_main --ignore-failures
   )"
 
-  assert_contains "${output}" "env ft: \`warn\` (unable to resolve)" "render unresolved environment warning"
+  assert_contains "${output}" "env ft: \`⚠️ WARN\` (unable to resolve)" "render unresolved environment warning"
   assert_contains "${output}" "inspect environment versions: \`jiggit env-versions project-a\`" "suggest env-versions follow-up"
 }
 
@@ -561,7 +561,7 @@ EOF
   assert_contains "${updated_file}" "[jira]" "append jira table to config file"
   assert_contains "${updated_file}" 'base_url = "https://jira.example.test"' "write prompted jira base url"
   assert_contains "${updated_file}" 'bearer_token = "token-123"' "write prompted jira bearer token"
-  assert_contains "${output}" "jira project: \`ok\` (Jira Project)" "reload config after creating jira block"
+  assert_contains "${output}" "jira project: \`✅ OK\` (Jira Project)" "reload config after creating jira block"
 }
 
 test_run_doctor_main_can_create_missing_project_jira_key() {
@@ -600,7 +600,7 @@ EOF
   local updated_file
   updated_file="$(cat "${projects_file}")"
   assert_contains "${updated_file}" 'jira_project_key = "JIRA"' "write prompted jira project key"
-  assert_contains "${output}" "jira project: \`ok\` (Jira Project)" "reload config after creating jira project key"
+  assert_contains "${output}" "jira project: \`✅ OK\` (Jira Project)" "reload config after creating jira project key"
 }
 
 test_run_doctor_main_can_create_missing_remote_url_from_git_origin() {
@@ -641,7 +641,7 @@ EOF
   local updated_file
   updated_file="$(cat "${projects_file}")"
   assert_contains "${updated_file}" 'remote_url = "git@github.com:example/project-a.git"' "write inferred remote url"
-  assert_contains "${output}" "repo path: \`ok\` (${repo_dir})" "keep repo-path status after writing remote url"
+  assert_contains "${output}" "repo path: \`✅ OK\` (${repo_dir})" "keep repo-path status after writing remote url"
 }
 
 test_run_doctor_main_can_create_missing_jira_regexes_from_git_history() {
@@ -686,7 +686,7 @@ EOF
   local updated_file
   updated_file="$(cat "${projects_file}")"
   assert_contains "${updated_file}" 'jira_regexes = ["JIRA-[0-9]+"]' "write inferred jira regexes"
-  assert_contains "${output}" "jira project: \`ok\` (Jira Project)" "keep jira project status after writing jira regexes"
+  assert_contains "${output}" "jira project: \`✅ OK\` (Jira Project)" "keep jira project status after writing jira regexes"
 }
 
 test_run_doctor_main_can_infer_jira_project_key_from_existing_regex() {
@@ -725,7 +725,7 @@ EOF
   local updated_file
   updated_file="$(cat "${projects_file}")"
   assert_contains "${updated_file}" 'jira_project_key = "JIRA"' "infer jira project key from jira regex"
-  assert_contains "${output}" "jira project: \`ok\` (Jira Project)" "keep jira project status after inferring jira project key"
+  assert_contains "${output}" "jira project: \`✅ OK\` (Jira Project)" "keep jira project status after inferring jira project key"
 }
 
 test_run_doctor_main_can_infer_environments_from_existing_info_urls() {
@@ -770,7 +770,7 @@ EOF
   local updated_file
   updated_file="$(cat "${projects_file}")"
   assert_contains "${updated_file}" 'environments = ["prod", "prep"]' "infer environments from environment info urls"
-  assert_contains "${output}" "env prod: \`ok\` (v2.1.0.26)" "reload config after inferring environments"
+  assert_contains "${output}" "env prod: \`✅ OK\` (v2.1.0.26)" "reload config after inferring environments"
 }
 
 test_run_doctor_main_can_create_missing_environment_info_url() {
@@ -829,7 +829,7 @@ EOF
   updated_file="$(cat "${projects_file}")"
   assert_contains "${updated_file}" "[project-a.environment_info_urls]" "create nested environment info table"
   assert_contains "${updated_file}" 'prod = "https://prod.example.com/actuator/info"' "write prompted environment info url"
-  assert_contains "${output}" "env prod: \`ok\` (v2.1.0.26)" "reload config after creating environment info url"
+  assert_contains "${output}" "env prod: \`✅ OK\` (v2.1.0.26)" "reload config after creating environment info url"
 }
 
 test_run_doctor_main_can_create_missing_environments_and_info_expr() {
@@ -878,7 +878,7 @@ EOF
   assert_contains "${updated_file}" 'info_version_expr = "jq -r '\''.git.branch'\''"' "write prompted info version expression"
   assert_contains "${updated_file}" 'prod = "https://prod.example.com/actuator/info"' "write prompted prod url after adding environments"
   assert_contains "${updated_file}" 'prep = "https://prep.example.com/actuator/info"' "write prompted prep url after adding environments"
-  assert_contains "${output}" "env prod: \`ok\` (v2.1.0.26)" "reload config after creating environments and info expr"
+  assert_contains "${output}" "env prod: \`✅ OK\` (v2.1.0.26)" "reload config after creating environments and info expr"
 }
 
 run_tests "$@"

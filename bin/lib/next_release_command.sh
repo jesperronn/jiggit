@@ -746,6 +746,9 @@ render_next_release_jira_release_status() {
   local unreleased_count="0"
   local latest_released_json=""
   local latest_released_name=""
+  local rendered_jira_release_state=""
+
+  rendered_jira_release_state="$(render_status_label "${jira_release_state}")"
 
   if [[ "${jira_release_state}" == "ok" ]]; then
     inventory_json="$(jira_next_release_inventory_json "${project_id}" "${suggested_version}" "${releases_json}")"
@@ -771,7 +774,7 @@ render_next_release_jira_release_status() {
 
   print_markdown_h2 "Jira Releases" "${C_MAGENTA}"
   printf '\n'
-  printf -- "- status: \`%s\`\n" "${jira_release_state}"
+  printf -- "- status: \`%s\`\n" "${rendered_jira_release_state}"
   if [[ -n "${jira_release_detail}" ]]; then
     printf -- "- detail: \`%s\`\n" "${jira_release_detail}"
   fi
@@ -812,10 +815,13 @@ render_next_release_jira_release_status() {
 render_next_release_jira_creation_status() {
   local jira_release_state="${1}"
   local jira_release_detail="${2}"
+  local rendered_jira_release_state=""
+
+  rendered_jira_release_state="$(render_status_label "${jira_release_state}")"
 
   print_markdown_h2 "Jira Release" "${C_MAGENTA}"
   printf '\n'
-  printf -- "- status: \`%s\`\n" "${jira_release_state}"
+  printf -- "- status: \`%s\`\n" "${rendered_jira_release_state}"
   if [[ -n "${jira_release_detail}" ]]; then
     printf -- "- detail: \`%s\`\n" "${jira_release_detail}"
   fi
