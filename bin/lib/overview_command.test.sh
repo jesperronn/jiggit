@@ -134,8 +134,7 @@ EOF
       run_overview_main project-a
   )"
 
-  assert_contains "${output}" "Unreleased Issues" "render unreleased issues subsection on jira failure"
-  assert_contains "${output}" "status: unable to fetch jira issues" "render explicit issue fetch failure"
+  assert_contains "${output}" "issues: unable to fetch jira issues" "render explicit issue fetch failure"
   assert_contains "${output}" "details: jiggit jira-check project-a" "suggest jira-check for issue fetch failure"
 }
 
@@ -215,8 +214,7 @@ EOF
       run_overview_main docs-only
   )"
 
-  assert_contains "${output}" "Unreleased Issues" "render unreleased issues subsection without jira keys"
-  assert_contains "${output}" "status: no jira keys found in commit span" "render explicit no-jira-keys status"
+  assert_contains "${output}" "issues: no jira keys found in commit span" "render explicit no-jira-keys status"
   assert_contains "${output}" "details: jiggit changes docs-only --base prod" "suggest changes when no jira keys are found"
 }
 
@@ -301,7 +299,7 @@ repo_path = "${repo_one}"
 remote_url = "git@github.com:example/alpha.git"
 jira_project_key = "ALPHA"
 jira_regexes = ["ALPHA-[0-9]+"]
-environments = ["prod", "lt"]
+environments = ["lt", "ft", "et", "prep", "prod"]
 
 [beta]
 repo_path = "${repo_two}"
@@ -312,6 +310,9 @@ EOF
 
   JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["alpha:prod"]="v1.2.0.0"
   JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["alpha:lt"]="ERROR: unable to fetch https://lt.example.test/actuator/info"
+  JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["alpha:ft"]="ERROR: unable to fetch https://ft.example.test/actuator/info"
+  JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["alpha:et"]="v1.2.0.0"
+  JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["alpha:prep"]="v1.2.0.0"
 
   local output
   output="$(
@@ -324,7 +325,7 @@ EOF
 
   assert_contains "${output}" "## alpha" "render first project when outside configured repo"
   assert_contains "${output}" "## beta" "render second project when outside configured repo"
-  assert_contains "${output}" "versions: prod=v1.2.0.0,lt=ERROR" "render compact versions summary with shortened errors"
+  assert_contains "${output}" "versions: lt,ft=ERROR, et,prep,prod=v1.2.0.0" "render compact versions summary with grouped identical values"
   assert_contains "${output}" "release: 1 commit ahead, next v1.3.0, Jira release missing" "render compact release summary with jira release state"
   assert_contains "${output}" "issues: 2 unreleased, 1 missing fixVersion" "render unreleased issue summary in compact mode"
   assert_contains "${output}" "versions: none" "render missing environment summary"
@@ -351,7 +352,7 @@ repo_path = "${repo_one}"
 remote_url = "git@github.com:example/alpha.git"
 jira_project_key = "ALPHA"
 jira_regexes = ["ALPHA-[0-9]+"]
-environments = ["prod"]
+environments = ["lt", "prod"]
 
 [beta]
 repo_path = "${repo_two}"
@@ -360,7 +361,18 @@ jira_project_key = "BETA"
 jira_regexes = ["BETA-[0-9]+"]
 EOF
 
+  JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["alpha:lt"]="v1.3.0.12"
   JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["alpha:prod"]="v1.2.0.0"
+
+  # shellcheck disable=SC2329
+  fetch_jira_releases() {
+    cat <<'EOF'
+[
+  {"name":"v1.3.0.0","released":false,"archived":false,"releaseDate":"2026-03-28"},
+  {"name":"v1.2.0.0","released":true,"archived":false,"releaseDate":"2026-03-01"}
+]
+EOF
+  }
 
   # shellcheck disable=SC2329
   fetch_jira_issues_by_keys() {
@@ -397,8 +409,9 @@ EOF
       run_overview_main
   )"
 
-  assert_contains "${output}" $'\e[1m\e[36m- release: 1 commit ahead, next v1.3.0, Jira release missing\e[0m' "render missing jira release summary in colored bold"
-  assert_contains "${output}" $'\e[1m\e[36m- issues: 2 unreleased, 1 missing fixVersion\e[0m' "render unreleased issues summary in colored bold"
+  assert_contains "${output}" $'\e[1m\e[38;5;110m- drift: lt v1.3.0.12 ahead of prod v1.2.0.0\e[0m' "render compact drift summary in colored bold"
+  assert_contains "${output}" $'- release: 1 commit ahead, \e[1m\e[38;5;110mnext v1.3.0, Jira release missing\e[0m' "render missing jira release summary with emphasized suffix"
+  assert_contains "${output}" $'\e[1m\e[38;5;110m- issues: 2 unreleased, 1 missing fixVersion\e[0m' "render unreleased issues summary in colored bold"
 }
 
 test_run_overview_main_shows_source_hint_for_missing_jira_project_key() {

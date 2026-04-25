@@ -111,9 +111,23 @@ overview_emit_attention_line() {
   local line="- ${label}: ${value}"
 
   if use_color_output; then
-    printf '%b%s%b\n' "${C_BOLD}${C_CYAN}" "${line}" "${C_0}"
+    printf '%b%s%b\n' "${C_BOLD}${C_SOFT_ACCENT}" "${line}" "${C_0}"
   else
     printf '%s\n' "${line}"
+  fi
+}
+
+# Render one dashboard line where only the trailing suffix gets attention styling.
+overview_emit_line_with_attention_suffix() {
+  local label="${1}"
+  local prefix="${2}"
+  local suffix="${3}"
+
+  if use_color_output; then
+    printf -- '- %s: %s' "${label}" "${prefix}"
+    printf '%b%s%b\n' "${C_BOLD}${C_SOFT_ACCENT}" "${suffix}" "${C_0}"
+  else
+    printf -- '- %s: %s%s\n' "${label}" "${prefix}" "${suffix}"
   fi
 }
 
@@ -127,9 +141,9 @@ overview_print_subheading() {
   local text="${1}"
 
   if overview_is_multi_project; then
-    print_markdown_h2 "${text}"
+    print_markdown_h2 "${text}" "${C_CYAN}"
   else
-    print_markdown_h3 "${text}"
+    print_markdown_h3 "${text}" "${C_CYAN}"
   fi
 }
 
@@ -139,7 +153,9 @@ overview_versions_summary_text() {
   local environments="${2}"
   local environment_name=""
   local value=""
-  local -a parts=()
+  local group_value=""
+  local rendered_any=0
+  local -a group_names=()
 
   if [[ -z "${environments}" ]]; then
     printf 'none'
@@ -151,14 +167,63 @@ overview_versions_summary_text() {
       if [[ "${value}" == ERROR:* ]]; then
         value="ERROR"
       fi
-      parts+=("${environment_name}=${value}")
     else
-      value="$(printf '%s' "${value:-unable to resolve}" | tr '\n' ' ')"
-      parts+=("${environment_name}=${value:-unable to resolve}")
+      value="ERROR"
     fi
+
+    if [[ -z "${group_value}" ]]; then
+      group_value="${value}"
+      group_names=("${environment_name}")
+      continue
+    fi
+
+    if [[ "${value}" == "${group_value}" ]]; then
+      group_names+=("${environment_name}")
+      continue
+    fi
+
+    if [[ "${rendered_any}" -eq 1 ]]; then
+      printf ', '
+    fi
+    printf '%s=%s' "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}"
+    rendered_any=1
+    group_value="${value}"
+    group_names=("${environment_name}")
   done
 
-  printf '%s\n' "$(IFS=', '; printf '%s' "${parts[*]}")"
+  if [[ "${rendered_any}" -eq 1 ]]; then
+    printf ', '
+  fi
+  printf '%s=%s' "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}"
+  printf '\n'
+}
+
+# Return a compact lt-vs-prod drift summary for one project.
+overview_lt_prod_drift_summary() {
+  local project_id="${1}"
+  local prod_version=""
+  local lt_version=""
+  local relation=""
+
+  if ! prod_version="$(fetch_project_environment_version "${project_id}" "prod" 2>/dev/null)"; then
+    return 0
+  fi
+  if ! lt_version="$(fetch_project_environment_version "${project_id}" "lt" 2>/dev/null)"; then
+    return 0
+  fi
+  if [[ -z "${prod_version}" || -z "${lt_version}" || "${prod_version}" == ERROR:* || "${lt_version}" == ERROR:* ]]; then
+    return 0
+  fi
+
+  relation="$(classify_env_version_against_prod "${prod_version}" "${lt_version}")"
+  case "${relation}" in
+    same-minor-different-build|ahead-major-minor)
+      printf 'lt %s ahead of prod %s\n' "${lt_version}" "${prod_version}"
+      ;;
+    behind-major-minor)
+      printf 'lt %s behind prod %s\n' "${lt_version}" "${prod_version}"
+      ;;
+  esac
 }
 
 # Render a short colored issue list for overview using the same fixVersion rules as next-release.
@@ -188,12 +253,11 @@ render_overview_next_release_issues() {
   local total_count=0
   local missing_fix_version_count=0
   local fetch_failed=0
+  local compact_issue_status=""
 
   if [[ -z "${suggested_version}" || -z "${jira_base_url_value}" ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_print_subheading "Unreleased Issues"
-      printf '\n'
-      overview_emit_line "status" "missing jira config"
+      overview_emit_line "issues" "missing jira config"
       overview_emit_next_step "details" "jiggit config"
     else
       overview_emit_line "issues" "missing jira config"
@@ -204,9 +268,7 @@ render_overview_next_release_issues() {
   issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}" || true)"
   if [[ -z "${issue_keys_text}" ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_print_subheading "Unreleased Issues"
-      printf '\n'
-      overview_emit_line "status" "no jira keys found in commit span"
+      overview_emit_line "issues" "no jira keys found in commit span"
       overview_emit_next_step "details" "jiggit changes ${project_id} --base prod"
     else
       overview_emit_line "issues" "no jira keys in commit span"
@@ -217,9 +279,7 @@ render_overview_next_release_issues() {
   mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
   if [[ ${#issue_keys[@]} -eq 0 ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_print_subheading "Unreleased Issues"
-      printf '\n'
-      overview_emit_line "status" "no jira keys found in commit span"
+      overview_emit_line "issues" "no jira keys found in commit span"
       overview_emit_next_step "details" "jiggit changes ${project_id} --base prod"
     else
       overview_emit_line "issues" "no jira keys in commit span"
@@ -233,9 +293,7 @@ render_overview_next_release_issues() {
 
   if [[ "${fetch_failed}" -eq 1 ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_print_subheading "Unreleased Issues"
-      printf '\n'
-      overview_emit_line "status" "unable to fetch jira issues"
+      overview_emit_line "issues" "unable to fetch jira issues"
       overview_emit_next_step "details" "jiggit jira-check ${project_id}"
     else
       overview_emit_line "issues" "unable to fetch jira issues"
@@ -256,9 +314,7 @@ render_overview_next_release_issues() {
 
   if [[ "${total_count}" -eq 0 ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
-      overview_print_subheading "Unreleased Issues (0)"
-      printf '\n'
-      overview_emit_line "status" "no jira issues returned for commit span"
+      overview_emit_line "issues" "0 unreleased issues"
     else
       overview_emit_line "issues" "0 unreleased issues"
     fi
@@ -266,6 +322,12 @@ render_overview_next_release_issues() {
   fi
 
   if [[ "${detail_mode}" == "detailed" ]]; then
+    compact_issue_status="${total_count} unreleased"
+    if [[ "${missing_fix_version_count}" -gt 0 ]]; then
+      compact_issue_status="${compact_issue_status}, ${missing_fix_version_count} missing fixVersion"
+    fi
+    overview_emit_attention_line "issues" "${compact_issue_status}"
+    printf '\n'
     overview_print_subheading "Unreleased Issues (${total_count})"
     printf '\n'
     render_overview_issue_list "${issues_json}" "${suggested_version}" "${project_id}" "${jira_base_url_value}"
@@ -290,7 +352,7 @@ render_overview_global_config_section() {
   jira_base_url_value="$(jira_base_url)"
   jira_auth_mode_value="$(jira_auth_mode)"
 
-  print_markdown_h2 "Global Jira"
+  print_markdown_h2 "Global Jira" "${C_CYAN}"
   printf '\n'
   if [[ -n "${jira_base_url_value}" && "${jira_auth_mode_value}" != "missing" ]]; then
     overview_emit_line "status" "configured"
@@ -456,7 +518,7 @@ render_overview_next_release() {
       fi
       if [[ -n "${suggested_version}" ]]; then
         if [[ "${jira_release_summary}" == *"missing" ]]; then
-          overview_emit_attention_line "release" "${commit_count} commit ahead, next ${suggested_version}${jira_release_summary}"
+          overview_emit_line_with_attention_suffix "release" "${commit_count} commit ahead, " "next ${suggested_version}${jira_release_summary}"
         else
           overview_emit_plain_line "release" "${commit_count} commit ahead, next ${suggested_version}${jira_release_summary}"
         fi
@@ -497,9 +559,14 @@ render_overview_project_multi() {
   jira_project_key="$(project_jira_project_key "${project_id}")"
   source_file="$(project_source_file "${project_id}")"
 
-  print_markdown_h2 "${project_id}"
+  print_markdown_h2 "${project_id}" "${C_CYAN}"
   printf '\n'
   overview_emit_line "versions" "$(overview_versions_summary_text "${project_id}" "${environments}")"
+  local drift_summary=""
+  drift_summary="$(overview_lt_prod_drift_summary "${project_id}")"
+  if [[ -n "${drift_summary}" ]]; then
+    overview_emit_attention_line "drift" "${drift_summary}"
+  fi
   if [[ -z "${jira_project_key}" ]]; then
     overview_emit_line "config" "missing jira project key"
     overview_emit_line "source" "${source_file:-unknown}"
@@ -523,7 +590,7 @@ render_overview_project_single() {
   jira_project_key="$(project_jira_project_key "${project_id}")"
   source_file="$(project_source_file "${project_id}")"
 
-  print_markdown_h2 "${project_id}"
+  print_markdown_h2 "${project_id}" "${C_CYAN}"
   printf '\n'
   if [[ -z "${jira_project_key}" ]]; then
     overview_emit_line "config" "missing jira project key"

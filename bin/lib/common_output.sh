@@ -12,6 +12,8 @@ C_MAGENTA="\e[35m"
 C_BLUE="\e[34m"
 C_CYAN="\e[36m"
 C_DIM="\e[37m"
+# shellcheck disable=SC2034
+C_SOFT_ACCENT="\e[38;5;110m"
 
 # Backward-compatible aliases kept for older scripts that still reference them.
 # shellcheck disable=SC2034
