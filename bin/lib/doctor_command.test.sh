@@ -151,7 +151,7 @@ EOF
   assert_contains "${output}" "## project-a" "check first configured project"
   assert_contains "${output}" "## project-b" "default to all configured projects"
   assert_contains "${output}" "env prod: \`ok\` (v2.1.0.26)" "render environment version check"
-  assert_contains "${output}" "jira releases: \`ok\` (1 found)" "render jira releases check"
+  assert_contains "${output}" "jira releases: \`ok\` (0 released, 1 unreleased -- 2.1.0.26)" "render jira releases summary"
   assert_contains "${output}" "command: \`jiggit doctor project-a\`" "render per-project doctor command hint"
   assert_contains "${output}" "jiggit: \`warn\` (not directly callable; run bin/setup)" "render jiggit PATH warning"
   assert_contains "${output}" "make jiggit directly callable: \`bin/setup\`" "render jiggit setup next step"
@@ -189,6 +189,53 @@ EOF
   assert_contains "${output}" $'\e[1m\e[34m# jiggit doctor\e[0m' "render colored doctor top heading"
   assert_contains "${output}" $'\e[1m\e[36m## Prerequisites\e[0m' "render colored doctor prerequisite heading"
   assert_contains "${output}" $'\e[1m\e[32m## project-a\e[0m' "render colored doctor project heading"
+}
+
+test_run_doctor_main_scopes_release_summary_by_jira_release_prefix() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/repo"
+  mkdir -p "${repo_dir}"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[project-a]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/project-a.git"
+jira_project_key = "JIRA"
+jira_release_prefix = ["ProjectA_"]
+jira_regexes = ["JIRA-[0-9]+"]
+environments = []
+EOF
+
+  # shellcheck disable=SC2329
+  fetch_jira_releases() {
+    local jira_base_url="${1}"
+    local jira_project_key="${2}"
+    printf 'releases|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
+
+    cat <<'EOF'
+[
+  { "name": "ProjectA_2.1.0.25", "released": true, "archived": false, "releaseDate": "2026-02-10" },
+  { "name": "ProjectA_2.1.0.26", "released": false, "archived": false, "releaseDate": "2026-03-30" },
+  { "name": "Other_9.9.9", "released": false, "archived": false, "releaseDate": "2026-04-01" }
+]
+EOF
+  }
+
+  local output
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    run_doctor_main project-a
+  )"
+
+  assert_contains "${output}" "jira releases: \`ok\` (1 released, 1 unreleased -- ProjectA_2.1.0.26)" "summarize only project-scoped jira releases"
 }
 
 test_run_doctor_main_fail_fast_stops_after_first_project_failure() {

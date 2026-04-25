@@ -8,8 +8,55 @@ source bin/lib/jira_check_command.sh
 
 TEST_TMPDIR=""
 
+install_default_fetch_jira_check_mocks() {
+  eval '
+fetch_jira_project_metadata() {
+  local jira_base_url="${1}"
+  local jira_project_key="${2}"
+  printf '\''project|%s|%s\n'\'' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
+
+  if [[ "${jira_project_key}" == "BROKEN" ]]; then
+    printf '\''simulated metadata failure\n'\'' >&2
+    return 1
+  fi
+
+  if [[ "${jira_project_key}" == "VERSIONS_ONLY" ]]; then
+    printf '\''simulated metadata 404\n'\'' >&2
+    return 1
+  fi
+
+  cat <<'"'"'EOF'"'"'
+{
+  "self": "https://jira.example.test/rest/api/2/project/JIRA",
+  "key": "JIRA",
+  "name": "Jira Project"
+}
+EOF
+}
+
+fetch_jira_releases() {
+  local jira_base_url="${1}"
+  local jira_project_key="${2}"
+  printf '\''releases|%s|%s\n'\'' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
+
+  if [[ "${jira_project_key}" == "BROKEN" ]]; then
+    printf '\''simulated release failure\n'\'' >&2
+    return 1
+  fi
+
+  cat <<'"'"'EOF'"'"'
+[
+  { "name": "2.1.0.26" },
+  { "name": "2.1.0.27" }
+]
+EOF
+}
+'
+}
+
 setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-jira-check-test.XXXXXX)"
+  install_default_fetch_jira_check_mocks
   unset JIRA_BASE_URL
   unset JIRA_API_TOKEN
   unset JIRA_BEARER_TOKEN
@@ -27,50 +74,6 @@ create_repo_for_jira_check() {
 
   mkdir -p "${repo_dir}"
   git init "${repo_dir}" >/dev/null 2>&1
-}
-
-# Override live Jira project fetches so tests stay local and deterministic.
-fetch_jira_project_metadata() {
-  local jira_base_url="${1}"
-  local jira_project_key="${2}"
-  printf 'project|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
-
-  if [[ "${jira_project_key}" == "BROKEN" ]]; then
-    printf 'simulated metadata failure\n' >&2
-    return 1
-  fi
-
-  if [[ "${jira_project_key}" == "VERSIONS_ONLY" ]]; then
-    printf 'simulated metadata 404\n' >&2
-    return 1
-  fi
-
-  cat <<'EOF'
-{
-  "self": "https://jira.example.test/rest/api/2/project/JIRA",
-  "key": "JIRA",
-  "name": "Jira Project"
-}
-EOF
-}
-
-# Override live Jira release fetches so tests stay local and deterministic.
-fetch_jira_releases() {
-  local jira_base_url="${1}"
-  local jira_project_key="${2}"
-  printf 'releases|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
-
-  if [[ "${jira_project_key}" == "BROKEN" ]]; then
-    printf 'simulated release failure\n' >&2
-    return 1
-  fi
-
-  cat <<'EOF'
-[
-  { "name": "2.1.0.26" },
-  { "name": "2.1.0.27" }
-]
-EOF
 }
 
 test_run_jira_check_main_treats_release_access_as_sufficient_when_metadata_fails() {
@@ -99,7 +102,7 @@ EOF
   )"
 
   assert_contains "${output}" "Jira project key: \`VERSIONS_ONLY\`" "render jira project key when metadata fetch fails"
-  assert_contains "${output}" "Release count: \`2\`" "still render release count when metadata fetch fails"
+  assert_contains "${output}" "Releases: \`0 released, 2 unreleased -- 2.1.0.27\`" "still render release summary when metadata fetch fails"
   assert_contains "${output}" "Connectivity: \`ok\`" "treat releases access as sufficient connectivity"
   assert_contains "${output}" "Metadata probe: \`warn\` (simulated metadata 404" "render metadata warning when metadata fetch fails"
 }
@@ -132,7 +135,7 @@ EOF
   assert_contains "${output}" "# jiggit jira-check" "render jira-check heading"
   assert_contains "${output}" "Jira project key: \`JIRA\`" "render jira project key"
   assert_contains "${output}" "Jira project name: \`Jira Project\`" "render jira project name"
-  assert_contains "${output}" "Release count: \`2\`" "render release count"
+  assert_contains "${output}" "Releases: \`0 released, 2 unreleased -- 2.1.0.27\`" "render release summary"
   assert_contains "${output}" "Metadata URL: \`https://jira.example.test/rest/api/2/project/JIRA\`" "render metadata url"
   assert_contains "${output}" "Releases URL: \`https://jira.example.test/rest/api/2/project/JIRA/versions\`" "render releases url"
   assert_contains "${output}" "Auth: \`ok\`" "render auth status"
@@ -142,6 +145,50 @@ EOF
   fetch_log="$(sed -n '1,20p' "${TEST_TMPDIR}/fetch.log")"
   assert_contains "${fetch_log}" "project|https://jira.example.test|JIRA" "fetch jira project metadata"
   assert_contains "${fetch_log}" "releases|https://jira.example.test|JIRA" "fetch jira releases"
+}
+
+test_run_jira_check_main_scopes_release_summary_by_jira_release_prefix() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[project-a]
+repo_path = "/tmp/project-a"
+remote_url = "git@github.com:example/project-a.git"
+jira_project_key = "JIRA"
+jira_release_prefix = ["ProjectA_"]
+jira_regexes = ["JIRA-[0-9]+"]
+environments = []
+EOF
+
+  # shellcheck disable=SC2329
+  fetch_jira_releases() {
+    local jira_base_url="${1}"
+    local jira_project_key="${2}"
+    printf 'releases|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
+
+    cat <<'EOF'
+[
+  { "name": "ProjectA_2.1.0.25", "released": true, "archived": false, "releaseDate": "2026-02-10" },
+  { "name": "ProjectA_2.1.0.26", "released": false, "archived": false, "releaseDate": "2026-03-30" },
+  { "name": "Other_9.9.9", "released": false, "archived": false, "releaseDate": "2026-04-01" }
+]
+EOF
+  }
+
+  local output
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_jira_check_main project-a
+  )"
+
+  assert_contains "${output}" "Releases: \`1 released, 1 unreleased -- ProjectA_2.1.0.26\`" "summarize only project-scoped jira releases"
 }
 
 test_run_jira_check_main_all_checks_every_project_and_fails_at_end() {
@@ -262,6 +309,7 @@ EOF
   assert_contains "${output}" "[verbose] jira-check project=project-a key=JIRA" "render project verbose line"
   assert_contains "${output}" "[verbose] jira-check metadata https://jira.example.test/rest/api/2/project/JIRA" "render metadata verbose line"
   assert_contains "${output}" "[verbose] jira-check releases https://jira.example.test/rest/api/2/project/JIRA/versions" "render releases verbose line"
+  assert_contains "${output}" "[verbose] jira releases project=project-a scoped released=0 unreleased=2 unreleased-names=2.1.0.26,2.1.0.27" "render scoped unreleased release names"
 }
 
 test_run_jira_check_main_verbose_keeps_probe_json_clean_when_stderr_has_logs() {
@@ -314,7 +362,7 @@ EOF
   )"
 
   assert_contains "${output}" "Jira project name: \`Jira Project\`" "parse metadata json even when stderr has verbose logs"
-  assert_contains "${output}" "Release count: \`2\`" "parse releases json even when stderr has verbose logs"
+  assert_contains "${output}" "Releases: \`0 released, 2 unreleased -- 2.1.0.27\`" "parse releases json even when stderr has verbose logs"
 }
 
 run_tests "$@"

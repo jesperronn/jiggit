@@ -183,4 +183,32 @@ EOF
   fi
 }
 
+test_project_release_inventory_summary_scopes_by_jira_release_prefix() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[project-a]
+jira_release_prefix = ["2."]
+EOF
+
+  local summary
+  summary="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    bash -lc '
+      source bin/lib/releases_command.sh
+      load_project_config
+      project_release_inventory_summary "project-a" '"'"'[
+        {"name":"2.1.0.25","released":true,"archived":false,"releaseDate":"2026-02-10"},
+        {"name":"2.1.0.26","released":false,"archived":false,"releaseDate":"2026-03-30"},
+        {"name":"other_9.9.9","released":false,"archived":false,"releaseDate":"2026-04-01"}
+      ]'"'"'
+    '
+  )"
+
+  assert_eq "1 released, 1 unreleased -- 2.1.0.26" "${summary}" "summarize only project-scoped releases"
+}
+
 run_tests "$@"

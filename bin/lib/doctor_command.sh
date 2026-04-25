@@ -330,6 +330,7 @@ render_doctor_project() {
   local environment_name
   local metadata_json
   local releases_json
+  local release_summary=""
   local env_version
   local jira_base_url_value
   local jira_name
@@ -374,7 +375,8 @@ render_doctor_project() {
     fi
 
     if releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>/dev/null)"; then
-      doctor_emit_check "jira releases" "ok" "$(printf '%s\n' "${releases_json}" | jq -r 'length') found"
+      release_summary="$(project_release_inventory_summary "${project_id}" "${releases_json}")"
+      doctor_emit_check "jira releases" "ok" "${release_summary}"
     else
       doctor_emit_check "jira releases" "warn" "unable to fetch"
       show_jira_next_step=1

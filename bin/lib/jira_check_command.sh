@@ -327,9 +327,9 @@ render_jira_check_summary() {
   local releases_json="${5}"
   local metadata_url="${6}"
   local releases_url="${7}"
+  local release_summary=""
   local project_name
   local project_self
-  local release_count
 
   if [[ -n "${metadata_json}" ]]; then
     project_name="$(printf '%s\n' "${metadata_json}" | jq -r '.name // "unknown"')"
@@ -338,7 +338,7 @@ render_jira_check_summary() {
     project_name="unknown"
     project_self="unknown"
   fi
-  release_count="$(printf '%s\n' "${releases_json}" | jq -r 'length')"
+  release_summary="$(project_release_inventory_summary "${project_id}" "${releases_json}")"
 
   print_markdown_h2 "${project_id}" "${C_GREEN}"
   printf '\n'
@@ -348,7 +348,7 @@ render_jira_check_summary() {
   printf -- "- Jira project URL: \`%s\`\n" "${project_self}"
   printf -- "- Metadata URL: \`%s\`\n" "${metadata_url}"
   printf -- "- Releases URL: \`%s\`\n" "${releases_url}"
-  printf -- "- Release count: \`%s\`\n" "${release_count}"
+  printf -- "- Releases: \`%s\`\n" "${release_summary}"
   printf -- "- Auth: \`ok\`\n"
   printf -- "- Connectivity: \`ok\`\n\n"
 }

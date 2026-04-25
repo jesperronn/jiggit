@@ -183,6 +183,59 @@ relevant_releases_json() {
   printf '%s\n' "${unreleased_json}"
 }
 
+# Return the latest unreleased Jira release name for one project scope.
+latest_unreleased_release_name() {
+  local project_id="${1}"
+  local releases_json="${2}"
+  local scoped_json=""
+
+  scoped_json="$(project_scoped_releases_json "${project_id}" "${releases_json}")"
+  printf '%s\n' "${scoped_json}" | jq -r '
+    map(select((.archived // false) != true and (.released // false) != true))
+    | sort_by((.releaseDate // ""), (.name // ""))
+    | last
+    | .name // empty
+  '
+}
+
+# Render a compact release inventory summary for one project scope.
+project_release_inventory_summary() {
+  local project_id="${1}"
+  local releases_json="${2}"
+  local scoped_json=""
+  local released_count=""
+  local unreleased_count=""
+  local latest_unreleased_name=""
+  local unreleased_names=""
+
+  scoped_json="$(project_scoped_releases_json "${project_id}" "${releases_json}")"
+  released_count="$(printf '%s\n' "${scoped_json}" | jq -r '
+    map(select((.archived // false) != true and (.released // false) == true))
+    | length
+  ')"
+  unreleased_count="$(printf '%s\n' "${scoped_json}" | jq -r '
+    map(select((.archived // false) != true and (.released // false) != true))
+    | length
+  ')"
+  latest_unreleased_name="$(latest_unreleased_release_name "${project_id}" "${releases_json}")"
+  unreleased_names="$(printf '%s\n' "${scoped_json}" | jq -r '
+    map(select((.archived // false) != true and (.released // false) != true))
+    | sort_by((.releaseDate // ""), (.name // ""))
+    | .[]?.name // empty
+  ' | paste -sd ', ' -)"
+
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    jiggit_verbose_log "jira releases project=${project_id} scoped released=${released_count} unreleased=${unreleased_count} unreleased-names=${unreleased_names:-none}"
+  fi
+
+  if [[ -n "${latest_unreleased_name}" ]]; then
+    printf '%s released, %s unreleased -- %s\n' "${released_count}" "${unreleased_count}" "${latest_unreleased_name}"
+    return 0
+  fi
+
+  printf '%s released, %s unreleased\n' "${released_count}" "${unreleased_count}"
+}
+
 # Return success when a Jira release name appears to match a local git tag.
 release_matches_git_tag() {
   local repo_path="${1}"
