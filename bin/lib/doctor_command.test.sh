@@ -8,6 +8,17 @@ source bin/lib/doctor_command.sh
 
 TEST_TMPDIR=""
 
+install_doctor_test_path_without_jiggit() {
+  mkdir -p "${TEST_TMPDIR}/bin"
+  ln -sf "$(command -v git)" "${TEST_TMPDIR}/bin/git"
+  ln -sf "$(command -v curl)" "${TEST_TMPDIR}/bin/curl"
+  ln -sf "$(command -v jq)" "${TEST_TMPDIR}/bin/jq"
+}
+
+doctor_test_path() {
+  printf '%s\n' "${TEST_TMPDIR}/bin:/usr/bin:/bin"
+}
+
 install_default_fetch_project_environment_version_mock() {
   eval '
 fetch_project_environment_version() {
@@ -69,6 +80,7 @@ EOF
 
 setup_tmpdir() {
   TEST_TMPDIR="$(mktemp -d /tmp/jiggit-doctor-test.XXXXXX)"
+  install_doctor_test_path_without_jiggit
   install_default_fetch_project_environment_version_mock
   install_default_fetch_jira_mocks
   unset JIRA_BASE_URL
@@ -142,6 +154,7 @@ EOF
 
   local output
   output="$(
+    PATH="$(doctor_test_path)" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
     run_doctor_main
