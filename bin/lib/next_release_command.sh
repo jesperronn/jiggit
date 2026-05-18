@@ -220,6 +220,72 @@ next_release_release_state() {
   printf '%s\n' "missing-both"
 }
 
+# Return the effective Jira auth mode and source used by next-release.
+next_release_jira_auth_summary() {
+  local reference="${1:-}"
+  local auth_mode_value=""
+  local auth_source_value=""
+
+  auth_mode_value="$(jira_auth_mode "${reference}")"
+  case "${auth_mode_value}" in
+    bearer_token)
+      auth_source_value="$(jira_field_source "${reference}" "bearer_token")"
+      ;;
+    basic_auth)
+      auth_source_value="$(jira_field_source "${reference}" "user_email"), $(jira_field_source "${reference}" "api_token")"
+      ;;
+    *)
+      auth_source_value="none"
+      ;;
+  esac
+
+  printf '%s|%s\n' "${auth_mode_value}" "${auth_source_value}"
+}
+
+# Return the next-step command when Jira config values are missing.
+next_release_jira_config_next_step() {
+  local project_id="${1:-}"
+  local jira_project_key="${2:-}"
+  local jira_base_url_value="${3:-}"
+  local jira_auth_mode_value="${4:-}"
+
+  if [[ -z "${jira_project_key}" ]]; then
+    printf '%s\n' "jiggit config ${project_id}"
+    return 0
+  fi
+
+  if [[ -z "${jira_base_url_value}" || "${jira_auth_mode_value}" == "missing" ]]; then
+    printf '%s\n' "jiggit setup jira"
+    return 0
+  fi
+
+  printf '%s\n' ""
+}
+
+# Print captured stderr from a Jira release fetch when verbose mode is enabled.
+next_release_emit_captured_stderr() {
+  local error_file="${1:-}"
+
+  if [[ -n "${error_file}" && -s "${error_file}" && "${JIGGIT_VERBOSE:-0}" -eq 1 ]]; then
+    cat "${error_file}" >&2
+  fi
+}
+
+# Fetch Jira releases while keeping stderr available for verbose diagnostics.
+next_release_fetch_jira_releases() {
+  local jira_base_url="${1}"
+  local jira_project_key="${2}"
+  local auth_reference="${3:-}"
+  local error_file="${4:-}"
+
+  if [[ -n "${error_file}" ]]; then
+    fetch_jira_releases "${jira_base_url}" "${jira_project_key}" "${auth_reference}" 2>"${error_file}"
+    return $?
+  fi
+
+  fetch_jira_releases "${jira_base_url}" "${jira_project_key}" "${auth_reference}"
+}
+
 # Normalize a release/fixVersion name so v-prefixed and plain versions compare equally.
 normalize_fix_version_name() {
   local value="${1:-}"
@@ -668,6 +734,8 @@ maybe_create_next_jira_release() {
   local jira_project_key="${3}"
   local suggested_version="${4}"
   local auth_reference="${5:-}"
+  local releases_error_file=""
+  local releases_error=""
   local releases_json=""
   local metadata_json=""
   local project_numeric_id=""
@@ -682,10 +750,17 @@ maybe_create_next_jira_release() {
     return 0
   fi
 
-  if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${auth_reference}" 2>/dev/null)"; then
-    printf '%s\n' "warn|unable to fetch existing releases"
+  releases_error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-next-release-releases.XXXXXX")"
+  if ! releases_json="$(next_release_fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${auth_reference}" "${releases_error_file}")"; then
+    next_release_emit_captured_stderr "${releases_error_file}"
+    releases_error="$(trim "$(tr '\n' ' ' < "${releases_error_file}")")"
+    rm -f "${releases_error_file}"
+    releases_error_file=""
+    printf '%s\n' "warn|${releases_error:-unable to fetch existing releases}"
     return 0
   fi
+  next_release_emit_captured_stderr "${releases_error_file}"
+  rm -f "${releases_error_file}"
 
   if next_release_project_release_exists "${project_id}" "${suggested_version}" "${releases_json}"; then
     printf '%s\n' "already-exists|$(printf '%s\n' "${releases_json}" | jq -r '.[]?.name // empty' | while IFS= read -r release_name; do
@@ -842,6 +917,7 @@ render_next_release_next_steps() {
   local jira_project_key="${3}"
   local jira_base_url_value="${4:-}"
   local jira_release_state="${5:-}"
+  local jira_config_next_step="${6:-}"
 
   print_markdown_h2 "Next Steps" "${C_CYAN}"
   printf '\n'
@@ -853,6 +929,9 @@ render_next_release_next_steps() {
   if [[ -n "${jira_project_key}" && -n "${suggested_version}" ]]; then
     printf -- "- inspect issues for the suggested release: \`jiggit changes %s --from-env prod --to %s\`\n" "${project_id}" "${suggested_version#v}"
     printf -- "- assign the fixVersion across commit-linked issues: \`jiggit assign-fix-version %s --release %s\`\n" "${project_id}" "${suggested_version#v}"
+  fi
+  if [[ -n "${jira_config_next_step}" ]]; then
+    printf -- "- review Jira config: \`%s\`\n" "${jira_config_next_step}"
   fi
   if [[ "${jira_release_state}" == "missing" || "${jira_release_state}" == "warn" ]]; then
     printf -- "- rerun interactively to create the Jira release: \`jiggit next-release %s\`\n" "${project_id}"
@@ -911,6 +990,8 @@ run_next_release_main() {
   local target_compare_ref=""
   local jira_project_key=""
   local jira_base_url_value=""
+  local jira_auth_mode_value=""
+  local jira_config_next_step=""
   local issue_keys_text=""
   local jira_release_result=""
   local jira_release_state=""
@@ -923,6 +1004,8 @@ run_next_release_main() {
   local -a issue_keys=()
   local issues_json='{"issues":[]}'
   local releases_json='[]'
+  local releases_error_file=""
+  local releases_error=""
 
   if ! project_selector="$(effective_single_project_selector "${project_selector}")"; then
     return 1
@@ -936,7 +1019,18 @@ run_next_release_main() {
   repo_path="$(project_repo_path "${project_id}")"
   jira_project_key="$(project_jira_project_key "${project_id}")"
   jira_base_url_value="$(jira_base_url "${project_id}")"
+  jira_auth_mode_value="$(jira_auth_mode "${project_id}")"
+  jira_config_next_step="$(next_release_jira_config_next_step "${project_id}" "${jira_project_key}" "${jira_base_url_value}" "${jira_auth_mode_value}")"
   environments=" $(project_environments "${project_id}") "
+  if declare -F jiggit_verbose_log >/dev/null 2>&1; then
+    local jira_auth_summary=""
+    local jira_auth_mode_value=""
+    local jira_auth_source_value=""
+
+    jira_auth_summary="$(next_release_jira_auth_summary "${project_id}")"
+    IFS='|' read -r jira_auth_mode_value jira_auth_source_value <<< "${jira_auth_summary}"
+    jiggit_verbose_log "next-release cwd=${PWD} project=${project_id} repo=${repo_path:-missing} jira=${jira_project_key:-missing} auth=${jira_auth_mode_value} auth-source=${jira_auth_source_value}"
+  fi
   if [[ -z "${repo_path}" || ! -d "${repo_path}" ]]; then
     render_next_release_failure "${project_id}" "${repo_path}" "missing local repo path" "jiggit config"
     return 1
@@ -967,13 +1061,33 @@ run_next_release_main() {
   fi
 
   if [[ -n "${jira_project_key}" && -n "${jira_base_url_value}" && -n "${suggested_version}" ]]; then
-    if releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>/dev/null)"; then
-      jira_release_fetch_state="ok"
-      jira_release_fetch_detail=""
+    if [[ "${jira_auth_mode_value}" == "missing" ]]; then
+      jira_release_fetch_state="unavailable"
+      jira_release_fetch_detail="missing Jira auth"
+    else
+      releases_error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-next-release-releases.XXXXXX")"
+      if releases_json="$(next_release_fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" "${releases_error_file}")"; then
+        jira_release_fetch_state="ok"
+        jira_release_fetch_detail=""
+        next_release_emit_captured_stderr "${releases_error_file}"
+        rm -f "${releases_error_file}"
+      fi
+      if [[ "${jira_release_fetch_state}" != "ok" ]]; then
+        releases_error="$(trim "$(tr '\n' ' ' < "${releases_error_file}")")"
+        next_release_emit_captured_stderr "${releases_error_file}"
+        rm -f "${releases_error_file}"
+        jira_release_fetch_detail="${releases_error:-unable to fetch existing releases}"
+      fi
     fi
   else
     jira_release_fetch_state="unavailable"
-    jira_release_fetch_detail="missing jira config"
+    if [[ -z "${jira_project_key}" ]]; then
+      jira_release_fetch_detail="missing jira project key"
+    elif [[ -z "${jira_base_url_value}" ]]; then
+      jira_release_fetch_detail="missing Jira base URL"
+    else
+      jira_release_fetch_detail="missing jira config"
+    fi
   fi
 
   base_compare_ref="$(env_diff_compare_ref "${repo_path}" "${base_git_ref}")"
@@ -982,6 +1096,13 @@ run_next_release_main() {
 
   if [[ "${commit_count}" -gt 0 ]]; then
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "${suggested_version}" "${compare_url}" "release-needed"
+    if [[ "${jira_auth_mode_value}" == "missing" ]]; then
+      print_markdown_h2 "Jira Status" "${C_ORANGE}"
+      printf '\n'
+      printf -- "- status: \`missing Jira auth\`\n"
+      render_jira_config_diagnostic
+      printf -- "- next step: \`%s\`\n\n" "${jira_config_next_step:-jiggit setup jira}"
+    fi
     if [[ -n "${jira_project_key}" && -n "${jira_base_url_value}" ]]; then
       if [[ "${jira_release_fetch_state}" == "ok" ]]; then
         if next_release_project_release_exists "${project_id}" "${suggested_version}" "${releases_json}"; then
@@ -1011,18 +1132,26 @@ run_next_release_main() {
       printf '\n'
       if [[ -z "${jira_project_key}" ]]; then
         printf -- "- status: \`missing jira project key\`\n"
+      elif [[ -z "${jira_base_url_value}" ]]; then
+        printf -- "- status: \`missing Jira base URL\`\n"
+      elif [[ "${jira_auth_mode_value}" == "missing" ]]; then
+        printf -- "- status: \`missing Jira auth\`\n"
       else
-        printf -- "- status: \`missing jira base url\`\n"
+        printf -- "- status: \`missing jira config\`\n"
       fi
       render_jira_config_diagnostic
-      printf -- "- next step: \`jiggit config\`\n\n"
+      if [[ -n "${jira_config_next_step}" ]]; then
+        printf -- "- next step: \`%s\`\n\n" "${jira_config_next_step}"
+      else
+        printf -- "- next step: \`jiggit config\`\n\n"
+      fi
     fi
-    render_next_release_next_steps "${project_id}" "${suggested_version}" "${jira_project_key}" "${jira_base_url_value}" ""
+    render_next_release_next_steps "${project_id}" "${suggested_version}" "${jira_project_key}" "${jira_base_url_value}" "" "${jira_config_next_step}"
     jira_release_result="$(maybe_create_next_jira_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}" "${project_id}")"
     IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
     render_next_release_jira_creation_status "${jira_release_state}" "${jira_release_detail}"
   else
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "" "${compare_url}" "up-to-date"
-    render_next_release_next_steps "${project_id}" "" "${jira_project_key}" "${jira_base_url_value}" ""
+    render_next_release_next_steps "${project_id}" "" "${jira_project_key}" "${jira_base_url_value}" "" "${jira_config_next_step}"
   fi
 }

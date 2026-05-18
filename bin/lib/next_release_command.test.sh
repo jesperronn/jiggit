@@ -193,6 +193,141 @@ EOF
   assert_contains "${fetch_log}" "https://jira.example.test|next-release-project|ALPHA-2 ALPHA-3" "pass all unreleased issue keys with project auth reference"
 }
 
+test_run_next_release_main_verbose_shows_project_and_jira_auth_source() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local home_dir="${TEST_TMPDIR}/home"
+  local repo_dir="${TEST_TMPDIR}/next-release-repo"
+  local projects_dir="${home_dir}/.jiggit/config"
+  mkdir -p "${projects_dir}"
+  create_repo_for_next_release "${repo_dir}"
+
+  cat > "${projects_dir}/projects.toml" <<EOF
+[next-release-project]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/next-release-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+environments = ["prod"]
+EOF
+
+  cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+EOF
+
+  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+
+  local output
+  output="$(
+    cd "${TEST_TMPDIR}" && \
+      HOME="${home_dir}" \
+      JIGGIT_VERBOSE=1 \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+      run_next_release_main next-release-project 2>&1
+  )"
+
+  assert_contains "${output}" "[verbose] next-release cwd=${TEST_TMPDIR}" "report the current working directory"
+  assert_contains "${output}" "project=next-release-project" "report the resolved project"
+  assert_contains "${output}" "auth=bearer_token" "report the auth mode"
+  assert_contains "${output}" "auth-source=${home_dir}/.jiggit/config.toml" "report the auth source file"
+}
+
+test_run_next_release_main_reports_missing_jira_auth_with_clear_next_step() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local home_dir="${TEST_TMPDIR}/home"
+  local repo_dir="${TEST_TMPDIR}/next-release-repo"
+  local projects_dir="${home_dir}/.jiggit/config"
+  mkdir -p "${projects_dir}"
+  create_repo_for_next_release "${repo_dir}"
+
+  cat > "${projects_dir}/projects.toml" <<EOF
+[next-release-project]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/next-release-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+environments = ["prod"]
+EOF
+
+  cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+EOF
+
+  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+
+  local output
+  output="$(
+    # shellcheck disable=SC2329
+    fetch_jira_releases() {
+      printf 'should-not-call\n' >&2
+      return 1
+    }
+
+    HOME="${home_dir}" \
+      JIGGIT_PROJECTS_FILE="${projects_dir}/projects.toml" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+      run_next_release_main next-release-project
+  )"
+
+  assert_contains "${output}" "## Jira Status" "render Jira status when auth is missing"
+  assert_contains "${output}" "status: \`missing Jira auth\`" "report missing Jira auth"
+  assert_contains "${output}" "next step: \`jiggit setup jira\`" "suggest Jira setup as the next step"
+  assert_contains "${output}" "review Jira config: \`jiggit setup jira\`" "repeat the setup guidance in next steps"
+  assert_not_contains "${output}" "should-not-call" "skip Jira release fetching when auth is missing"
+}
+
+test_run_next_release_main_surfaces_jira_release_fetch_errors() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local home_dir="${TEST_TMPDIR}/home"
+  local repo_dir="${TEST_TMPDIR}/next-release-repo"
+  local projects_dir="${home_dir}/.jiggit/config"
+  mkdir -p "${projects_dir}"
+  create_repo_for_next_release "${repo_dir}"
+
+  cat > "${projects_dir}/projects.toml" <<EOF
+[next-release-project]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/next-release-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+environments = ["prod"]
+EOF
+
+  cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+EOF
+
+  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+
+  local output
+  output="$(
+    # shellcheck disable=SC2329
+    fetch_jira_releases() {
+      printf 'curl: (22) The requested URL returned error: 401\n' >&2
+      return 1
+    }
+
+    HOME="${home_dir}" \
+      JIGGIT_VERBOSE=1 \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+      run_next_release_main next-release-project 2>&1
+  )"
+
+  assert_contains "${output}" "detail: \`curl: (22) The requested URL returned error: 401\`" "surface the release fetch failure"
+  assert_contains "${output}" "## Jira Releases" "keep the Jira releases section"
+  assert_contains "${output}" "status: \`⚠️ WARN\`" "keep the warning status"
+}
+
 test_run_next_release_main_can_force_colored_issue_states() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
@@ -424,8 +559,8 @@ EOF
 
   assert_contains "${output}" "## Jira Status" "render jira status section when jira config is missing"
   assert_contains "${output}" "status: \`missing jira project key\`" "render missing jira key status"
-  assert_contains "${output}" "next step: \`jiggit config\`" "suggest config as jira next step"
-  assert_contains "${output}" "review effective config: \`jiggit config\`" "include config command in next steps"
+  assert_contains "${output}" "next step: \`jiggit config next-release-project\`" "suggest project-specific config as jira next step"
+  assert_contains "${output}" "review Jira config: \`jiggit config next-release-project\`" "include project-specific config command in next steps"
 }
 
 test_run_next_release_main_fails_with_guidance_when_repo_path_is_missing() {
