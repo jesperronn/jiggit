@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Set up shellcheck
+        uses: jdx/mise-action@9dc7d5dd454262207dea3ab5a06a3df6afc8ff26
+        with:
+          tool_versions: |
+            shellcheck 0.10.0
+      - name: Run lint
+        run: bash bin/lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Run tests
+        run: bash bin/test
