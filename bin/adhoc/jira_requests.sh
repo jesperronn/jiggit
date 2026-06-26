@@ -4,22 +4,27 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [[ ! -f "${SCRIPT_DIR}/_jira_variables.sh" ]]; then
-  printf 'Missing local config file: %s\n' "${SCRIPT_DIR}/_jira_variables.sh" >&2
-  printf 'Create it by copying %s\n' "${SCRIPT_DIR}/_jira_variables.sh.example" >&2
-  exit 1
-fi
-
-# Load local Jira variables for manual testing.
-# shellcheck disable=SC1091
-source "${SCRIPT_DIR}/_jira_variables.sh"
-
 # Default to a real run that stops at the first failure.
 JIRA_REQUESTS_DRY_RUN=0
 JIRA_REQUESTS_FAIL_FAST=1
 JIRA_REQUESTS_RAW_OUTPUT=0
 JIRA_REQUESTS_SHORT_OUTPUT=0
 JIRA_REQUESTS_ISSUE_LIMIT=10
+
+# Built-in fallback values let dry-run mode print without local config.
+JIRA_BASE_URL="${JIRA_BASE_URL:-https://jira.example.com}"
+JIRA_PROJECT_KEY="${JIRA_PROJECT_KEY:-JIRA}"
+JIRA_API_TOKEN="${JIRA_API_TOKEN:-}"
+
+# Track whether the local config file exists so live runs can enforce it.
+JIRA_REQUESTS_CONFIG_PRESENT=0
+
+# Load local Jira variables for manual testing when available.
+if [[ -f "${SCRIPT_DIR}/_jira_variables.sh" ]]; then
+  JIRA_REQUESTS_CONFIG_PRESENT=1
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/_jira_variables.sh"
+fi
 
 # Hardcoded Jira examples for adhoc manual probes.
 readonly JIRA_EXAMPLE_ISSUE_KEY="SKOLELOGIN-13603"
@@ -472,6 +477,12 @@ main() {
 
   if [[ -z "${command}" ]]; then
     usage
+    return 1
+  fi
+
+  if [[ "${JIRA_REQUESTS_DRY_RUN}" -eq 0 && "${JIRA_REQUESTS_CONFIG_PRESENT}" -ne 1 ]]; then
+    printf 'Missing local config file: %s\n' "${SCRIPT_DIR}/_jira_variables.sh" >&2
+    printf 'Create it by copying %s\n' "${SCRIPT_DIR}/_jira_variables.sh.example" >&2
     return 1
   fi
 

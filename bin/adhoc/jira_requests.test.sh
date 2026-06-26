@@ -26,6 +26,12 @@ EOF
   mkdir -p "${TEST_TMPDIR}/bin"
 }
 
+create_jira_requests_fixture_without_local_config() {
+  mkdir -p "${TEST_TMPDIR}/bin/adhoc" "${TEST_TMPDIR}/bin"
+  cp bin/adhoc/jira_requests.sh "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh"
+  chmod +x "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh"
+}
+
 create_fake_curl_success() {
   cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -127,6 +133,21 @@ test_jira_requests_dry_run_prints_commands_without_calling_curl() {
   assert_contains "${output}" "/rest/api/2/project/SKOLELOGIN" "print project request"
   assert_contains "${output}" "/rest/api/2/project/SKOLELOGIN/versions" "print versions request"
   assert_eq "" "$(cat "${TEST_TMPDIR}/curl.log")" "dry run does not call curl"
+}
+
+test_jira_requests_dry_run_all_works_without_local_config_file() {
+  setup_test_tmpdir
+  create_jira_requests_fixture_without_local_config
+  create_fake_curl_success
+  : > "${TEST_TMPDIR}/curl.log"
+
+  local output
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" --dry-run all 2>&1)"
+
+  assert_contains "${output}" "/rest/api/2/myself" "dry run all prints myself without config file"
+  assert_contains "${output}" "/rest/api/2/project/JIRA" "dry run all prints fallback project key without config file"
+  assert_contains "${output}" "Authorization: Bearer \$JIRA_API_TOKEN" "dry run all keeps auth redacted without config file"
+  assert_eq "" "$(cat "${TEST_TMPDIR}/curl.log")" "dry run all still avoids curl without config file"
 }
 
 test_jira_requests_myself_runs_request_and_prints_next_steps() {
