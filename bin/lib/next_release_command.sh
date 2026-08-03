@@ -345,7 +345,7 @@ next_release_name_matches_project_candidates() {
 
   while IFS= read -r candidate; do
     [[ -z "${candidate}" ]] && continue
-    if [[ "${release_name}" == "${candidate}" ]]; then
+    if [[ "$(lowercase_text "${release_name}")" == "$(lowercase_text "${candidate}")" ]]; then
       return 0
     fi
   done < <(next_release_project_release_name_candidates "${project_id}" "${suggested_version}")

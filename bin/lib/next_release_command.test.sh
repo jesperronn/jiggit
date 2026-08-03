@@ -439,6 +439,12 @@ EOF
     fail "recognize matching prefixed jira release as present"
   fi
 
+  if next_release_name_matches_project_candidates "next-release-project" "v1.23.0.0" "udbyderportal_1.23.0"; then
+    pass "match configured release prefix case-insensitively"
+  else
+    fail "match configured release prefix case-insensitively"
+  fi
+
   local issue_state
   issue_state="$(
     next_release_issue_fix_version_state \
