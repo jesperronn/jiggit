@@ -520,9 +520,9 @@ repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/next-release-repo.git"
 jira_project_key = "ALPHA"
 jira_regexes = ["ALPHA-[0-9]+"]
+environments = ["prod"]
 EOF
 
-  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
   cat > "${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
 y
 
@@ -530,6 +530,7 @@ EOF
 
   local output
   output="$(
+    JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0" \
     # shellcheck disable=SC2329
     create_jira_release_version() {
       return 1
