@@ -330,6 +330,15 @@ render_overview_issue_list() {
   render_next_release_issue_lines "${issues_json}" "${expected_release}" "${project_id}" "${jira_base_url}"
 }
 
+# Count Renovate dependency updates in the dashboard's unreleased commit range.
+overview_dependency_update_count() {
+  local repo_path="${1}"
+  local git_range="${2}"
+
+  git -C "${repo_path}" log --format='%s' "${git_range}" |
+    grep -Ec '^(chore|fix)\(deps\):[[:space:]]' || true
+}
+
 # Render a compact unreleased-issue summary for the next-release section.
 render_overview_next_release_issues() {
   local project_id="${1}"
@@ -346,6 +355,7 @@ render_overview_next_release_issues() {
   local issue_state=""
   local total_count=0
   local missing_fix_version_count=0
+  local dependency_update_count=0
   local fetch_failed=0
 
   if [[ -z "${suggested_version}" || -z "${jira_base_url_value}" ]]; then
@@ -418,6 +428,10 @@ render_overview_next_release_issues() {
     overview_print_subheading "Unreleased Issues (${total_count})"
     printf '\n'
     render_overview_issue_list "${issues_json}" "${suggested_version}" "${project_id}" "${jira_base_url_value}"
+    dependency_update_count="$(overview_dependency_update_count "${repo_path}" "${base_git_ref}..${target_ref}")"
+    if [[ "${dependency_update_count}" -gt 0 ]]; then
+      overview_emit_line "Dependency updates (deps)" "${dependency_update_count} dependency updates"
+    fi
     if [[ "${missing_fix_version_count}" -gt 0 ]]; then
       overview_emit_line "add missing fixVersion" "jiggit assign-fix-version ${project_id} --release ${suggested_version#v}"
     fi
@@ -514,7 +528,14 @@ render_overview_next_release() {
   IFS='|' read -r _ base_label _ base_git_ref <<< "${base_resolved}"
   if ! commit_count="$(git -C "${repo_path}" rev-list --count "${base_git_ref}..${target_ref}" 2>/dev/null)"; then
     overview_emit_plain_line "release" "unable to compare refs"
-    overview_emit_next_step "details" "${command_text}"
+    if [[ "${detail_mode}" == "detailed" ]]; then
+      printf '\n'
+      print_markdown_h2 "Next Steps" "${C_CYAN}"
+      printf '\n'
+      overview_emit_next_step "next release" "${command_text}"
+    else
+      overview_emit_next_step "details" "${command_text}"
+    fi
     printf '\n'
     return 0
   fi

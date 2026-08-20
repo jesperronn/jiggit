@@ -241,6 +241,15 @@ EOF
   JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["project-a:prod"]="v1.2.0.0"
   JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["project-a:prep"]="v1.2.0.0"
 
+  printf 'three\n' >> "${repo_dir}/README.md"
+  git -C "${repo_dir}" add README.md
+  git -C "${repo_dir}" commit -m "chore(deps): update test dependency" >/dev/null 2>&1
+
+  printf 'four\n' >> "${repo_dir}/README.md"
+  git -C "${repo_dir}" add README.md
+  git -C "${repo_dir}" commit -m "fix(deps): patch test dependency" >/dev/null 2>&1
+  git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
+
   local output
   output="$(
     cd "${repo_dir}"
@@ -256,7 +265,7 @@ EOF
   assert_contains "${output}" "auth mode: bearer_token" "render shared jira auth diagnostic"
   assert_contains "${output}" "## project-a" "default to current configured project"
   assert_contains "${output}" "prod,prep: v1.2.0.0" "render grouped environment versions in single-project mode"
-  assert_contains "${output}" "- release: 1 commit ahead, next v1.3.0" "render flattened release summary line"
+  assert_contains "${output}" "- release: 3 commits ahead, next v1.3.0" "render flattened release summary line"
   assert_contains "${output}" "Unreleased Issues (2)" "render compact unreleased issues subsection with count"
   if [[ "${output}" == *$'\n- issues: 2 unreleased\n'* ]]; then
     fail "omit redundant detailed unreleased issue summary line"
@@ -271,8 +280,11 @@ EOF
   assert_contains "${output}" "[ALPHA-3](https://jira.example.com/browse/ALPHA-3): status: Resolved, MISSING fix_version, subject: Add second feature" "render linked missing-fix-version issue detail"
   assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement unreleased issue detail"
   assert_contains "${output}" "add missing fixVersion: jiggit assign-fix-version project-a --release 1.3.0" "suggest assign-fix-version for missing fix versions"
+  assert_contains "${output}" "Dependency updates (deps): 2 dependency updates" "render Renovate dependency update count"
   assert_contains "${output}" "changes: jiggit changes project-a --base prod" "render shared diff command"
-  assert_contains "${output}" "details: jiggit next-release project-a --base prod" "render next-release create command"
+  assert_contains "${output}" "## Next Steps" "render next steps heading"
+  assert_contains "${output}" "next release: jiggit next-release project-a --base prod" "render next-release create command"
+  assert_contains "${output}" $'Dependency updates (deps): 2 dependency updates\n\n## Next Steps' "separate next steps from issue details"
 
   local jira_issues_log
   jira_issues_log="$(sed -n '1,20p' "${TEST_TMPDIR}/jira-issues.log")"
