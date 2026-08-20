@@ -502,6 +502,50 @@ EOF
   assert_contains "${create_log}" '"name": "1.3.0"' "send suggested release name without v prefix"
 }
 
+test_run_next_release_main_reports_exact_rerun_after_jira_release_creation_failure() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/next-release-repo"
+  create_repo_for_next_release "${repo_dir}"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[next-release-project]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/next-release-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+EOF
+
+  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+  cat > "${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
+y
+
+EOF
+
+  local output
+  output="$(
+    # shellcheck disable=SC2329
+    create_jira_release_version() {
+      return 1
+    }
+
+    JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
+    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_next_release_main next-release-project --base prod --target refs/remotes/origin/main
+  )"
+
+  assert_contains "${output}" "status: \`⚠️ WARN\`" "report failed Jira release creation"
+  assert_contains "${output}" "rerun after fixing the Jira release error: \`jiggit next-release next-release-project --base prod --target refs/remotes/origin/main\`" "suggest exact rerun command after creation failure"
+}
+
 test_run_next_release_main_accepts_repo_path_selector_and_reports_up_to_date() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN

@@ -939,6 +939,20 @@ render_next_release_next_steps() {
   printf '\n'
 }
 
+# Render the exact next-release command after interactive creation fails.
+render_next_release_creation_failure_next_step() {
+  local project_id="${1}"
+  local base_operand="${2:-prod}"
+  local target_operand="${3:-}"
+  local rerun_command="jiggit next-release ${project_id} --base ${base_operand}"
+
+  if [[ -n "${target_operand}" ]]; then
+    rerun_command+=" --target ${target_operand}"
+  fi
+
+  printf -- "- rerun after fixing the Jira release error: \`%s\`\n" "${rerun_command}"
+}
+
 # Load config, compare a deployed base to the target branch, and suggest the next release.
 run_next_release_main() {
   local project_selector=""
@@ -1150,6 +1164,10 @@ run_next_release_main() {
     jira_release_result="$(maybe_create_next_jira_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}" "${project_id}")"
     IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
     render_next_release_jira_creation_status "${jira_release_state}" "${jira_release_detail}"
+    if [[ "${jira_release_state}" == "warn" ]]; then
+      render_next_release_creation_failure_next_step "${project_id}" "${base_operand}" "${target_operand}"
+      printf '\n'
+    fi
   else
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "" "${compare_url}" "up-to-date"
     render_next_release_next_steps "${project_id}" "" "${jira_project_key}" "${jira_base_url_value}" "" "${jira_config_next_step}"
