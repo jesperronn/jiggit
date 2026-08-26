@@ -277,7 +277,7 @@ EOF
   else
     pass "omit unreleased issue summary count lines"
   fi
-  assert_contains "${output}" "[ALPHA-3](https://jira.example.com/browse/ALPHA-3): status: Resolved, MISSING fix_version, subject: Add second feature" "render linked missing-fix-version issue detail"
+  assert_contains "${output}" "ALPHA-3: status: Resolved, MISSING fix_version, subject: Add second feature" "render missing-fix-version issue detail"
   assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement unreleased issue detail"
   assert_contains "${output}" "add missing fixVersion: jiggit assign-fix-version project-a --release 1.3.0" "suggest assign-fix-version for missing fix versions"
   assert_contains "${output}" "Dependency updates (deps): 2 dependency updates" "render Renovate dependency update count"

@@ -372,7 +372,8 @@ test_render_next_release_issue_lines_keeps_unknown_status_issues() {
     render_next_release_issue_lines '{"issues":[{"key":"ALPHA-9","fields":{"summary":"Triage follow-up","status":{"name":"Needs Triage"},"fixVersions":[]}}]}' "v1.3.0" "project-a" "https://jira.example.test"
   )"
 
-  assert_contains "${output}" '[ALPHA-9](https://jira.example.test/browse/ALPHA-9): status: Needs Triage, MISSING fix_version, subject: Triage follow-up' "render issue even when status falls outside named workflow buckets"
+  assert_contains "${output}" 'ALPHA-9: status: Needs Triage, MISSING fix_version, subject: Triage follow-up' "render issue even when status falls outside named workflow buckets"
+  assert_not_contains "${output}" '[ALPHA-9](https://jira.example.test/browse/ALPHA-9)' "avoid markdown links in terminal issue output"
   assert_not_contains "${output}" '_No Jira issues found for this unreleased span._' "avoid false empty jira issue state when issues are present"
 }
 

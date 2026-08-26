@@ -1,5 +1,11 @@
 # Jiggit V2 Roadmap
 
+## Follow-up Tasks
+
+### Consistent Output Formats
+- Design and implement a consistent `--format` interface across Jiggit commands.
+- Audit current tests for coverage gaps before expanding format support.
+
 ## Deferred From V1
 
 ### Multiple Jira Instances

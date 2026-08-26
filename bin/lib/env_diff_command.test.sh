@@ -186,7 +186,7 @@ EOF
   assert_contains "${output}" '## fix' "render fix section"
   assert_contains "${output}" '## docs' "render docs section"
   assert_contains "${output}" '## Jira Issues' "render jira issues section"
-  assert_contains "${output}" '[ALPHA-2](https://jira.example.test/browse/ALPHA-2): status: Done, MISSING fix_version, subject: Repair edge case' "render linked jira issue with missing fix version"
+  assert_contains "${output}" 'ALPHA-2: status: Done, MISSING fix_version, subject: Repair edge case' "render jira issue with missing fix version"
   assert_contains "${output}" 'add missing fixVersion: jiggit assign-fix-version project_a --release 1.1.0' "suggest assign-fix-version from env diff"
 
   local fetch_log

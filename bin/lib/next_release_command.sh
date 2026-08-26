@@ -526,10 +526,6 @@ print_next_release_issue_line() {
   local fix_bold=""
   local issue_key_display="${issue_key}"
 
-  if [[ -n "${issue_url}" ]]; then
-    issue_key_display="[${issue_key}](${issue_url})"
-  fi
-
   if ! use_color_output; then
     if [[ "${fix_version_state}" == "missing-fix-version" ]]; then
       printf '%s: status: %s, MISSING fix_version, subject: %s\n' \
@@ -550,12 +546,8 @@ print_next_release_issue_line() {
     fix_bold="${C_BOLD}"
   fi
 
-  if [[ -n "${issue_url}" ]]; then
-    printf '%s: status: ' "${issue_key_display}"
-  else
-    printf '%b%s%b status: ' \
-      "${C_BOLD}${C_CYAN}" "${issue_key_display}:" "${C_0}"
-  fi
+  printf '%b%s%b status: ' \
+    "${C_BOLD}${C_CYAN}" "${issue_key_display}:" "${C_0}"
   if [[ -n "${status_color}" ]]; then
     printf '%b%s%b' "${C_BOLD}${status_color}" "${status_name}" "${C_0}"
   else
