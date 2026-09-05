@@ -58,9 +58,10 @@ fi
 assign_fix_version_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>]
+  jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--apply]
 
-Add a Jira fixVersion to issues in the base-to-target commit span when they do not already have it.
+Preview Jira fixVersion updates by default. Use --apply to explicitly confirm
+and send updates for issues missing the selected fixVersion.
 EOF
 }
 
@@ -259,7 +260,7 @@ render_assign_fix_version_summary() {
   fi
 }
 
-# Add the chosen fixVersion to each issue that is missing it.
+# Add the chosen fixVersion to each issue that is missing it and count failures.
 apply_assign_fix_version_updates() {
   local jira_base_url_value="${1}"
   local release_name="${2}"
@@ -267,6 +268,8 @@ apply_assign_fix_version_updates() {
   local issue_json=""
   local issue_key=""
   local applied_count=0
+  local failed_count=0
+  local error_file=""
 
   while IFS= read -r issue_json; do
     [[ -z "${issue_json}" ]] && continue
@@ -277,23 +280,54 @@ apply_assign_fix_version_updates() {
     esac
     issue_key="$(printf '%s\n' "${issue_json}" | jq -r '.key // empty')"
     [[ -z "${issue_key}" ]] && continue
-    update_jira_issue_fix_version "${jira_base_url_value}" "${issue_key}" "${release_name}" >/dev/null
-    applied_count=$((applied_count + 1))
+    error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-assign-fix-version.XXXXXX")"
+    if update_jira_issue_fix_version "${jira_base_url_value}" "${issue_key}" "${release_name}" >/dev/null 2>"${error_file}"; then
+      applied_count=$((applied_count + 1))
+    else
+      failed_count=$((failed_count + 1))
+      if jiggit_is_verbose && [[ -s "${error_file}" ]]; then
+        cat "${error_file}" >&2
+      fi
+    fi
+    rm -f "${error_file}"
   done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
 
-  printf '%s\n' "${applied_count}"
+  printf '%s|%s\n' "${applied_count}" "${failed_count}"
+}
+
+# Build the explicit command that enables fixVersion updates.
+assign_fix_version_apply_command() {
+  local project_id="${1}"
+  local release_name="${2}"
+  local base_operand="${3:-prod}"
+  local target_operand="${4:-}"
+  local command_text="jiggit assign-fix-version ${project_id} --release ${release_name} --apply"
+
+  if [[ "${base_operand}" != "prod" ]]; then
+    command_text+=" --base ${base_operand}"
+  fi
+  if [[ -n "${target_operand}" ]]; then
+    command_text+=" --target ${target_operand}"
+  fi
+
+  printf '%s\n' "${command_text}"
 }
 
 # Render local next steps for assign-fix-version.
 render_assign_fix_version_next_steps() {
   local project_id="${1}"
   local release_name="${2}"
+  local missing_count="${3:-0}"
+  local apply_command="${4:-}"
 
   print_markdown_h2 "Next Steps" "${C_CYAN}"
   printf '\n'
   printf -- "- review release issues: \`jiggit changes %s --from-env prod --to %s\`\n" "${project_id}" "${release_name}"
   printf -- "- inspect the release summary: \`jiggit next-release %s\`\n" "${project_id}"
   printf -- "- review the production diff: \`jiggit changes %s --base prod\`\n\n" "${project_id}"
+  if [[ "${missing_count}" -gt 0 && -n "${apply_command}" ]]; then
+    printf -- "- apply the fixVersion updates after confirmation: \`%s\`\n\n" "${apply_command}"
+  fi
 }
 
 # Load config, resolve a Jira release, and add it to issues missing that fixVersion.
@@ -302,6 +336,7 @@ run_assign_fix_version_main() {
   local release_query=""
   local base_operand="prod"
   local target_operand=""
+  local apply_requested=0
 
   if [[ $# -gt 0 && "${1}" != -* ]]; then
     project_selector="${1}"
@@ -321,6 +356,10 @@ run_assign_fix_version_main() {
       --target)
         target_operand="${2:-}"
         shift 2
+        ;;
+      --apply)
+        apply_requested=1
+        shift
         ;;
       -h|--help)
         assign_fix_version_usage
@@ -356,6 +395,9 @@ run_assign_fix_version_main() {
   local missing_count=0
   local apply_choice=""
   local applied_count=0
+  local failed_count=0
+  local apply_command=""
+  local update_result=""
 
   if [[ -z "${release_query}" ]]; then
     printf 'Missing required option: --release\n' >&2
@@ -442,23 +484,55 @@ run_assign_fix_version_main() {
     esac
   done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
 
+  apply_command="$(assign_fix_version_apply_command "${project_id}" "${release_resolution_detail}" "${base_operand}" "${target_operand}")"
+  print_markdown_h2 "Update Plan" "${C_CYAN}"
+  printf '\n'
+  printf -- "- would update: \`%s\`\n" "${missing_count}"
+  if [[ "${missing_count}" -eq 0 ]]; then
+    printf -- "- status: \`%s\`\n\n" "$(render_status_label "ok")"
+  elif [[ "${apply_requested}" -eq 0 ]]; then
+    printf -- "- status: \`read-only preview\`\n"
+    printf -- "- next step: \`%s\`\n\n" "${apply_command}"
+  else
+    printf -- "- status: \`confirmation required\`\n\n"
+  fi
+
   if [[ "${missing_count}" -gt 0 ]]; then
-    if can_prompt_interactively; then
-      apply_choice="$(prompt_input_line "Add fixVersion ${release_resolution_detail} to ${missing_count} issue(s)? [y/N]: ")"
-      case "${apply_choice}" in
-        y|Y)
-          applied_count="$(apply_assign_fix_version_updates "${jira_base_url_value}" "${release_resolution_detail}" "${issues_json}")"
-          print_markdown_h2 "Update Result" "${C_MAGENTA}"
+    if [[ "${apply_requested}" -eq 1 ]]; then
+      if can_prompt_interactively; then
+        apply_choice="$(prompt_input_line "Add fixVersion ${release_resolution_detail} to ${missing_count} issue(s)? [y/N]: ")"
+        case "${apply_choice}" in
+          y|Y)
+            update_result="$(apply_assign_fix_version_updates "${jira_base_url_value}" "${release_resolution_detail}" "${issues_json}")"
+            IFS='|' read -r applied_count failed_count <<< "${update_result}"
+            print_markdown_h2 "Update Result" "${C_MAGENTA}"
+            printf '\n'
+            printf -- "- applied: \`%s\`\n" "${applied_count}"
+            printf -- "- failed: \`%s\`\n" "${failed_count}"
+            if [[ "${failed_count}" -gt 0 ]]; then
+              printf -- "- status: \`%s\`\n" "$(render_status_label "warn")"
+              printf -- "- next step: \`%s\`\n\n" "${apply_command}"
+              return 1
+            fi
+            printf -- "- status: \`%s\`\n\n" "$(render_status_label "ok")"
+            ;;
+          *)
+            print_markdown_h2 "Update Result" "${C_ORANGE}"
+            printf '\n'
+            printf -- "- applied: \`0\`\n"
+            printf -- "- status: \`%s\` (confirmation declined; no updates applied)\n" "$(render_status_label "warn")"
+            printf -- "- next step: \`%s\`\n\n" "${apply_command}"
+            ;;
+        esac
+      else
+          print_markdown_h2 "Update Result" "${C_ORANGE}"
           printf '\n'
-          printf -- "- applied: \`%s\`\n\n" "${applied_count}"
-          ;;
-      esac
-    else
-      print_markdown_h2 "Update Result" "${C_ORANGE}"
-      printf '\n'
-      printf -- "- status: \`interactive confirmation required\`\n\n"
+          printf -- "- applied: \`0\`\n"
+          printf -- "- status: \`%s\` (interactive confirmation required)\n" "$(render_status_label "warn")"
+          printf -- "- next step: \`%s\`\n\n" "${apply_command}"
+      fi
     fi
   fi
 
-  render_assign_fix_version_next_steps "${project_id}" "${release_resolution_detail}"
+  render_assign_fix_version_next_steps "${project_id}" "${release_resolution_detail}" "${missing_count}" "${apply_command}"
 }

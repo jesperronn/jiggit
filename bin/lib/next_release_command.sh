@@ -51,9 +51,11 @@ fi
 next_release_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>]
+  jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--create]
 
-Detect whether a project needs a new release and suggest the next minor version.
+Read-only by default: detect whether a project needs a release and suggest the
+next minor version. Use --create to explicitly offer interactive Jira release
+creation after the report.
 EOF
 }
 
@@ -911,6 +913,7 @@ render_next_release_next_steps() {
   local jira_base_url_value="${4:-}"
   local jira_release_state="${5:-}"
   local jira_config_next_step="${6:-}"
+  local jira_create_command="${7:-}"
 
   print_markdown_h2 "Next Steps" "${C_CYAN}"
   printf '\n'
@@ -921,13 +924,15 @@ render_next_release_next_steps() {
   fi
   if [[ -n "${jira_project_key}" && -n "${suggested_version}" ]]; then
     printf -- "- inspect issues for the suggested release: \`jiggit changes %s --from-env prod --to %s\`\n" "${project_id}" "${suggested_version#v}"
-    printf -- "- assign the fixVersion across commit-linked issues: \`jiggit assign-fix-version %s --release %s\`\n" "${project_id}" "${suggested_version#v}"
+    printf -- "- assign the fixVersion across commit-linked issues: \`jiggit assign-fix-version %s --release %s --apply\`\n" "${project_id}" "${suggested_version#v}"
   fi
   if [[ -n "${jira_config_next_step}" ]]; then
     printf -- "- review Jira config: \`%s\`\n" "${jira_config_next_step}"
   fi
-  if [[ "${jira_release_state}" == "missing" || "${jira_release_state}" == "warn" ]]; then
-    printf -- "- rerun interactively to create the Jira release: \`jiggit next-release %s\`\n" "${project_id}"
+  if [[ "${jira_release_state}" == "missing" && -n "${jira_create_command}" ]]; then
+    printf -- "- create the Jira release after confirmation: \`%s\`\n" "${jira_create_command}"
+  elif [[ "${jira_release_state}" == "warn" && -n "${jira_create_command}" ]]; then
+    printf -- "- retry Jira release creation after fixing the error: \`%s\`\n" "${jira_create_command}"
   fi
   printf '\n'
 }
@@ -937,7 +942,7 @@ render_next_release_creation_failure_next_step() {
   local project_id="${1}"
   local base_operand="${2:-prod}"
   local target_operand="${3:-}"
-  local rerun_command="jiggit next-release ${project_id} --base ${base_operand}"
+  local rerun_command="jiggit next-release ${project_id} --create --base ${base_operand}"
 
   if [[ -n "${target_operand}" ]]; then
     rerun_command+=" --target ${target_operand}"
@@ -946,11 +951,26 @@ render_next_release_creation_failure_next_step() {
   printf -- "- rerun after fixing the Jira release error: \`%s\`\n" "${rerun_command}"
 }
 
+# Build the explicit command that enables Jira release creation.
+next_release_create_command() {
+  local project_id="${1}"
+  local base_operand="${2:-prod}"
+  local target_operand="${3:-}"
+  local command_text="jiggit next-release ${project_id} --create --base ${base_operand}"
+
+  if [[ -n "${target_operand}" ]]; then
+    command_text+=" --target ${target_operand}"
+  fi
+
+  printf '%s\n' "${command_text}"
+}
+
 # Load config, compare a deployed base to the target branch, and suggest the next release.
 run_next_release_main() {
   local project_selector=""
   local base_operand="prod"
   local target_operand=""
+  local create_requested=0
 
   if [[ $# -gt 0 && "${1}" != -* ]]; then
     project_selector="${1}"
@@ -966,6 +986,10 @@ run_next_release_main() {
       --target)
         target_operand="${2:-}"
         shift 2
+        ;;
+      --create)
+        create_requested=1
+        shift
         ;;
       -h|--help)
         next_release_usage
@@ -1009,6 +1033,7 @@ run_next_release_main() {
   local git_tag_present="no"
   local release_matrix_state="unknown"
   local jira_issue_fetch_failed=0
+  local jira_create_command=""
   local -a issue_keys=()
   local issues_json='{"issues":[]}'
   local releases_json='[]'
@@ -1166,9 +1191,24 @@ run_next_release_main() {
         printf -- "- next step: \`jiggit config\`\n\n"
       fi
     fi
-    render_next_release_next_steps "${project_id}" "${suggested_version}" "${jira_project_key}" "${jira_base_url_value}" "" "${jira_config_next_step}"
-    jira_release_result="$(maybe_create_next_jira_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}" "${project_id}")"
-    IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
+    jira_create_command="$(next_release_create_command "${project_id}" "${base_operand}" "${target_operand}")"
+    if [[ -z "${jira_project_key}" || -z "${jira_base_url_value}" || "${jira_auth_mode_value}" == "missing" ]]; then
+      jira_release_state="unavailable"
+      jira_release_detail="${jira_release_fetch_detail}"
+    elif [[ "${jira_release_fetch_state}" != "ok" ]]; then
+      jira_release_state="warn"
+      jira_release_detail="${jira_release_fetch_detail}"
+    elif [[ "${jira_release_present}" == "yes" ]]; then
+      jira_release_state="already-exists"
+      jira_release_detail="release already exists; no creation needed"
+    elif [[ "${create_requested}" -eq 1 ]]; then
+      jira_release_result="$(maybe_create_next_jira_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}" "${project_id}")"
+      IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
+    else
+      jira_release_state="missing"
+      jira_release_detail="not requested; run ${jira_create_command} after review"
+    fi
+    render_next_release_next_steps "${project_id}" "${suggested_version}" "${jira_project_key}" "${jira_base_url_value}" "${jira_release_state}" "${jira_config_next_step}" "${jira_create_command}"
     render_next_release_jira_creation_status "${jira_release_state}" "${jira_release_detail}"
     if [[ "${jira_release_state}" == "warn" ]]; then
       render_next_release_creation_failure_next_step "${project_id}" "${base_operand}" "${target_operand}"
@@ -1179,6 +1219,6 @@ run_next_release_main() {
     fi
   else
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "" "${compare_url}" "up-to-date"
-    render_next_release_next_steps "${project_id}" "" "${jira_project_key}" "${jira_base_url_value}" "" "${jira_config_next_step}"
+    render_next_release_next_steps "${project_id}" "" "${jira_project_key}" "${jira_base_url_value}" "" "${jira_config_next_step}" ""
   fi
 }

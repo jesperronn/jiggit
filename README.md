@@ -37,7 +37,8 @@ Current commands:
 - `jiggit doctor [--fix|--repair] [--ignore-failures] [<project|path> ...]`
 - `jiggit doctor jira [--fix|--repair] [<project|path> ...]`
 - `jiggit jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run]`
-- `jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>]`
+- `jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--create]`
+- `jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--apply]`
 - `jiggit releases [<project|path>]`
 
 Global project-scope flags:
@@ -117,8 +118,12 @@ dev = "https://dev.project-a.example.com/actuator/info"
 
 - Detect whether `prod` is behind and suggest the next release:
   `jiggit next-release project_a`
-- Add a missing fixVersion to commit-linked issues:
+- Create the reviewed suggested Jira release, with a final confirmation:
+  `jiggit next-release project_a --create`
+- Preview commit-linked issues that need the selected fixVersion:
   `jiggit assign-fix-version project_a --release 1.3.0.0`
+- Apply the reviewed fixVersion updates, with a final confirmation:
+  `jiggit assign-fix-version project_a --release 1.3.0.0 --apply`
 - Show release-oriented changes and Jira issues for a release:
   `jiggit changes project_a --from-env prod --to 2.1.0.26`
 
