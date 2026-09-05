@@ -178,8 +178,8 @@ EOF
   else
     pass "fail releases when jira project key is missing"
     assert_contains "${output}" "# jiggit releases" "render releases heading on config failure"
-    assert_contains "${output}" "status: \`missing jira project key\`" "render jira key failure status"
-    assert_contains "${output}" "next step: \`jiggit config\`" "render config next step for missing jira key"
+    assert_contains "${output}" "status: \`❌ FAIL\` (missing Jira project key)" "render normalized jira key failure status"
+    assert_contains "${output}" "next step: \`jiggit doctor --fix project-a\`" "render repair next step for missing jira key"
   fi
 }
 

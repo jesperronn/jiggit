@@ -79,9 +79,9 @@ EOF
     run_jira_create_main "worker-project" --dry-run
   )"
 
-  assert_contains "${output}" "Project: worker-project" "dry run prints project id"
-  assert_contains "${output}" "Jira project: PLAT" "dry run prints jira project key"
-  assert_contains "${output}" "Summary: feat: add issue creator" "dry run derives summary from commit"
+  assert_contains "${output}" "- Project: \`worker-project\`" "dry run prints project id"
+  assert_contains "${output}" "- Jira project: \`PLAT\`" "dry run prints jira project key"
+  assert_contains "${output}" "- Summary: \`feat: add issue creator\`" "dry run derives summary from commit"
   assert_contains "${output}" '"summary": "feat: add issue creator"' "dry run payload contains derived summary"
   assert_contains "${output}" 'Body line one' "dry run payload includes commit body"
 }
@@ -110,8 +110,95 @@ EOF
     run_jira_create_main --dry-run
   )"
 
-  assert_contains "${output}" "Project: worker-project" "resolve jira-create project from current repo"
-  assert_contains "${output}" "Summary: feat: add issue creator" "derive summary from current repo selector"
+  assert_contains "${output}" "- Project: \`worker-project\`" "resolve jira-create project from current repo"
+  assert_contains "${output}" "- Summary: \`feat: add issue creator\`" "derive summary from current repo selector"
+}
+
+test_run_jira_create_main_reports_unknown_project() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[worker-project]
+repo_path = "/tmp/worker-repo"
+jira_project_key = "PLAT"
+EOF
+
+  local output=""
+  if output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+    run_jira_create_main missing-project 2>&1
+  )"; then
+    fail "fail jira-create for an unknown project"
+  else
+    pass "fail jira-create for an unknown project"
+    assert_contains "${output}" "status: \`❌ FAIL\` (unknown project or path: missing-project)" "report unknown jira-create project"
+    assert_contains "${output}" "next step: \`jiggit config missing-project\`" "suggest config for unknown jira-create project"
+  fi
+}
+
+test_run_jira_create_main_reports_missing_jira_url_without_mutating() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/worker-repo"
+  create_repo_with_commit "${repo_dir}" "PLAT-42 feat: add issue creator"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[worker-project]
+repo_path = "${repo_dir}"
+jira_project_key = "PLAT"
+EOF
+  local config_before
+  config_before="$(cat "${projects_file}")"
+
+  local output=""
+  if output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+    run_jira_create_main worker-project 2>&1
+  )"; then
+    fail "fail jira-create without a Jira base URL"
+  else
+    pass "fail jira-create without a Jira base URL"
+    assert_contains "${output}" "status: \`❌ FAIL\` (missing Jira base URL)" "report missing Jira URL"
+    assert_contains "${output}" "next step: \`jiggit doctor --fix worker-project\`" "suggest Jira configuration repair"
+    assert_eq "${config_before}" "$(cat "${projects_file}")" "keep config unchanged after jira-create failure"
+  fi
+}
+
+test_run_jira_create_main_reports_missing_auth_without_networking() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/worker-repo"
+  create_repo_with_commit "${repo_dir}" "PLAT-42 feat: add issue creator"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+
+[worker-project]
+repo_path = "${repo_dir}"
+jira_project_key = "PLAT"
+EOF
+
+  local output=""
+  if output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+    run_jira_create_main worker-project 2>&1
+  )"; then
+    fail "fail jira-create without Jira authentication"
+  else
+    pass "fail jira-create without Jira authentication"
+    assert_contains "${output}" "status: \`❌ FAIL\` (missing Jira authentication)" "report missing Jira authentication"
+    assert_contains "${output}" "next step: \`jiggit doctor --fix worker-project\`" "suggest Jira auth repair"
+  fi
 }
 
 run_tests "$@"

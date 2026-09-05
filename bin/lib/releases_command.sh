@@ -338,8 +338,8 @@ render_releases_failure() {
   printf -- "- Repo path: \`%s\`\n\n" "${repo_path:-missing}"
   print_markdown_h2 "Releases" "${C_BLUE}"
   printf '\n'
-  printf -- "- status: \`%s\`\n" "${status}"
-  printf -- "- next step: \`%s\`\n" "${next_step_command}"
+  render_status_line "fail" "${status}"
+  render_next_step_line "${next_step_command}"
 }
 
 # Load config, fetch Jira releases, and render the report.
@@ -371,7 +371,8 @@ run_releases_main() {
   fi
   project_id="$(resolve_project_selector "${project_selector}" || true)"
   if [[ -z "${project_id}" ]]; then
-    printf 'Unknown project or path: %s\n' "${project_selector:-$PWD}" >&2
+    project_id="${project_selector:-$PWD}"
+    render_releases_failure "${project_id}" "unknown" "unknown project or path: ${project_id}" "jiggit config ${project_id}"
     return 1
   fi
 
@@ -386,13 +387,13 @@ run_releases_main() {
   repo_path="$(project_repo_path "${project_id}")"
 
   if [[ -z "${jira_project_key}" ]]; then
-    render_releases_failure "${project_id}" "${repo_path}" "missing jira project key" "jiggit config"
+    render_releases_failure "${project_id}" "${repo_path}" "missing Jira project key" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   jira_base_url_value="$(jira_base_url "${project_id}")"
   if [[ -z "${jira_base_url_value}" ]]; then
-    render_releases_failure "${project_id}" "${repo_path}" "missing jira base url" "jiggit config"
+    render_releases_failure "${project_id}" "${repo_path}" "missing Jira base URL" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 

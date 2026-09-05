@@ -194,6 +194,63 @@ Config:
 USAGE
 }
 
+# Render a structured Jira issue creation failure.
+render_jira_create_failure() {
+  local project_id="${1}"
+  local repo_path="${2:-missing}"
+  local status="${3}"
+  local next_step_command="${4}"
+
+  print_markdown_h1 "jiggit jira-create"
+  printf '\n'
+  printf -- "- Project: \`%s\`\n" "${project_id}"
+  printf -- "- Repo path: \`%s\`\n" "${repo_path}"
+  render_status_line "fail" "${status}"
+  render_next_step_line "${next_step_command}"
+}
+
+# Render the non-mutating Jira issue preview.
+render_jira_create_preview() {
+  local project_id="${1}"
+  local jira_project_key="${2}"
+  local commit_ref="${3}"
+  local short_hash="${4}"
+  local summary="${5}"
+  local issue_type="${6}"
+  local payload="${7}"
+
+  print_markdown_h1 "jiggit jira-create"
+  printf '\n'
+  print_markdown_h2 "Preview" "${C_CYAN}"
+  printf '\n'
+  printf -- "- Project: \`%s\`\n" "${project_id}"
+  printf -- "- Jira project: \`%s\`\n" "${jira_project_key}"
+  printf -- "- Commit: \`%s\` (\`%s\`)\n" "${commit_ref}" "${short_hash}"
+  printf -- "- Summary: \`%s\`\n" "${summary}"
+  printf -- "- Issue type: \`%s\`\n" "${issue_type}"
+  printf -- "- status: \`%s\`\n\n" "$(render_status_label "ok")"
+  printf '%s\n' "${payload}"
+}
+
+# Render the created issue and its immediate follow-up command.
+render_jira_create_success() {
+  local project_id="${1}"
+  local issue_key="${2}"
+  local issue_self="${3:-}"
+
+  print_markdown_h1 "jiggit jira-create"
+  printf '\n'
+  print_markdown_h2 "Created" "${C_GREEN}"
+  printf '\n'
+  printf -- "- Project: \`%s\`\n" "${project_id}"
+  printf -- "- Issue: \`%s\`\n" "${issue_key}"
+  if [[ -n "${issue_self}" ]]; then
+    printf -- "- URL: \`%s\`\n" "${issue_self}"
+  fi
+  render_status_line "ok" "Jira issue created"
+  render_next_step_line "jiggit releases ${project_id}" "next step"
+}
+
 # Parse options, load project config, derive issue data, and create or preview a Jira issue.
 run_jira_create_main() {
   local project_selector=""
@@ -254,26 +311,27 @@ run_jira_create_main() {
   fi
   project_id="$(resolve_project_selector "${project_selector}" || true)"
   if [[ -z "${project_id}" ]]; then
-    printf 'Unknown project or path: %s\n' "${project_selector:-$PWD}" >&2
+    project_id="${project_selector:-$PWD}"
+    render_jira_create_failure "${project_id}" "unknown" "unknown project or path: ${project_id}" "jiggit config ${project_id}"
     return 1
   fi
 
   local repo_path
   repo_path="$(project_repo_path "${project_id}")"
   if [[ -z "${repo_path}" ]]; then
-    printf 'Project %s is missing a repo path in config.\n' "${project_id}" >&2
+    render_jira_create_failure "${project_id}" "missing" "missing repo path in config" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   if [[ ! -d "${repo_path}" ]]; then
-    printf 'Project repo path does not exist: %s\n' "${repo_path}" >&2
+    render_jira_create_failure "${project_id}" "${repo_path}" "repo path does not exist: ${repo_path}" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   local jira_project_key
   jira_project_key="$(project_jira_project_key "${project_id}")"
   if [[ -z "${jira_project_key}" ]]; then
-    printf 'Project %s is missing a Jira project key in config.\n' "${project_id}" >&2
+    render_jira_create_failure "${project_id}" "${repo_path}" "missing Jira project key in config" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
@@ -292,24 +350,33 @@ run_jira_create_main() {
   payload="$(build_jira_issue_payload "${jira_project_key}" "${issue_type}" "${summary}" "${description}")"
 
   if [[ "${dry_run}" -eq 1 ]]; then
-    printf 'Project: %s\n' "${project_id}"
-    printf 'Jira project: %s\n' "${jira_project_key}"
-    printf 'Commit: %s (%s)\n' "${commit_ref}" "${short_hash}"
-    printf 'Summary: %s\n' "${summary}"
-    printf 'Issue type: %s\n' "${issue_type}"
-    printf '%s\n' "${payload}"
+    render_jira_create_preview "${project_id}" "${jira_project_key}" "${commit_ref}" "${short_hash}" "${summary}" "${issue_type}" "${payload}"
     return 0
   fi
 
   local jira_base_url_value
   jira_base_url_value="$(jira_base_url "${project_id}")"
   if [[ -z "${jira_base_url_value}" ]]; then
-    printf 'Missing Jira base URL. Configure jira.base_url in TOML.\n' >&2
+    render_jira_create_failure "${project_id}" "${repo_path}" "missing Jira base URL" "jiggit doctor --fix ${project_id}"
+    return 1
+  fi
+  if [[ "$(jira_auth_mode "${project_id}")" == "missing" ]]; then
+    render_jira_create_failure "${project_id}" "${repo_path}" "missing Jira authentication" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   local response
-  response="$(create_jira_issue "${jira_base_url_value}" "${payload}" "${project_id}")"
+  local error_file
+  error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-jira-create.XXXXXX")"
+  if ! response="$(create_jira_issue "${jira_base_url_value}" "${payload}" "${project_id}" 2>"${error_file}")"; then
+    if jiggit_is_verbose && [[ -s "${error_file}" ]]; then
+      cat "${error_file}" >&2
+    fi
+    rm -f "${error_file}"
+    render_jira_create_failure "${project_id}" "${repo_path}" "Jira issue request failed" "jiggit doctor jira ${project_id}"
+    return 1
+  fi
+  rm -f "${error_file}"
 
   local issue_key
   local issue_self
@@ -317,13 +384,9 @@ run_jira_create_main() {
   issue_self="$(printf '%s' "${response}" | jq -r '.self // empty')"
 
   if [[ -z "${issue_key}" ]]; then
-    printf '%s\n' "${response}"
-    printf 'Jira did not return an issue key.\n' >&2
+    render_jira_create_failure "${project_id}" "${repo_path}" "Jira response did not include an issue key" "jiggit doctor jira ${project_id}"
     return 1
   fi
 
-  printf 'Created issue %s\n' "${issue_key}"
-  if [[ -n "${issue_self}" ]]; then
-    printf '%s\n' "${issue_self}"
-  fi
+  render_jira_create_success "${project_id}" "${issue_key}" "${issue_self}"
 }

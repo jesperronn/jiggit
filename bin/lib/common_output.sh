@@ -110,6 +110,26 @@ render_status_label() {
   esac
 }
 
+# Render a normalized status with optional human-readable detail.
+render_status_line() {
+  local status="${1:-}"
+  local detail="${2:-}"
+
+  printf -- "- status: \`%s\`" "$(render_status_label "${status}")"
+  if [[ -n "${detail}" ]]; then
+    printf ' (%s)' "${detail}"
+  fi
+  printf '\n'
+}
+
+# Render one copy-paste recovery command.
+render_next_step_line() {
+  local command="${1:-}"
+  local label="${2:-next step}"
+
+  printf -- "- %s: \`%s\`\n" "${label}" "${command}"
+}
+
 # Print a usage line that bolds the jiggit subcommand token when present.
 print_jiggit_usage_line() {
   local line="${1:-}"

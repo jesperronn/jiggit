@@ -490,7 +490,7 @@ run_doctor_jira_main() {
   while IFS= read -r project_id; do
     [[ -z "${project_id}" ]] && continue
     if ! project_exists "${project_id}"; then
-      render_jira_check_failure "${project_id}" "missing" "missing" "unknown project" "unknown" "unknown" "fail" "jiggit config"
+      render_jira_check_failure "${project_id}" "missing" "missing" "unknown project" "unknown" "unknown" "fail" "jiggit config ${project_id}"
       saw_failure=1
       continue
     fi
@@ -585,6 +585,7 @@ run_doctor_main() {
         print_markdown_h2 "${project_id}" "${C_ORANGE}"
         printf '\n'
         doctor_emit_check "project config" "fail" "unknown project"
+        doctor_emit_next_step "review project configuration" "jiggit config ${project_id}"
         printf '\n'
       fi
       saw_failure_after="${JIGGIT_DOCTOR_SAW_FAILURE:-0}"

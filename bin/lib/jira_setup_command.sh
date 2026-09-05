@@ -189,12 +189,18 @@ run_jira_setup_main() {
   fi
 
   if [[ $# -gt 1 ]]; then
-    printf 'jiggit setup jira accepts at most one Jira name.\n' >&2
+    print_markdown_h1 "jiggit setup jira"
+    printf '\n'
+    render_status_line "fail" "accepts at most one Jira name"
+    render_next_step_line "jiggit setup jira --help"
     return 1
   fi
 
   if ! can_prompt_interactively; then
-    printf 'jiggit setup jira requires an interactive terminal.\n' >&2
+    print_markdown_h1 "jiggit setup jira"
+    printf '\n'
+    render_status_line "fail" "interactive terminal required"
+    render_next_step_line "jiggit setup jira"
     return 1
   fi
 
@@ -213,7 +219,8 @@ run_jira_setup_main() {
   base_url="$(prompt_input_line "Jira base URL [$(jira_base_url "${jira_name}")]: ")"
   base_url="${base_url:-$(jira_base_url "${jira_name}")}"
   if [[ -z "${base_url}" ]]; then
-    printf 'Jira base URL is required.\n' >&2
+    render_status_line "fail" "Jira base URL is required"
+    render_next_step_line "jiggit setup jira"
     return 1
   fi
 
@@ -234,7 +241,8 @@ run_jira_setup_main() {
     fi
   else
     if [[ "${jira_name}" != "default" ]]; then
-      printf 'Named Jira configs currently support .envrc only for the default Jira.\n' >&2
+      render_status_line "fail" "named Jira configs support .envrc only for default"
+      render_next_step_line "jiggit setup jira default"
       return 1
     fi
     api_token="$(prompt_input_line "JIRA_API_TOKEN value: ")"

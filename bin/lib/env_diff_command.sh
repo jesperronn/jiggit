@@ -477,14 +477,16 @@ render_env_diff_jira_issues() {
   fi
 
   if [[ "${jira_fetch_status}" == "missing-config" ]]; then
-    printf -- "- status: missing jira base url\n"
-    printf -- "- next step: jiggit config\n\n"
+    render_status_line "fail" "missing Jira base URL"
+    render_next_step_line "jiggit doctor --fix ${project_id}"
+    printf '\n'
     return 0
   fi
 
   if [[ "${jira_fetch_status}" == "fetch-failed" ]]; then
-    printf -- "- status: unable to fetch jira issues\n"
-    printf -- "- next step: jiggit doctor jira %s\n\n" "${project_id}"
+    render_status_line "fail" "unable to fetch Jira issues"
+    render_next_step_line "jiggit doctor jira ${project_id}"
+    printf '\n'
     return 0
   fi
 
@@ -503,6 +505,21 @@ render_env_diff_jira_issues() {
     printf -- "- add missing fixVersion: jiggit assign-fix-version %s --release %s\n" "${project_id}" "${suggested_version#v}"
   fi
   printf '\n'
+}
+
+# Render a failed operand resolution with the relevant repair command.
+render_env_diff_failure() {
+  local project_id="${1}"
+  local repo_path="${2}"
+  local detail="${3}"
+  local next_step_command="${4}"
+
+  print_markdown_h1 "jiggit changes"
+  printf '\n'
+  printf -- "- Project: \`%s\`\n" "${project_id}"
+  printf -- "- Repo path: \`%s\`\n" "${repo_path:-missing}"
+  render_status_line "fail" "${detail}"
+  render_next_step_line "${next_step_command}"
 }
 
 # Render the full env-diff report once both environment versions are resolved.
@@ -643,7 +660,12 @@ run_env_diff_main() {
   fi
   project_id="$(resolve_project_selector "${project_selector}" || true)"
   if [[ -z "${project_id}" ]]; then
-    printf 'Unknown project or path: %s\n' "${project_selector:-$PWD}" >&2
+    project_id="${project_selector:-$PWD}"
+    print_markdown_h1 "jiggit changes"
+    printf '\n'
+    printf -- "- Project: \`%s\`\n" "${project_id}"
+    render_status_line "fail" "unknown project or path: ${project_id}"
+    render_next_step_line "jiggit config ${project_id}"
     return 1
   fi
 
@@ -680,19 +702,24 @@ run_env_diff_main() {
   configured_environments=" $(project_environments "${project_id}") "
 
   if [[ ! -d "${repo_path}" ]]; then
-    printf 'Project repo path does not exist: %s\n' "${repo_path}" >&2
+    print_markdown_h1 "jiggit changes"
+    printf '\n'
+    printf -- "- Project: \`%s\`\n" "${project_id}"
+    printf -- "- Repo path: \`%s\`\n" "${repo_path:-missing}"
+    render_status_line "fail" "repo path does not exist: ${repo_path:-missing}"
+    render_next_step_line "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   base_resolution="$(env_diff_resolve_operand "${project_id}" "${repo_path}" "${configured_environments}" "${base_input}")" || {
-    printf '%s\n' "${base_resolution#ERROR|}" >&2
+    render_env_diff_failure "${project_id}" "${repo_path}" "${base_resolution#ERROR|}" "jiggit doctor --fix ${project_id}"
     return 1
   }
   IFS='|' read -r _ base_label base_value base_norm base_compare_ref <<< "${base_resolution}"
 
   if [[ -n "${target_input}" ]]; then
     target_resolution="$(env_diff_resolve_operand "${project_id}" "${repo_path}" "${configured_environments}" "${target_input}")" || {
-      printf '%s\n' "${target_resolution#ERROR|}" >&2
+      render_env_diff_failure "${project_id}" "${repo_path}" "${target_resolution#ERROR|}" "jiggit changes ${project_id} --base ${base_input}"
       return 1
     }
     IFS='|' read -r _ target_label target_value target_norm target_compare_ref <<< "${target_resolution}"

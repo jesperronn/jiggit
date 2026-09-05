@@ -108,6 +108,15 @@ render_config_jira_summary() {
   done < <(jira_check_jira_names_for_projects "${project_ids[@]}")
 }
 
+# Render a clear failure for a selector that is not a configured project.
+render_config_unknown_project() {
+  local project_id="${1}"
+
+  print_markdown_project_item "${project_id}"
+  render_status_line "fail" "unknown project or path: ${project_id}"
+  render_next_step_line "jiggit config ${project_id}"
+}
+
 # Render the shared global config view.
 render_config_global_summary() {
   local -a selectors=("$@")
@@ -161,7 +170,11 @@ render_config_projects_summary() {
   fi
 
   for project_id in "${project_ids[@]}"; do
-    render_project_config_entry "${project_id}"
+    if project_exists "${project_id}"; then
+      render_project_config_entry "${project_id}"
+    else
+      render_config_unknown_project "${project_id}"
+    fi
   done
 }
 

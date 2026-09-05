@@ -168,6 +168,57 @@ EOF
   else
     pass "fail when one configured environment has no info url"
     assert_contains "${output}" "\`ft  \`: \`ERROR: missing info URL in config\` from \`missing\`" "report missing environment info url"
+    assert_contains "${output}" "next step: \`jiggit doctor --fix project-a\`" "suggest project-specific environment repair"
+  fi
+}
+
+test_run_env_versions_main_reports_unknown_project_with_config_next_step() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[project-a]
+repo_path = "/tmp/project-a"
+environments = ["prod"]
+EOF
+
+  local output=""
+  if output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    run_env_versions_main missing-project 2>&1
+  )"; then
+    fail "fail env-versions for an unknown project"
+  else
+    pass "fail env-versions for an unknown project"
+    assert_contains "${output}" "unknown project or path: missing-project" "report unknown env-versions selector"
+    assert_contains "${output}" "next step: \`jiggit config missing-project\`" "suggest config for unknown env-versions selector"
+  fi
+}
+
+test_run_env_versions_main_reports_missing_environment_configuration() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<'EOF'
+[project-a]
+repo_path = "/tmp/project-a"
+environments = []
+EOF
+
+  local output=""
+  if output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    run_env_versions_main project-a 2>&1
+  )"; then
+    fail "fail env-versions without configured environments"
+  else
+    pass "fail env-versions without configured environments"
+    assert_contains "${output}" "status: \`❌ FAIL\` (no configured environments)" "report missing environment configuration"
+    assert_contains "${output}" "next step: \`jiggit doctor --fix project-a\`" "suggest environment configuration repair"
   fi
 }
 

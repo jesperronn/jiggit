@@ -277,8 +277,8 @@ EOF
 
   assert_contains "${output}" "## Jira Status" "render Jira status when auth is missing"
   assert_contains "${output}" "status: \`missing Jira auth\`" "report missing Jira auth"
-  assert_contains "${output}" "next step: \`jiggit setup jira\`" "suggest Jira setup as the next step"
-  assert_contains "${output}" "review Jira config: \`jiggit setup jira\`" "repeat the setup guidance in next steps"
+  assert_contains "${output}" "next step: \`jiggit doctor jira next-release-project\`" "suggest Jira diagnostics as the next step"
+  assert_contains "${output}" "review Jira config: \`jiggit doctor jira next-release-project\`" "repeat the diagnostic guidance in next steps"
   assert_not_contains "${output}" "should-not-call" "skip Jira release fetching when auth is missing"
 }
 
@@ -531,12 +531,12 @@ EOF
 
   local output
   output="$(
-    JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0" \
     # shellcheck disable=SC2329
     create_jira_release_version() {
       return 1
     }
 
+    JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
@@ -611,8 +611,8 @@ EOF
 
   assert_contains "${output}" "## Jira Status" "render jira status section when jira config is missing"
   assert_contains "${output}" "status: \`missing jira project key\`" "render missing jira key status"
-  assert_contains "${output}" "next step: \`jiggit config next-release-project\`" "suggest project-specific config as jira next step"
-  assert_contains "${output}" "review Jira config: \`jiggit config next-release-project\`" "include project-specific config command in next steps"
+  assert_contains "${output}" "next step: \`jiggit doctor --fix next-release-project\`" "suggest project-specific repair as jira next step"
+  assert_contains "${output}" "review Jira config: \`jiggit doctor --fix next-release-project\`" "include project-specific repair command in next steps"
 }
 
 test_run_next_release_main_fails_with_guidance_when_repo_path_is_missing() {
@@ -637,8 +637,8 @@ EOF
   else
     pass "fail next-release when repo path is missing"
     assert_contains "${output}" "# jiggit next-release" "render next-release heading on repo-path failure"
-    assert_contains "${output}" "Status: \`missing local repo path\`" "render repo-path failure status"
-    assert_contains "${output}" "Next step: \`jiggit config\`" "render config next step for missing repo path"
+    assert_contains "${output}" "status: \`❌ FAIL\` (missing local repo path)" "render normalized repo-path failure status"
+    assert_contains "${output}" "next step: \`jiggit doctor --fix next-release-project\`" "render project-specific repair next step for missing repo path"
   fi
 }
 

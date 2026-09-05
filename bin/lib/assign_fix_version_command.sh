@@ -180,8 +180,9 @@ render_assign_fix_version_failure() {
   printf '\n'
   printf -- "- Project: \`%s\`\n" "${project_id}"
   printf -- "- Repo path: \`%s\`\n" "${repo_path:-missing}"
-  printf -- "- Status: \`%s\`\n" "${status}"
-  printf -- "- Next step: \`%s\`\n\n" "${next_step_command}"
+  render_status_line "fail" "${status}"
+  render_next_step_line "${next_step_command}"
+  printf '\n'
 }
 
 # Render one issue in the assign-fix-version report.
@@ -367,7 +368,8 @@ run_assign_fix_version_main() {
   fi
   project_id="$(resolve_project_selector "${project_selector}" || true)"
   if [[ -z "${project_id}" ]]; then
-    printf 'Unknown project or path: %s\n' "${project_selector:-$PWD}" >&2
+    project_id="${project_selector:-$PWD}"
+    render_assign_fix_version_failure "${project_id}" "unknown" "unknown project or path: ${project_id}" "jiggit config ${project_id}"
     return 1
   fi
 
@@ -377,12 +379,12 @@ run_assign_fix_version_main() {
   environments=" $(project_environments "${project_id}") "
 
   if [[ -z "${repo_path}" || ! -d "${repo_path}" ]]; then
-    render_assign_fix_version_failure "${project_id}" "${repo_path}" "missing local repo path" "jiggit config"
+    render_assign_fix_version_failure "${project_id}" "${repo_path}" "missing local repo path" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   if [[ -z "${jira_project_key}" || -z "${jira_base_url_value}" ]]; then
-    render_assign_fix_version_failure "${project_id}" "${repo_path}" "missing Jira config" "jiggit config"
+    render_assign_fix_version_failure "${project_id}" "${repo_path}" "missing Jira config" "jiggit doctor --fix ${project_id}"
     render_jira_config_diagnostic >&2
     return 1
   fi
@@ -423,7 +425,10 @@ run_assign_fix_version_main() {
   issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}")"
   if [[ -n "${issue_keys_text}" ]]; then
     mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
-    issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}")"
+    if ! issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}" 2>/dev/null)"; then
+      render_assign_fix_version_failure "${project_id}" "${repo_path}" "unable to fetch Jira issues" "jiggit doctor jira ${project_id}"
+      return 1
+    fi
   fi
 
   render_assign_fix_version_summary "${project_id}" "${repo_path}" "${base_label}" "${base_git_ref}" "${target_ref}" "${release_resolution_detail}" "${issues_json}"
