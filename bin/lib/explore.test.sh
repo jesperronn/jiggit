@@ -375,14 +375,18 @@ y
 
 EOF
 
-  JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/explore-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_explore_main --dry-run "${repo_dir}" >/dev/null
+  local output
+  output="$(
+    JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/explore-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_explore_main --dry-run "${repo_dir}" 2>&1
+  )"
 
   local updated_file
   updated_file="$(cat "${projects_file}")"
+  assert_contains "${output}" "Newly discovered: 1" "report repaired repository discovery"
   assert_contains "${updated_file}" "[jira]" "append jira table during default explore repair"
   assert_contains "${updated_file}" 'base_url = "https://jira.example.com"' "write jira base url during default explore repair"
   assert_contains "${updated_file}" 'bearer_token = "token-123"' "write jira bearer token during default explore repair"
@@ -472,12 +476,16 @@ test_write_discovery_file_appends_when_requested() {
 [existing]
 EOF
 
-  HOME="${TEST_TMPDIR}/home" \
-  JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
-  JIGGIT_EXPLORE_WRITE_MODE="append" \
-  write_discovery_file "[beta-api]
+  local output
+  output="$(
+    HOME="${TEST_TMPDIR}/home" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
+    JIGGIT_EXPLORE_WRITE_MODE="append" \
+    write_discovery_file "[beta-api]
 repo_path = \"/tmp/beta-api\""
+  )"
 
+  assert_eq "${discovered_file}" "${output}" "return discovery file path after appending"
   local discovered_contents
   discovered_contents="$(sed -n '1,120p' "${discovered_file}")"
   assert_contains "${discovered_contents}" "[existing]" "preserve existing discovery content when appending"
