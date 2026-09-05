@@ -341,7 +341,7 @@ EOF
   assert_contains "${output}" "issues: 2 unreleased, 1 missing fixVersion" "render unreleased issue summary in compact mode"
   assert_contains "${output}" "versions: none" "render missing environment summary"
   assert_contains "${output}" "release: missing prod base" "render next-release warning for project without prod"
-  assert_contains "${output}" "details: jiggit config beta" "suggest config command when prod base is missing"
+  assert_contains "${output}" "details: jiggit doctor --fix beta" "suggest repair command when prod base is missing"
 }
 
 test_run_overview_main_uses_ansi_bold_for_compact_attention_lines() {
@@ -454,7 +454,7 @@ EOF
 
   assert_contains "${output}" "config: missing jira project key" "render missing jira project key"
   assert_contains "${output}" "source: ${projects_file}" "render project source file for missing jira key"
-  assert_contains "${output}" "details: jiggit config project-b" "render config next step adjacent to missing jira key"
+  assert_contains "${output}" "details: jiggit doctor --fix project-b" "render repair next step adjacent to missing jira key"
 }
 
 test_run_overview_main_renders_version_diagnostics_for_prod_drift() {

@@ -159,8 +159,8 @@ render_jira_issues_failure() {
   printf -- "- Release query: \`%s\`\n\n" "${release_query}"
   print_markdown_h2 "Issues" "${C_BLUE}"
   printf '\n'
-  printf -- "- status: \`%s\`\n" "${status}"
-  printf -- "- next step: \`%s\`\n" "${next_step_command}"
+  render_status_line "fail" "${status}"
+  render_next_step_line "${next_step_command}"
 }
 
 # Load config, resolve a release by fuzzy name, fetch Jira issues, and render the report.
@@ -206,7 +206,8 @@ run_jira_issues_main() {
   fi
   project_id="$(resolve_project_selector "${project_selector}" || true)"
   if [[ -z "${project_id}" ]]; then
-    printf 'Unknown project or path: %s\n' "${project_selector:-$PWD}" >&2
+    project_id="${project_selector:-$PWD}"
+    render_jira_issues_failure "${project_id}" "${release_query}" "unknown project or path: ${project_id}" "jiggit config ${project_id}"
     return 1
   fi
 
@@ -220,13 +221,13 @@ run_jira_issues_main() {
 
   jira_project_key="$(project_jira_project_key "${project_id}")"
   if [[ -z "${jira_project_key}" ]]; then
-    render_jira_issues_failure "${project_id}" "${release_query}" "missing jira project key" "jiggit config"
+    render_jira_issues_failure "${project_id}" "${release_query}" "missing Jira project key" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   jira_base_url_value="$(jira_base_url "${project_id}")"
   if [[ -z "${jira_base_url_value}" ]]; then
-    render_jira_issues_failure "${project_id}" "${release_query}" "missing jira base url" "jiggit config"
+    render_jira_issues_failure "${project_id}" "${release_query}" "missing Jira base URL" "jiggit doctor --fix ${project_id}"
     render_jira_config_diagnostic >&2
     return 1
   fi

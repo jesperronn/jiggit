@@ -461,17 +461,17 @@ run_jira_check_for_project() {
   access_detail="${access_result#*|}"
 
   if [[ -z "${jira_project_key}" ]]; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "missing" "missing Jira project key in config" "unknown" "unknown" "${access_state}" "jiggit config ${project_id}"
+    render_jira_check_failure "${project_id}" "${jira_name}" "missing" "missing Jira project key in config" "unknown" "unknown" "${access_state}" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   if [[ -z "${jira_name}" ]]; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit setup jira"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
   if [[ -z "${jira_base_url_value}" ]]; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit setup jira"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "missing Jira base URL" "unknown" "unknown" "${access_state}" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
@@ -485,7 +485,7 @@ run_jira_check_for_project() {
   fi
 
   if [[ "${access_state}" == "missing-config" ]]; then
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${access_detail}" "${metadata_url}" "${releases_url}" "${access_state}" "jiggit setup jira"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${access_detail}" "${metadata_url}" "${releases_url}" "${access_state}" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 

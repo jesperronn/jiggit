@@ -237,11 +237,11 @@ render_compare_summary() {
   if [[ -z "${issue_keys_text}" ]]; then
     printf '_No Jira issues mentioned in commit history for this range._\n'
   elif [[ "${jira_fetch_status}" == "missing-config" ]]; then
-    printf -- "- status: \`missing jira base url\`\n"
-    printf -- "- next step: \`jiggit config\`\n"
+    render_status_line "fail" "missing Jira base URL"
+    render_next_step_line "jiggit doctor --fix ${project_id}"
   elif [[ "${jira_fetch_status}" == "fetch-failed" ]]; then
-    printf -- "- status: \`unable to fetch jira issues\`\n"
-    printf -- "- next step: \`jiggit doctor jira %s\`\n" "${project_id}"
+    render_status_line "fail" "unable to fetch Jira issues"
+    render_next_step_line "jiggit doctor jira ${project_id}"
   else
     render_compare_issue_details "${issues_json}"
   fi

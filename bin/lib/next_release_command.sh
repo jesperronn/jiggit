@@ -193,8 +193,9 @@ render_next_release_failure() {
   printf '\n'
   printf -- "- Project: \`%s\`\n" "${project_id}"
   printf -- "- Repo path: \`%s\`\n" "${repo_path:-missing}"
-  printf -- "- Status: \`%s\`\n" "${status}"
-  printf -- "- Next step: \`%s\`\n\n" "${next_step_command}"
+  render_status_line "fail" "${status}"
+  render_next_step_line "${next_step_command}"
+  printf '\n'
 }
 
 # Return a combined release-state label from Jira and git tag presence.
@@ -250,12 +251,12 @@ next_release_jira_config_next_step() {
   local jira_auth_mode_value="${4:-}"
 
   if [[ -z "${jira_project_key}" ]]; then
-    printf '%s\n' "jiggit config ${project_id}"
+    printf '%s\n' "jiggit doctor --fix ${project_id}"
     return 0
   fi
 
   if [[ -z "${jira_base_url_value}" || "${jira_auth_mode_value}" == "missing" ]]; then
-    printf '%s\n' "jiggit setup jira"
+    printf '%s\n' "jiggit doctor jira ${project_id}"
     return 0
   fi
 
@@ -1007,6 +1008,7 @@ run_next_release_main() {
   local jira_release_present="unknown"
   local git_tag_present="no"
   local release_matrix_state="unknown"
+  local jira_issue_fetch_failed=0
   local -a issue_keys=()
   local issues_json='{"issues":[]}'
   local releases_json='[]'
@@ -1018,7 +1020,8 @@ run_next_release_main() {
   fi
   project_id="$(resolve_project_selector "${project_selector}" || true)"
   if [[ -z "${project_id}" ]]; then
-    printf 'Unknown project or path: %s\n' "${project_selector:-$PWD}" >&2
+    project_id="${project_selector:-$PWD}"
+    render_next_release_failure "${project_id}" "unknown" "unknown project or path: ${project_id}" "jiggit config ${project_id}"
     return 1
   fi
 
@@ -1038,7 +1041,7 @@ run_next_release_main() {
     jiggit_verbose_log "next-release cwd=${PWD} project=${project_id} repo=${repo_path:-missing} jira=${jira_project_key:-missing} auth=${jira_auth_mode_value} auth-source=${jira_auth_source_value}"
   fi
   if [[ -z "${repo_path}" || ! -d "${repo_path}" ]]; then
-    render_next_release_failure "${project_id}" "${repo_path}" "missing local repo path" "jiggit config"
+    render_next_release_failure "${project_id}" "${repo_path}" "missing local repo path" "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
@@ -1130,9 +1133,20 @@ run_next_release_main() {
       issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}")"
       if [[ -n "${issue_keys_text}" ]]; then
         mapfile -t issue_keys < <(printf '%s\n' "${issue_keys_text}" | sed '/^$/d')
-        issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${project_id}" "${issue_keys[@]}")"
+        if ! issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "${project_id}" "${issue_keys[@]}" 2>/dev/null)"; then
+          jira_issue_fetch_failed=1
+          issues_json='{"issues":[]}'
+        fi
       fi
-      render_next_release_issue_summary "${issues_json}" "${suggested_version}"
+      if [[ "${jira_issue_fetch_failed}" -eq 1 ]]; then
+        print_markdown_h2 "Unreleased Jira Issues" "${C_ORANGE}"
+        printf '\n'
+        render_status_line "fail" "unable to fetch Jira issues"
+        render_next_step_line "jiggit doctor jira ${project_id}"
+        printf '\n'
+      else
+        render_next_release_issue_summary "${issues_json}" "${suggested_version}"
+      fi
     else
       print_markdown_h2 "Jira Status" "${C_ORANGE}"
       printf '\n'
@@ -1159,6 +1173,9 @@ run_next_release_main() {
     if [[ "${jira_release_state}" == "warn" ]]; then
       render_next_release_creation_failure_next_step "${project_id}" "${base_operand}" "${target_operand}"
       printf '\n'
+    fi
+    if [[ "${jira_issue_fetch_failed}" -eq 1 ]]; then
+      return 1
     fi
   else
     render_next_release_summary "${project_id}" "${repo_path}" "${base_label}" "${target_ref}" "${base_git_ref}" "${commit_count}" "" "${compare_url}" "up-to-date"

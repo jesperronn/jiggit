@@ -563,7 +563,7 @@ render_env_versions_unreleased_issues() {
 
   if [[ -z "${jira_base_url_value}" || -z "$(project_jira_project_key "${project_id}")" ]]; then
     printf -- "- Status: \`missing jira config\`\n"
-    printf -- "- Next step: \`jiggit config\`\n\n"
+    printf -- "- Next step: \`jiggit doctor --fix %s\`\n\n" "${project_id}"
     return 0
   fi
 
@@ -625,7 +625,12 @@ run_env_versions_main() {
   fi
   project_id="$(resolve_project_selector "${project_selector}" || true)"
   if [[ -z "${project_id}" ]]; then
-    printf 'Unknown project or path: %s\n' "${project_selector:-$PWD}" >&2
+    project_id="${project_selector:-$PWD}"
+    print_markdown_h1 "jiggit env-versions"
+    printf '\n'
+    printf -- "- Project: \`%s\`\n" "${project_id}"
+    render_status_line "fail" "unknown project or path: ${project_id}"
+    render_next_step_line "jiggit config ${project_id}"
     return 1
   fi
 
@@ -649,7 +654,11 @@ run_env_versions_main() {
   version_expr="$(env_versions_expr_for_project "${project_id}")"
 
   if [[ -z "${environments}" ]]; then
-    printf 'Project %s has no configured environments.\n' "${project_id}" >&2
+    print_markdown_h1 "jiggit env-versions"
+    printf '\n'
+    printf -- "- Project: \`%s\`\n" "${project_id}"
+    render_status_line "fail" "no configured environments"
+    render_next_step_line "jiggit doctor --fix ${project_id}"
     return 1
   fi
 
@@ -696,7 +705,12 @@ run_env_versions_main() {
   if [[ "${saw_version_error}" -eq 1 ]]; then
     print_markdown_h2 "Next Steps" "${C_CYAN}"
     printf '\n'
-    printf -- "- retry environment version discovery: \`jiggit env-versions %s\`\n\n" "${project_id}"
+    local recovery_command="jiggit config ${project_id}"
+    if [[ "${env_entries[*]}" == *"missing info URL in config"* ]]; then
+      recovery_command="jiggit doctor --fix ${project_id}"
+    fi
+    render_next_step_line "${recovery_command}" "next step"
+    printf '\n'
   fi
   render_env_version_diagnostics "${project_id}" "${prod_version}" "${env_entries[@]}"
 

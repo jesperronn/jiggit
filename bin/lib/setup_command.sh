@@ -24,6 +24,16 @@ Run guided setup flows for Jira config and project discovery.
 EOF
 }
 
+# Render an invalid setup mode with the command that exposes valid modes.
+render_setup_failure() {
+  local mode="${1}"
+
+  print_markdown_h1 "jiggit setup"
+  printf '\n'
+  render_status_line "fail" "unknown setup mode: ${mode}"
+  render_next_step_line "jiggit setup --help"
+}
+
 # Dispatch the requested setup flow to the existing implementation.
 run_setup_main() {
   local mode="${1:-}"
@@ -41,9 +51,7 @@ run_setup_main() {
       run_explore_main "$@"
       ;;
     *)
-      printf 'Unknown setup mode: %s\n' "${mode}" >&2
-      printf '\n' >&2
-      setup_usage >&2
+      render_setup_failure "${mode}"
       return 1
       ;;
   esac

@@ -362,7 +362,7 @@ render_overview_next_release_issues() {
   if [[ -z "${suggested_version}" || -z "${jira_base_url_value}" ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
       overview_emit_line "issues" "missing jira config"
-      overview_emit_next_step "details" "jiggit config"
+      overview_emit_next_step "details" "jiggit doctor --fix ${project_id}"
     else
       overview_emit_line "issues" "missing jira config"
     fi
@@ -500,14 +500,14 @@ render_overview_next_release() {
 
   if [[ -z "${repo_path}" || ! -d "${repo_path}" ]]; then
     overview_emit_plain_line "release" "missing local repo"
-    overview_emit_next_step "details" "jiggit config ${project_id}"
+    overview_emit_next_step "details" "jiggit doctor --fix ${project_id}"
     printf '\n'
     return 0
   fi
 
   if [[ " ${environments} " != *" prod "* ]]; then
     overview_emit_plain_line "release" "missing prod base"
-    overview_emit_next_step "details" "jiggit config ${project_id}"
+    overview_emit_next_step "details" "jiggit doctor --fix ${project_id}"
     printf '\n'
     return 0
   fi
@@ -521,7 +521,7 @@ render_overview_next_release() {
 
   if ! base_resolved="$(next_release_resolve_base "${project_id}" "${repo_path}" " ${environments} " "prod" 2>/dev/null)"; then
     overview_emit_plain_line "release" "missing prod base"
-    overview_emit_next_step "details" "jiggit config ${project_id}"
+    overview_emit_next_step "details" "jiggit doctor --fix ${project_id}"
     printf '\n'
     return 0
   fi
@@ -611,7 +611,7 @@ render_overview_project_multi() {
   if [[ -z "${jira_project_key}" ]]; then
     overview_emit_line "config" "missing jira project key"
     overview_emit_line "source" "${source_file:-unknown}"
-    overview_emit_next_step "details" "jiggit config ${project_id}"
+    overview_emit_next_step "details" "jiggit doctor --fix ${project_id}"
     printf '\n'
     return 0
   fi
@@ -636,7 +636,7 @@ render_overview_project_single() {
   if [[ -z "${jira_project_key}" ]]; then
     overview_emit_line "config" "missing jira project key"
     overview_emit_line "source" "${source_file:-unknown}"
-    overview_emit_next_step "details" "jiggit config ${project_id}"
+    overview_emit_next_step "details" "jiggit doctor --fix ${project_id}"
     printf '\n'
   fi
   render_overview_versions "${project_id}" "${environments}"
@@ -696,6 +696,7 @@ run_overview_main() {
       print_markdown_h2 "${project_id}"
       printf '\n'
       overview_emit_line "status" "unknown project"
+      overview_emit_next_step "next step" "jiggit config ${project_id}"
       printf '\n'
       continue
     fi
