@@ -33,9 +33,9 @@ Current commands:
 - `jiggit changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]`
 - `jiggit changes [<project|path>] --from <git-ref> [--to <git-ref|release>] [--verbose]`
 - `jiggit changes [<project|path>] --from-env <env> [--to <git-ref|release>] [--verbose]`
-- `jiggit dash [<project|path> ...] [--verbose]`
-- `jiggit doctor [--ignore-failures] [<project|path> ...]`
-- `jiggit jira-check [<project|path>] [--all]`
+- `jiggit dash [<project|path> ...] [--verbose]` (`dashboard` and `status` are aliases)
+- `jiggit doctor [--fix|--repair] [--ignore-failures] [<project|path> ...]`
+- `jiggit doctor jira [--fix|--repair] [<project|path> ...]`
 - `jiggit jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run]`
 - `jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>]`
 - `jiggit releases [<project|path>]`
@@ -101,12 +101,17 @@ dev = "https://dev.project-a.example.com/actuator/info"
 
 - Check the current project or all configured projects:
   `jiggit dash`
+- The equivalent long forms are `jiggit dashboard` and `jiggit status`.
 - See deployed versions for one project:
   `jiggit env-versions project_a --verbose`
 - Explain what changed since `prod`:
   `jiggit changes project_a --base prod`
-- Run health checks:
+- Run read-only health checks:
   `jiggit doctor`
+- Repair missing configuration interactively, with previews:
+  `jiggit doctor --fix`
+- Diagnose Jira auth, identity, project access, and releases:
+  `jiggit doctor jira`
 
 ### Release Flow
 
@@ -130,8 +135,8 @@ dev = "https://dev.project-a.example.com/actuator/info"
 
 ### Jira-Only Checks
 
-- Verify Jira auth and project access:
-  `jiggit jira-check project_a`
+- Verify Jira auth, authenticated identity, project access, and releases:
+  `jiggit doctor jira project_a`
 - Repair or create Jira auth config:
   `jiggit setup jira`
 - Create a Jira issue draft from the latest commit:
@@ -152,7 +157,7 @@ Additional workflows are easy to discover from each command's built-in next-step
 `changes --to` treats an exact local git ref as a git target first.
 If a fuzzy Jira release query matches multiple releases, it prints the matches and exits instead of guessing.
 
-`jira-create`, `jira-check`, `assign-fix-version`, `releases`, `changes`, and `doctor` expect shared Jira settings in TOML config:
+`jira-create`, `assign-fix-version`, `releases`, `changes`, and `doctor` expect shared Jira settings in TOML config:
 
 ```toml
 [jira]

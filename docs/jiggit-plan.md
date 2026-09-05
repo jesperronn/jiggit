@@ -17,7 +17,7 @@ Two product decisions are locked:
 - `jiggit env-diff`
 - `jiggit releases`
 - `jiggit jira-issues`
-- `jiggit jira-check`
+- `jiggit doctor jira`
 - `jiggit doctor`
 - `jiggit jira-create`
 - `jiggit release-notes`
@@ -27,7 +27,7 @@ Two product decisions are locked:
 - project selection by configured id, repo path, or current configured directory
 - global project selectors via `--projects=...`
 - explicit multi-project escape hatch via `--all-projects`
-- `jira-check --all`
+- `doctor jira` defaults to all configured projects
 - `repo_path` expansion for `$HOME/...` and `~/...`
 - colocated tests, `bin/test`, and `bin/lint`
 - legacy shell-era config cleanup
@@ -39,7 +39,7 @@ Two product decisions are locked:
   currently being reworked so the command first reads Jira release versions, then compares the suggested version against local git tags, and finally reports the combined readiness matrix
   remaining work is mostly presentation polish and the exact behavior matrix for cases where Jira and git disagree or are both missing
 - `jiggit doctor`
-  implemented as health checks plus a default interactive repair flow for shared Jira config and common per-project gaps
+  implemented as read-only health checks plus an explicit `--fix`/`--repair` flow for shared Jira config and common per-project gaps
   now repairs shared Jira config, remote URLs, Jira project keys, Jira regexes, environments, version expressions, and environment URLs when it can do so safely
   remaining work is mostly broader heuristics and polish for less common missing fields
 - `jiggit explore`
@@ -47,7 +47,7 @@ Two product decisions are locked:
   now includes default interactive completion for shared Jira config and common per-project candidate details such as Jira keys, environments, info URLs, and version expressions
   remaining work is mostly deeper heuristics for more inferred project settings
 - console styling
-  now propagated through the main user-facing subcommands, including `config`, `overview`, `doctor`, `jira-check`, `releases`, `env-versions`, `env-diff`, `compare`, `changelog`, `next-release`, `release-notes`, `jira-issues`, and `explore`
+  now propagated through the main user-facing subcommands, including `config`, `overview`, `doctor`, `doctor jira`, `releases`, `env-versions`, `env-diff`, `compare`, `changelog`, `next-release`, `release-notes`, `jira-issues`, and `explore`
   remaining work is mostly consistency cleanup rather than missing foundation
 
 ### Still missing
@@ -202,16 +202,17 @@ Behavior:
 - When an issue has one or more fixVersions, render the actual value(s).
 - Keep this command Jira-centric and simple.
 
-### `jiggit jira-check [<project|path>]`
+### `jiggit doctor jira [<project|path>]`
 Purpose:
-Verify Jira connectivity and project access for one configured project.
+Verify Jira connectivity, authenticated identity, and project access for one
+configured project or all configured projects.
 
 Behavior:
 - Validate Jira base URL and auth configuration.
 - Confirm the configured Jira project key exists and is readable.
 - Fetch a lightweight Jira endpoint such as project metadata or versions.
 - Return a small diagnostic report suitable for debugging auth and config.
-- `--all` should continue through every configured project and only return failure at the end if one or more checks failed.
+- No selector checks every configured project; selectors narrow the report.
 
 ### `jiggit doctor [<project|path> ...]`
 Purpose:
@@ -224,7 +225,7 @@ Behavior:
 - Check repo path, Jira access, info URLs, and releases access where configured.
 - Support warning-only mode for optional capabilities so missing prod/release data does not always fail the command.
 - Use project issue-key regexes only for validation and enrichment logic elsewhere, not to hide Jira issues here.
-- Interactive doctor repair is the default when a TTY is available, and it should continue to expand coverage while always previewing the TOML that would be written first.
+- Doctor is read-only by default. `--fix` (or `--repair`) explicitly enables interactive repair, and every write still requires the existing TOML preview and confirmation.
 
 ### `jiggit env-versions [<project|path>]`
 Purpose:

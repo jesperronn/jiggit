@@ -44,11 +44,16 @@ test_jiggit_help_lists_assign_fix_version_command() {
   assert_contains "${output}" "jiggit assign-fix-version [<project|path>] --release <fixVersion>" "help lists assign-fix-version command"
 }
 
-test_jiggit_help_lists_jira_check_command() {
+test_jiggit_help_uses_doctor_jira_instead_of_jira_check() {
   local output
   output="$(bin/jiggit help)"
 
-  assert_contains "${output}" "jiggit jira-check [<project|path>] [--all]" "help lists jira-check command"
+  assert_contains "${output}" "jiggit doctor jira [--fix|--repair] [<project|path> ...]" "help lists doctor jira scope"
+  if grep -Fq "jira-check" <<<"${output}"; then
+    fail "top-level help should not list jira-check"
+  else
+    pass "top-level help omits jira-check"
+  fi
 }
 
 test_jiggit_help_lists_next_release_command() {
@@ -63,6 +68,28 @@ test_jiggit_help_lists_dash_command() {
   output="$(bin/jiggit help)"
 
   assert_contains "${output}" "jiggit dash [<project|path> ...]" "help lists dash command"
+  assert_contains "${output}" "dashboard" "help describes dashboard alias"
+  assert_contains "${output}" "status" "help describes status alias"
+}
+
+test_jiggit_dashboard_alias_help_forms_work() {
+  local output
+
+  output="$(bin/jiggit dashboard --help)"
+  assert_contains "${output}" "jiggit dash [<project|path> ...]" "dashboard alias uses overview help"
+  output="$(bin/jiggit status --help)"
+  assert_contains "${output}" "jiggit dash [<project|path> ...]" "status alias uses overview help"
+}
+
+test_jiggit_releases_help_succeeds() {
+  local output
+
+  if output="$(bin/jiggit releases --help 2>&1)"; then
+    pass "releases --help exits successfully"
+    assert_contains "${output}" "jiggit releases [<project|path>]" "releases help renders usage"
+  else
+    fail "releases --help should exit successfully"
+  fi
 }
 
 test_jiggit_help_lists_env_versions_command() {
@@ -85,7 +112,7 @@ test_jiggit_help_lists_doctor_command() {
   local output
   output="$(bin/jiggit help)"
 
-  assert_contains "${output}" "jiggit doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]" "help lists doctor command"
+  assert_contains "${output}" "jiggit doctor [--fix|--repair] [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]" "help lists doctor command"
 }
 
 test_jiggit_help_lists_setup_command() {

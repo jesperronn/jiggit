@@ -156,18 +156,18 @@ jira_setup_validate_once() {
   jira_base_url_value="$(jira_base_url "${jira_name}")"
   if [[ -z "${jira_base_url_value}" || "$(jira_auth_mode "${jira_name}")" == "missing" ]]; then
     printf -- "- validation: \`%s\` (missing Jira auth or base URL)\n" "${warn_status}"
-    printf -- "- next step: \`jiggit jira-check\`\n"
+    printf -- "- next step: \`jiggit doctor jira\`\n"
     return 0
   fi
 
   if fetch_jira_current_user "${jira_base_url_value}" "${jira_name}" >/dev/null 2>&1; then
     printf -- "- validation: \`%s\` (auth probe succeeded)\n" "${ok_status}"
-    printf -- "- next step: \`jiggit jira-check\`\n"
+    printf -- "- next step: \`jiggit doctor jira\`\n"
     return 0
   fi
 
   printf -- "- validation: \`%s\` (auth probe failed)\n" "${fail_status}"
-  printf -- "- next step: \`jiggit jira-check\`\n"
+  printf -- "- next step: \`jiggit doctor jira\`\n"
   return 1
 }
 

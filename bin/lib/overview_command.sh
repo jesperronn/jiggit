@@ -51,6 +51,7 @@ Usage:
   jiggit dash [<project|path> ...]
 
 Show a read-only dashboard for one configured project or all configured projects.
+The aliases `jiggit dashboard` and `jiggit status` behave identically.
 EOF
 }
 
@@ -397,7 +398,7 @@ render_overview_next_release_issues() {
   if [[ "${fetch_failed}" -eq 1 ]]; then
     if [[ "${detail_mode}" == "detailed" ]]; then
       overview_emit_line "issues" "unable to fetch jira issues"
-      overview_emit_next_step "details" "jiggit jira-check ${project_id}"
+      overview_emit_next_step "details" "jiggit doctor jira ${project_id}"
     else
       overview_emit_line "issues" "unable to fetch jira issues"
     fi

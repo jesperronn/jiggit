@@ -232,7 +232,7 @@ run_jira_issues_main() {
   fi
 
   if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" 2>/dev/null)"; then
-    render_jira_issues_failure "${project_id}" "${release_query}" "unable to fetch releases" "jiggit jira-check ${project_id}"
+    render_jira_issues_failure "${project_id}" "${release_query}" "unable to fetch releases" "jiggit doctor jira ${project_id}"
     return 1
   fi
 

@@ -484,7 +484,7 @@ render_env_diff_jira_issues() {
 
   if [[ "${jira_fetch_status}" == "fetch-failed" ]]; then
     printf -- "- status: unable to fetch jira issues\n"
-    printf -- "- next step: jiggit jira-check %s\n\n" "${project_id}"
+    printf -- "- next step: jiggit doctor jira %s\n\n" "${project_id}"
     return 0
   fi
 

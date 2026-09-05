@@ -583,7 +583,7 @@ render_env_versions_unreleased_issues() {
 
   if ! issues_json="$(fetch_jira_issues_by_keys "${jira_base_url_value}" "" "${issue_keys[@]}" 2>/dev/null)"; then
     printf -- "- Status: \`unable to fetch jira issues\`\n"
-    printf -- "- Next step: \`jiggit jira-check %s\`\n\n" "${project_id}"
+    printf -- "- Next step: \`jiggit doctor jira %s\`\n\n" "${project_id}"
     return 0
   fi
 
