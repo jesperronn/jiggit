@@ -94,11 +94,6 @@ run_main() {
   done
 
   if [[ ${failures} -eq 0 ]]; then
-    if [[ -z "${NO_COLOR:-}" ]]; then
-      printf '\033[1;32mTEST SUMMARY: all test files passed\033[0m\n'
-    else
-      printf 'TEST SUMMARY: all test files passed\n'
-    fi
     return 0
   fi
 

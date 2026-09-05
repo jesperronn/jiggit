@@ -196,7 +196,7 @@ EOF
     JIGGIT_COLOR_OUTPUT=always \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   assert_contains "${output}" $'\e[1m\e[34m# jiggit doctor\e[0m' "render colored doctor top heading"
@@ -484,7 +484,7 @@ EOF
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   assert_contains "${output}" "env ft: \`⚠️ WARN\` (unable to resolve)" "render unresolved environment warning"
@@ -553,7 +553,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -594,7 +594,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -635,7 +635,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -680,7 +680,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -719,7 +719,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -764,7 +764,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -822,7 +822,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -869,7 +869,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures
+    run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -995,7 +995,7 @@ EOF
       JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
       JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-      run_doctor_main --repair --ignore-failures
+      run_doctor_main --repair --ignore-failures 2>&1
   )"
   assert_contains "$(cat "${projects_file}")" "[jira]" "doctor repair alias writes configuration"
 }
