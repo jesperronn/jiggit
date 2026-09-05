@@ -241,7 +241,7 @@ render_compare_summary() {
     printf -- "- next step: \`jiggit config\`\n"
   elif [[ "${jira_fetch_status}" == "fetch-failed" ]]; then
     printf -- "- status: \`unable to fetch jira issues\`\n"
-    printf -- "- next step: \`jiggit jira-check %s\`\n" "${project_id}"
+    printf -- "- next step: \`jiggit doctor jira %s\`\n" "${project_id}"
   else
     render_compare_issue_details "${issues_json}"
   fi

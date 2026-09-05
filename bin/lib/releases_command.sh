@@ -345,14 +345,14 @@ render_releases_failure() {
 # Load config, fetch Jira releases, and render the report.
 run_releases_main() {
   local project_selector=""
+  if [[ $# -gt 0 && ( "${1}" == "-h" || "${1}" == "--help" ) ]]; then
+    releases_usage
+    return 0
+  fi
+
   if [[ $# -gt 0 && "${1}" != -* ]]; then
     project_selector="${1}"
     shift || true
-  fi
-
-  if [[ "${project_selector}" == "-h" || "${project_selector}" == "--help" ]]; then
-    releases_usage
-    return 0
   fi
 
   if [[ $# -gt 0 ]]; then
@@ -397,7 +397,7 @@ run_releases_main() {
   fi
 
   if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>/dev/null)"; then
-    render_releases_failure "${project_id}" "${repo_path}" "unable to fetch releases" "jiggit jira-check ${project_id}"
+    render_releases_failure "${project_id}" "${repo_path}" "unable to fetch releases" "jiggit doctor jira ${project_id}"
     return 1
   fi
 

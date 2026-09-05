@@ -400,7 +400,7 @@ run_assign_fix_version_main() {
       return 1
       ;;
     *)
-      render_assign_fix_version_failure "${project_id}" "${repo_path}" "${release_resolution_detail:-unable to resolve release}" "jiggit jira-check ${project_id}"
+      render_assign_fix_version_failure "${project_id}" "${repo_path}" "${release_resolution_detail:-unable to resolve release}" "jiggit doctor jira ${project_id}"
       return 1
       ;;
   esac

@@ -132,7 +132,7 @@ EOF
       run_jira_check_main project-a
   )"
 
-  assert_contains "${output}" "# jiggit jira-check" "render jira-check heading"
+  assert_contains "${output}" "# jiggit doctor jira" "render doctor jira heading"
   assert_contains "${output}" "Jira project key: \`JIRA\`" "render jira project key"
   assert_contains "${output}" "Jira project name: \`Jira Project\`" "render jira project name"
   assert_contains "${output}" "Releases: \`0 released, 2 unreleased -- 2.1.0.27\`" "render release summary"
@@ -228,7 +228,7 @@ EOF
     fail "fail at the end when one jira-check --all project fails"
   else
     pass "fail at the end when one jira-check --all project fails"
-    assert_contains "${output}" "# jiggit jira-check" "render jira-check heading for --all"
+    assert_contains "${output}" "# jiggit doctor jira" "render doctor jira heading for all"
     assert_contains "${output}" "## project-a" "render successful project section during --all"
     assert_contains "${output}" "## broken-project" "render failing project section during --all"
     assert_contains "${output}" "Connectivity: \`❌ FAIL\`" "render failure state for broken project"
@@ -271,7 +271,7 @@ EOF
     fail "fail at the end when jira-check --all has no Jira base URL"
   else
     pass "fail at the end when jira-check --all has no Jira base URL"
-    assert_contains "${output}" "# jiggit jira-check" "render jira-check heading without Jira base URL"
+    assert_contains "${output}" "# jiggit doctor jira" "render doctor jira heading without Jira base URL"
     assert_contains "${output}" "## project-a" "render first project section without Jira base URL"
     assert_contains "${output}" "## project-b" "render second project section without Jira base URL"
     assert_contains "${output}" "Metadata URL: \`unknown\`" "render unknown metadata url when base url is missing"

@@ -212,7 +212,7 @@ jiggit_render_help_line() {
     "    --"*)
       jiggit_render_help_tokens "${line}" "option"
       ;;
-    "  help"|"  version, --version"|"  assign-fix-version "*|"  changes "*|"  config "*|"  dash "*|"  doctor "*|"  env-versions "*|"  jira-check "*|"  jira-create "*|"  next-release "*|"  releases "*|"  setup"*)
+    "  help"|"  version, --version"|"  assign-fix-version "*|"  changes "*|"  config "*|"  dash "*|"  dashboard "*|"  doctor "*|"  env-versions "*|"  jira-create "*|"  next-release "*|"  releases "*|"  setup"*)
       jiggit_render_help_tokens "${line}" "command"
       ;;
     *)
@@ -278,9 +278,9 @@ Usage:
   jiggit version
   jiggit config [--global|--no-projects|--all] [<project|path> ...] [--verbose]
   jiggit dash [<project|path> ...] [--verbose]
-  jiggit doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
+  jiggit doctor [--fix|--repair] [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
+  jiggit doctor jira [--fix|--repair] [<project|path> ...] [--verbose]
   jiggit env-versions [<project|path>] [--verbose]
-  jiggit jira-check [<project|path>] [--all] [--verbose]
   jiggit jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run] [--verbose]
   jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--verbose]
   jiggit releases [<project|path>] [--verbose]
@@ -320,17 +320,19 @@ Commands:
 
   dash [<project|path> ...] [--verbose]
     Show a read-only dashboard for one configured project or all configured
-    projects.
+    projects. `dash` is the primary shorthand; `dashboard` and `status` are
+    equivalent aliases.
 
-  doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
-    Run health checks for configured projects. Defaults to all configured
-    projects. In interactive mode, missing config can be scaffolded with a preview before writing.
+  doctor [--fix|--repair] [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...] [--verbose]
+    Run read-only health checks for configured projects. Use --fix (or
+    --repair) to interactively repair missing configuration after previews.
+
+  doctor jira [--fix|--repair] [<project|path> ...] [--verbose]
+    Diagnose Jira auth, identity, project access, and releases. Defaults to
+    all configured projects; use --fix only when configuration repair is wanted.
 
   env-versions [<project|path>] [--verbose]
     Show deployed versions for the project's configured environments.
-
-  jira-check [<project|path>] [--all] [--verbose]
-    Verify Jira connectivity and project access for the configured project.
 
   jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run] [--verbose]
     Create a Jira issue in the configured Jira project based on a
@@ -459,7 +461,7 @@ dispatch_command() {
       shift || true
       run_config_main "$@"
       ;;
-    dash)
+    dash|dashboard|status)
       shift || true
       run_overview_main "$@"
       ;;
@@ -470,10 +472,6 @@ dispatch_command() {
     env-versions)
       shift || true
       run_env_versions_main "$@"
-      ;;
-    jira-check)
-      shift || true
-      run_jira_check_main "$@"
       ;;
     jira-create)
       shift || true

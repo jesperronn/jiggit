@@ -196,7 +196,7 @@ EOF
     JIGGIT_COLOR_OUTPUT=always \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   assert_contains "${output}" $'\e[1m\e[34m# jiggit doctor\e[0m' "render colored doctor top heading"
@@ -484,7 +484,7 @@ EOF
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   assert_contains "${output}" "env ft: \`⚠️ WARN\` (unable to resolve)" "render unresolved environment warning"
@@ -553,7 +553,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -594,7 +594,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -635,7 +635,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -680,7 +680,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -719,7 +719,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -764,7 +764,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -822,7 +822,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -869,7 +869,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures
+    run_doctor_main --fix --ignore-failures
   )"
 
   local updated_file
@@ -879,6 +879,125 @@ EOF
   assert_contains "${updated_file}" 'prod = "https://prod.example.com/actuator/info"' "write prompted prod url after adding environments"
   assert_contains "${updated_file}" 'prep = "https://prep.example.com/actuator/info"' "write prompted prep url after adding environments"
   assert_contains "${output}" "env prod: \`✅ OK\` (v2.1.0.26)" "reload config after creating environments and info expr"
+}
+
+test_run_doctor_jira_reports_identity_and_never_prints_credentials() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/repo"
+  mkdir -p "${repo_dir}"
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "super-secret-token"
+
+[project-a]
+repo_path = "${repo_dir}"
+jira_project_key = "JIRA"
+jira_regexes = ["JIRA-[0-9]+"]
+environments = []
+
+[project-b]
+repo_path = "${repo_dir}"
+jira_project_key = "JIRA"
+jira_regexes = ["JIRA-[0-9]+"]
+environments = []
+EOF
+
+  # shellcheck disable=SC2329
+  fetch_jira_current_user() {
+    printf '{"displayName":"Ada Lovelace","accountId":"ada-123"}\n'
+  }
+
+  local output
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main jira project-a
+  )"
+
+  assert_contains "${output}" "# jiggit doctor jira" "render doctor jira heading"
+  assert_contains "${output}" "Jira base URL: \`https://jira.example.test\`" "render Jira base URL"
+  assert_contains "${output}" "Jira config: \`default\`" "render selected Jira config"
+  assert_contains "${output}" "Jira auth mode: \`bearer_token\`" "render auth mode"
+  assert_contains "${output}" "Jira identity: \`Ada Lovelace\` (account/login: \`ada-123\`)" "render authenticated identity"
+  assert_contains "${output}" "Jira project name: \`Jira Project\`" "render Jira project access"
+  assert_contains "${output}" "Releases: \`0 released, 1 unreleased -- 2.1.0.26\`" "render Jira release access"
+  if grep -Fq "super-secret-token" <<<"${output}"; then
+    fail "doctor Jira output must not print credentials"
+  else
+    pass "doctor Jira output omits credentials"
+  fi
+
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main jira
+  )"
+  assert_contains "${output}" "## project-a" "doctor Jira defaults to all projects"
+  assert_contains "${output}" "## project-b" "doctor Jira includes every project by default"
+
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main jira project-a
+  )"
+  if grep -Fq "## project-b" <<<"${output}"; then
+    fail "doctor Jira selector should narrow project sections"
+  else
+    pass "doctor Jira selector narrows project sections"
+  fi
+}
+
+test_run_doctor_is_read_only_by_default_and_repair_alias_writes() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/repo"
+  mkdir -p "${repo_dir}"
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[project-a]
+repo_path = "${repo_dir}"
+jira_project_key = "JIRA"
+jira_regexes = ["JIRA-[0-9]+"]
+environments = []
+EOF
+  cp "${projects_file}" "${TEST_TMPDIR}/before.toml"
+  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+https://jira.example.test
+token-123
+y
+EOF
+
+  local output
+  output="$(
+    JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --ignore-failures
+  )"
+  assert_eq "$(cat "${TEST_TMPDIR}/before.toml")" "$(cat "${projects_file}")" "default doctor does not write configuration"
+  assert_contains "${output}" "repair project configuration: \`jiggit doctor --fix project-a\`" "default doctor gives exact repair next step"
+
+  output="$(
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main jira project-a 2>&1 || true
+  )"
+  assert_contains "${output}" "repair Jira configuration: \`jiggit doctor --fix project-a\`" "doctor Jira gives exact repair next step"
+
+  output="$(
+    JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --repair --ignore-failures
+  )"
+  assert_contains "$(cat "${projects_file}")" "[jira]" "doctor repair alias writes configuration"
 }
 
 run_tests "$@"

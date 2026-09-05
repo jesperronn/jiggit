@@ -24,16 +24,17 @@ fi
 
 declare -A JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME=()
 declare -A JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME=()
+declare -A JIGGIT_JIRA_CHECK_IDENTITY_JSON_BY_NAME=()
+JIGGIT_JIRA_CHECK_LAST_RESULT=""
 
-# Render help for the jira-check command.
+# Render help for the retained internal Jira diagnostic helper.
 jira_check_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit jira-check [<project|path> ...]
-  jiggit jira-check --all
+  jiggit doctor jira [<project|path> ...]
 
-Verify Jira connectivity and project access for one or more configured projects.
-Defaults to all configured projects.
+Verify Jira connectivity, identity, and project access for one or more
+configured projects. Defaults to all configured projects.
 EOF
 }
 
@@ -41,6 +42,8 @@ EOF
 jira_check_reset_state() {
   JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME=()
   JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME=()
+  JIGGIT_JIRA_CHECK_IDENTITY_JSON_BY_NAME=()
+  JIGGIT_JIRA_CHECK_LAST_RESULT=""
 }
 
 # Return the Jira project metadata URL for one project key.
@@ -168,11 +171,13 @@ jira_check_probe_access() {
 
   jira_name="$(resolve_jira_name "${reference}")"
   if [[ -z "${jira_name}" ]]; then
+    JIGGIT_JIRA_CHECK_LAST_RESULT="missing-config|missing Jira config"
     printf '%s|%s\n' "missing-config" "missing Jira config"
     return 0
   fi
 
   if [[ -n "${JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]+x}" ]]; then
+    JIGGIT_JIRA_CHECK_LAST_RESULT="${JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]}|${JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]}"
     printf '%s|%s\n' \
       "${JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]}" \
       "${JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]}"
@@ -182,6 +187,7 @@ jira_check_probe_access() {
   if ! command -v curl >/dev/null 2>&1; then
     JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]="missing-prereq"
     JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]="curl missing; skipped Jira auth probe"
+    JIGGIT_JIRA_CHECK_LAST_RESULT="missing-prereq|${JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]}"
     printf '%s|%s\n' "missing-prereq" "${JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]}"
     return 0
   fi
@@ -192,20 +198,41 @@ jira_check_probe_access() {
   if [[ -z "${jira_base_url_value}" || "${jira_auth_mode_value}" == "missing" ]]; then
     JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]="missing-config"
     JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]="missing Jira config"
+    JIGGIT_JIRA_CHECK_LAST_RESULT="missing-config|missing Jira config"
     printf '%s|%s\n' "missing-config" "missing Jira config"
     return 0
   fi
 
-  if fetch_jira_current_user "${jira_base_url_value}" "${jira_name}" >/dev/null 2>&1; then
+  local current_user_json=""
+  if current_user_json="$(fetch_jira_current_user "${jira_base_url_value}" "${jira_name}" 2>/dev/null)"; then
     JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]="ok"
     JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]="auth probe succeeded"
+    JIGGIT_JIRA_CHECK_IDENTITY_JSON_BY_NAME["${jira_name}"]="${current_user_json}"
+    JIGGIT_JIRA_CHECK_LAST_RESULT="ok|auth probe succeeded"
     printf '%s|%s\n' "ok" "auth probe succeeded"
     return 0
   fi
 
   JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]="failed"
   JIGGIT_JIRA_CHECK_ACCESS_DETAIL_BY_NAME["${jira_name}"]="auth probe failed; later Jira checks skipped"
+  JIGGIT_JIRA_CHECK_LAST_RESULT="failed|auth probe failed; later Jira checks skipped"
   printf '%s|%s\n' "failed" "auth probe failed; later Jira checks skipped"
+}
+
+# Render the authenticated Jira identity from the cached /myself response.
+render_jira_check_identity() {
+  local jira_name="${1}"
+  local identity_json="${JIGGIT_JIRA_CHECK_IDENTITY_JSON_BY_NAME["${jira_name}"]:-}"
+  local display_name=""
+  local identifier=""
+
+  if [[ -z "${identity_json}" ]]; then
+    return 0
+  fi
+
+  display_name="$(printf '%s\n' "${identity_json}" | jq -r '.displayName // .name // .emailAddress // "unknown"')"
+  identifier="$(printf '%s\n' "${identity_json}" | jq -r '.accountId // .key // .name // .emailAddress // "unknown"')"
+  printf -- "- Jira identity: \`%s\` (account/login: \`%s\`)\n" "${display_name}" "${identifier}"
 }
 
 # Return success when any cached Jira access probe failed.
@@ -226,6 +253,7 @@ jira_check_any_access_failures() {
 # Print the read-only config summary lines for one Jira entry.
 render_jira_check_config_summary() {
   local reference="${1:-}"
+  local safe_mode="${2:-0}"
   local jira_name=""
   local jira_base_url_value=""
   local jira_bearer_token_value=""
@@ -236,6 +264,8 @@ render_jira_check_config_summary() {
   local jira_auth_mode_source=""
   local jira_api_token_value=""
   local jira_api_token_source=""
+  local jira_bearer_token_status=""
+  local jira_api_token_status_value=""
   local jira_config_source_value=""
   local projects_text=""
   local project_id=""
@@ -249,6 +279,18 @@ render_jira_check_config_summary() {
   jira_auth_mode_value="$(jira_auth_mode "${jira_name}")"
   jira_api_token_value="$(jira_display_value "${jira_name}" "api_token")"
   jira_config_source_value="$(jira_config_source "${jira_name}")"
+  jira_bearer_token_status="missing"
+  jira_api_token_status_value="missing"
+  if [[ -n "$(jira_bearer_token "${jira_name}")" ]]; then
+    jira_bearer_token_status="configured"
+  fi
+  if [[ -n "$(jira_api_token "${jira_name}")" ]]; then
+    jira_api_token_status_value="configured"
+  fi
+  if [[ "${safe_mode}" -eq 1 ]]; then
+    jira_bearer_token_value="${jira_bearer_token_status}"
+    jira_api_token_value="${jira_api_token_status_value}"
+  fi
 
   if [[ "${jira_auth_mode_value}" == "bearer_token" ]]; then
     jira_auth_mode_source="$(jira_field_source "${jira_name}" "bearer_token")"
@@ -297,8 +339,9 @@ render_jira_check_access_body() {
     [[ -z "${jira_name}" ]] && continue
     print_markdown_h2 "${jira_name}" "${C_MAGENTA}"
     printf '\n'
-    render_jira_check_config_summary "${jira_name}"
-    access_result="$(jira_check_probe_access "${jira_name}")"
+    render_jira_check_config_summary "${jira_name}" "safe"
+    jira_check_probe_access "${jira_name}" >/dev/null
+    access_result="${JIGGIT_JIRA_CHECK_LAST_RESULT}"
     access_state="${access_result%%|*}"
     access_detail="${access_result#*|}"
     access_status_display="${access_state}"
@@ -307,6 +350,9 @@ render_jira_check_access_body() {
     fi
     rendered_access_status="$(render_status_label "${access_status_display}")"
     printf -- "- jira access: \`%s\` (%s)\n" "${rendered_access_status}" "${access_detail}"
+    if [[ "${access_state}" == "ok" ]]; then
+      render_jira_check_identity "$(resolve_jira_name "${jira_name}")"
+    fi
     case "${access_state}" in
       missing-config|failed)
         printf -- "- next step: \`jiggit setup jira\`\n"
@@ -409,7 +455,8 @@ run_jira_check_for_project() {
   jira_name="$(project_jira_name "${project_id}")"
   jira_project_key="$(project_jira_project_key "${project_id}")"
   jira_base_url_value="$(jira_base_url "${project_id}")"
-  access_result="$(jira_check_probe_access "${project_id}")"
+  jira_check_probe_access "${project_id}" >/dev/null
+  access_result="${JIGGIT_JIRA_CHECK_LAST_RESULT}"
   access_state="${access_result%%|*}"
   access_detail="${access_result#*|}"
 
@@ -453,7 +500,7 @@ run_jira_check_for_project() {
   if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>"${releases_error_file}")"; then
     releases_error="$(tr '\n' ' ' < "${releases_error_file}")"
     rm -f "${releases_error_file}"
-    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${releases_error}" "${metadata_url}" "${releases_url}" "ok" "jiggit jira-check ${project_id}"
+    render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${releases_error}" "${metadata_url}" "${releases_url}" "ok" "jiggit doctor jira ${project_id}"
     return 1
   fi
   rm -f "${releases_error_file}"
@@ -524,7 +571,7 @@ run_jira_check_main() {
   JIGGIT_JIRA_CHECK_ALL="${check_all}"
   mapfile -t project_ids < <(jira_check_target_projects "${project_selectors[@]}")
 
-  print_markdown_h1 "jiggit jira-check"
+  print_markdown_h1 "jiggit doctor jira"
   printf '\n'
   print_markdown_h2 "Jira Access" "${C_MAGENTA}"
   printf '\n'

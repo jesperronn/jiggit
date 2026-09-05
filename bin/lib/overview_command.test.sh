@@ -135,7 +135,7 @@ EOF
   )"
 
   assert_contains "${output}" "issues: unable to fetch jira issues" "render explicit issue fetch failure"
-  assert_contains "${output}" "details: jiggit jira-check project-a" "suggest jira-check for issue fetch failure"
+  assert_contains "${output}" "details: jiggit doctor jira project-a" "suggest doctor jira for issue fetch failure"
 }
 
 test_run_overview_main_renders_missing_shared_jira_config_diagnostic() {

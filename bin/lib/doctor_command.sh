@@ -29,13 +29,21 @@ fi
 
 JIGGIT_DOCTOR_IGNORE_FAILURES=0
 JIGGIT_DOCTOR_FAIL_FAST=0
+JIGGIT_DOCTOR_ALLOW_REPAIR=0
 # Render help for the doctor command.
 doctor_usage() {
   print_jiggit_usage_block <<'EOF'
 Usage:
-  jiggit doctor [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]
+  jiggit doctor [--fix|--repair] [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]
+  jiggit doctor jira [--fix|--repair] [<project|path> ...]
 
-Run health checks for configured projects. Defaults to all configured projects.
+Run read-only health checks for configured projects. Defaults to all configured
+projects. Use --fix (or --repair) to interactively repair configuration after
+the existing preview and confirmation prompts.
+
+Use `doctor jira` for an explicit Jira-only diagnostic. It reports the Jira
+base URL, selected configuration, auth mode/source, authenticated identity,
+project access, and release access without displaying secrets.
 EOF
 }
 
@@ -137,7 +145,7 @@ doctor_maybe_create_missing_shared_jira_config() {
   local jira_base_url_value=""
   local jira_bearer_token_value=""
 
-  if [[ -n "$(jira_base_url)" ]]; then
+  if [[ "${JIGGIT_DOCTOR_ALLOW_REPAIR:-0}" -ne 1 || -n "$(jira_base_url)" ]]; then
     return 0
   fi
 
@@ -177,7 +185,7 @@ doctor_maybe_repair_project_config() {
   local new_info_version_expr=""
   local changed=0
 
-  if ! can_prompt_interactively; then
+  if [[ "${JIGGIT_DOCTOR_ALLOW_REPAIR:-0}" -ne 1 ]] || ! can_prompt_interactively; then
     return 0
   fi
 
@@ -353,7 +361,8 @@ render_doctor_project() {
   environments="$(project_environments "${project_id}")"
   jira_base_url_value="$(jira_base_url "${project_id}")"
   project_source="$(project_source_file "${project_id}")"
-  access_result="$(jira_check_probe_access "${project_id}")"
+  jira_check_probe_access "${project_id}" >/dev/null
+  access_result="${JIGGIT_JIRA_CHECK_LAST_RESULT}"
   access_state="${access_result%%|*}"
 
   print_markdown_h2 "${project_id}" "${C_GREEN}"
@@ -416,10 +425,16 @@ render_doctor_project() {
     printf '\n'
     if [[ "${show_config_next_step}" -eq 1 ]]; then
       doctor_emit_next_step "review effective config" "jiggit config"
+      if [[ "${JIGGIT_DOCTOR_ALLOW_REPAIR:-0}" -ne 1 ]]; then
+        doctor_emit_next_step "repair project configuration" "jiggit doctor --fix ${project_id}"
+      fi
     fi
     if [[ "${show_jira_next_step}" -eq 1 ]]; then
       doctor_emit_next_step "repair Jira setup" "jiggit setup jira"
-      doctor_emit_next_step "verify Jira access" "jiggit jira-check ${project_id}"
+      doctor_emit_next_step "verify Jira access" "jiggit doctor jira ${project_id}"
+      if [[ "${JIGGIT_DOCTOR_ALLOW_REPAIR:-0}" -ne 1 ]]; then
+        doctor_emit_next_step "repair Jira configuration" "jiggit doctor --fix ${project_id}"
+      fi
     fi
     if [[ "${show_env_next_step}" -eq 1 ]]; then
       doctor_emit_next_step "inspect environment versions" "jiggit env-versions ${project_id}"
@@ -445,6 +460,58 @@ doctor_target_projects() {
   done < <(effective_multi_project_selectors "$@")
 }
 
+# Run the explicit Jira-only diagnostic for selected projects or all projects.
+run_doctor_jira_main() {
+  local -a project_selectors=("$@")
+  local -a project_ids=()
+  local project_id=""
+  local saw_failure=0
+
+  load_project_config
+  doctor_maybe_create_missing_shared_jira_config
+  load_project_config
+  jira_check_reset_state
+  unset JIGGIT_JIRA_CHECK_ALL || true
+  mapfile -t project_ids < <(jira_check_target_projects "${project_selectors[@]}")
+
+  print_markdown_h1 "jiggit doctor jira"
+  printf '\n'
+  print_markdown_h2 "Jira Access" "${C_MAGENTA}"
+  printf '\n'
+  render_jira_check_access_body "${project_ids[@]}"
+
+  if [[ ${#project_ids[@]} -eq 0 ]]; then
+    print_markdown_h2 "Projects" "${C_BLUE}"
+    printf '\n'
+    printf '_No projects configured._\n'
+    return 0
+  fi
+
+  while IFS= read -r project_id; do
+    [[ -z "${project_id}" ]] && continue
+    if ! project_exists "${project_id}"; then
+      render_jira_check_failure "${project_id}" "missing" "missing" "unknown project" "unknown" "unknown" "fail" "jiggit config"
+      saw_failure=1
+      continue
+    fi
+
+    doctor_maybe_repair_project_config "${project_id}"
+    if ! run_jira_check_for_project "${project_id}"; then
+      saw_failure=1
+      if [[ "${JIGGIT_DOCTOR_ALLOW_REPAIR:-0}" -ne 1 ]] \
+        && { [[ -z "$(project_jira_project_key "${project_id}")" ]] \
+          || [[ -z "$(jira_base_url "${project_id}")" ]] \
+          || [[ "$(jira_auth_mode "${project_id}")" == "missing" ]]; }; then
+        doctor_emit_next_step "repair Jira configuration" "jiggit doctor --fix ${project_id}"
+      fi
+    fi
+  done < <(printf '%s\n' "${project_ids[@]}")
+
+  if [[ "${saw_failure}" -ne 0 ]]; then
+    return 1
+  fi
+}
+
 # Load config, run doctor across requested or all projects, and return summary status.
 run_doctor_main() {
   local -a requested_projects=()
@@ -452,12 +519,23 @@ run_doctor_main() {
   local saw_failure_before=0
   local saw_failure_after=0
   local global_only=0
+  local jira_only=0
 
   JIGGIT_DOCTOR_IGNORE_FAILURES=0
   JIGGIT_DOCTOR_FAIL_FAST=0
+  JIGGIT_DOCTOR_ALLOW_REPAIR=0
+
+  if [[ "${1:-}" == "jira" ]]; then
+    jira_only=1
+    shift
+  fi
 
   while [[ $# -gt 0 ]]; do
     case "${1}" in
+      --fix|--repair)
+        JIGGIT_DOCTOR_ALLOW_REPAIR=1
+        shift
+        ;;
       --global|--no-projects)
         global_only=1
         shift
@@ -480,6 +558,11 @@ run_doctor_main() {
         ;;
     esac
   done
+
+  if [[ "${jira_only}" -eq 1 ]]; then
+    run_doctor_jira_main "${requested_projects[@]}"
+    return $?
+  fi
 
   load_project_config
   doctor_maybe_create_missing_shared_jira_config
