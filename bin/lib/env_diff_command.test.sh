@@ -175,7 +175,7 @@ EOF
   assert_contains "${output}" "target ref: v1.1.0" "render target version"
   assert_contains "${output}" 'commit count ahead: 2' "render commit count"
   assert_contains "${output}" '**suggested next release: v1.1.0**' "render suggested next release"
-  assert_contains "${output}" "create it now: \`jiggit next-release project_a\`" "render suggested release call to action"
+  assert_contains "${output}" "create it after review: \`jiggit next-release project_a --create\`" "render explicit release creation call to action"
   assert_contains "${output}" 'suggested release link: https://github.com/example/env-diff-repo/compare/' "render suggested release link"
   assert_contains "${output}" '## Commits By Type' "render grouped commits heading"
   assert_contains "${output}" "* ${fix_sha} repair edge case in callback parsing" "render single-line bullet commit with leading sha"

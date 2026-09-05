@@ -6,23 +6,22 @@ Create `jiggit` as a new Bash-first project at `/Users/jesper/src/jiggit`. The p
 Two product decisions are locked:
 - `jiggit config` replaces `jiggit projects`
 - `jiggit` should prefer native `jiggit` command modules over copied legacy helper scripts
+- Only commands dispatched by `bin/jiggit` are public; reusable modules remain internal helpers.
 
 ## Status Snapshot
 ### Implemented
 - `jiggit config`
-- `jiggit explore`
-- `jiggit compare`
-- `jiggit changelog`
 - `jiggit env-versions`
-- `jiggit env-diff`
+- `jiggit changes`
+- `jiggit dash` (`dashboard` and `status` aliases)
 - `jiggit releases`
-- `jiggit jira-issues`
 - `jiggit doctor jira`
 - `jiggit doctor`
 - `jiggit jira-create`
-- `jiggit release-notes`
 - `jiggit next-release`
 - `jiggit assign-fix-version`
+- `jiggit setup jira`
+- `jiggit setup explore`
 - shared TOML Jira config
 - project selection by configured id, repo path, or current configured directory
 - global project selectors via `--projects=...`
@@ -35,19 +34,19 @@ Two product decisions are locked:
 
 ### Partially implemented
 - `jiggit next-release`
-  implemented as drift detection, suggested next minor version, unreleased Jira issue review, interactive Jira release creation, and overview integration
+  implemented as read-only drift detection, suggested next minor version, unreleased Jira issue review, and overview integration; `--create` explicitly enables an interactive Jira release creation after review
   currently being reworked so the command first reads Jira release versions, then compares the suggested version against local git tags, and finally reports the combined readiness matrix
   remaining work is mostly presentation polish and the exact behavior matrix for cases where Jira and git disagree or are both missing
 - `jiggit doctor`
   implemented as read-only health checks plus an explicit `--fix`/`--repair` flow for shared Jira config and common per-project gaps
   now repairs shared Jira config, remote URLs, Jira project keys, Jira regexes, environments, version expressions, and environment URLs when it can do so safely
   remaining work is mostly broader heuristics and polish for less common missing fields
-- `jiggit explore`
+- `jiggit setup explore`
   implemented as interactive discovery and append/replace review with exact TOML previews before writes
   now includes default interactive completion for shared Jira config and common per-project candidate details such as Jira keys, environments, info URLs, and version expressions
   remaining work is mostly deeper heuristics for more inferred project settings
 - console styling
-  now propagated through the main user-facing subcommands, including `config`, `overview`, `doctor`, `doctor jira`, `releases`, `env-versions`, `env-diff`, `compare`, `changelog`, `next-release`, `release-notes`, `jira-issues`, and `explore`
+  now propagated through the public commands and their internal helper modules
   remaining work is mostly consistency cleanup rather than missing foundation
 
 ### Still missing
@@ -183,7 +182,10 @@ Behavior:
 - Sort in a way that makes current and upcoming releases easy to spot.
 - Optionally indicate when a release name appears to match an existing git tag.
 
-### `jiggit jira-issues [<project|path>] --release <fixVersion>`
+### Internal `jira_issues_command.sh` helper
+
+This module is not dispatched as a public `jiggit jira-issues` command. Its
+release issue lookup is reused by public release-oriented commands.
 Purpose:
 Show Jira issues belonging to a release.
 
@@ -240,10 +242,13 @@ Behavior:
 - If production and a lower environment share the same major/minor but differ in build number, highlight the lower-environment version in bold red and mark that a new minor release should be created.
 - If production has a lower major/minor than another environment, highlight that as a bold orange pending deployment state.
 - In pending-deployment situations, show the unreleased stories/issues for that span and link or point to the relevant release information.
-- Include an adjacent investigative command such as `jiggit env-diff ...` or `jiggit next-release ...` when drift is detected.
+- Include an adjacent investigative command such as `jiggit changes ...` or `jiggit next-release ...` when drift is detected.
 - When project/path is omitted, resolve the current working directory against configured repos.
 
-### `jiggit env-diff [<project|path>] --base <env|git-ref> [--target <env|git-ref>]`
+### Internal `env_diff_command.sh` helper
+
+This module is not dispatched as a public `jiggit env-diff` command. It powers
+the public `jiggit changes` command.
 Purpose:
 Explain the code difference between a base deployment and a target deployment or git ref.
 
@@ -257,7 +262,10 @@ Behavior:
 - Return explicit “no difference” when both sides resolve to the same version.
 - When project/path is omitted, resolve the current working directory against configured repos.
 
-### `jiggit compare [<project|path>] --from <git-ref> --to <git-ref>`
+### Internal `compare_command.sh` helper
+
+This module is not dispatched as a public `jiggit compare` command. It
+provides git-range logic to the public commands.
 Purpose:
 Low-level comparison command for git and Jira-backed diagnostics.
 
@@ -267,7 +275,10 @@ Behavior:
 - Show normalized range, commit count, extracted issue keys, and optional compare URL if remote format supports it.
 - This is the reusable building block behind release and env comparison commands.
 
-### `jiggit release-notes [<project|path>] --target <git-ref|release> [--from-env <env>] [--from <git-ref>]`
+### Internal `release_notes_command.sh` helper
+
+This module is not dispatched as a public `jiggit release-notes` command. It
+provides Jira enrichment for public release-oriented commands.
 Purpose:
 Generate release notes for a target version or release.
 
@@ -275,7 +286,7 @@ Behavior:
 - Determine start ref from `--from-env` or explicit `--from`.
 - Determine target from an exact local git ref first, otherwise from a uniquely matched Jira release.
 - If a fuzzy Jira release query matches multiple releases, print the matches and exit instead of guessing.
-- When the target resolves to a Jira release, reuse the same shared Jira release issue query logic used by `jiggit jira-issues`.
+- When the target resolves to a Jira release, reuse the shared Jira release issue query helper.
 - Compute git diff.
 - Parse commits using conventional commit groups.
 - Extract Jira issue keys via configured regexes.
@@ -296,7 +307,10 @@ Behavior:
 Important rule:
 - release notes are git-first, Jira-enriched
 
-### `jiggit changelog [<project|path>] --from <git-ref> --to <git-ref>`
+### Internal `changelog_command.sh` helper
+
+This module is not dispatched as a public `jiggit changelog` command. Its
+commit grouping is reused by public commands.
 Purpose:
 Generate a git-centric changelog grouped by conventional commit type.
 
@@ -307,9 +321,10 @@ Behavior:
 - Enrich with Jira metadata when issue keys are present
 - Less release-specific and less strict than `release-notes`
 
-### `jiggit next-release [<project|path>]`
+### `jiggit next-release [<project|path>] [--create]`
 Purpose:
-Detect when a project needs a new release and interactively create the next Jira release version.
+Detect when a project needs a new release. It is read-only by default; `--create`
+explicitly enables an interactive Jira release creation after the report.
 
 Behavior:
 - Resolve a deployed base version, defaulting to `prod`.
@@ -324,7 +339,7 @@ Behavior:
   - highlight resolved issues that already carry the expected upcoming fixVersion in green
   - highlight in-progress issues that carry the expected upcoming fixVersion in aqua/cyan
   - highlight issues missing the expected upcoming fixVersion in bold orange
-- Include adjacent next-step commands such as `jiggit releases ...`, `jiggit jira-issues ...`, and later the release-creation / fix-version assignment commands.
+- Include adjacent next-step commands such as `jiggit releases ...`, `jiggit changes ...`, and the explicit release-creation / fix-version assignment commands.
 - Feed the same richer release-needed diagnostics back into `jiggit overview`.
 
 Behavior:
@@ -332,10 +347,10 @@ Behavior:
 - Detect when production is behind and newer commits exist.
 - Suggest a next release version automatically.
 - Default the suggestion to a minor-version bump.
-- Later let the user review and confirm before creating the Jira release in Jira.
+- With `--create`, let the user review and confirm before creating the Jira release in Jira.
 - Future iterations should make the Jira/git release-state matrix explicit enough to handle the common cases where only Jira exists, only git exists, both exist, or neither exists yet.
 
-### `jiggit assign-fix-version [<project|path>] --release <fixVersion>`
+### `jiggit assign-fix-version [<project|path>] --release <fixVersion> [--apply]`
 Purpose:
 Add a release fixVersion to Jira issues that appear in the commit span but are missing that fixVersion.
 
@@ -344,7 +359,8 @@ Behavior:
 - Extract Jira issues referenced by commits in that span.
 - Fetch each issue’s current fixVersions from Jira.
 - Show which issues are missing the selected fixVersion.
-- Offer an interactive bulk update that adds the fixVersion to those issues.
+- Default to a read-only preview. With `--apply`, offer an interactive bulk
+  update that adds the fixVersion to those issues.
 - Reuse the same issue metadata shape used by `jira-issues` and `release-notes`.
 
 ### Shared issue metadata
@@ -446,9 +462,7 @@ Each project may define several regexes, for example:
 
 Use these in:
 - `explore`
-- `compare`
-- `release-notes`
-- `changelog`
+- internal git-range and Jira enrichment helpers
 
 If no project-specific regexes exist, use a generic fallback.
 

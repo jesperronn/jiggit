@@ -270,7 +270,7 @@ jiggit_usage() {
 Usage:
   jiggit [--projects=<project[,project...]>] [--all-projects] [--verbose] <command> ...
   jiggit --version
-  jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--verbose]
+  jiggit assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--apply] [--verbose]
   jiggit changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
   jiggit changes [<project|path>] --from <git-ref> [--to <git-ref|release>] [--verbose]
   jiggit changes [<project|path>] --from-env <env> [--to <git-ref|release>] [--verbose]
@@ -282,7 +282,7 @@ Usage:
   jiggit doctor jira [--fix|--repair] [<project|path> ...] [--verbose]
   jiggit env-versions [<project|path>] [--verbose]
   jiggit jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run] [--verbose]
-  jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--verbose]
+  jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--create] [--verbose]
   jiggit releases [<project|path>] [--verbose]
   jiggit setup
   jiggit setup jira [<jira-name>] [--verbose]
@@ -307,9 +307,9 @@ Commands:
   version, --version
     Show the installed jiggit version.
 
-  assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--verbose]
-    Add the chosen Jira fixVersion to issues in the base-to-target commit span
-    when they do not already have it.
+  assign-fix-version [<project|path>] --release <fixVersion> [--base <env|git-ref>] [--target <git-ref>] [--apply] [--verbose]
+    Preview missing Jira fixVersion updates by default. Use --apply to
+    explicitly confirm and send the updates.
 
   changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]
     Show either the deployment diff from a base environment/ref, or
@@ -335,12 +335,12 @@ Commands:
     Show deployed versions for the project's configured environments.
 
   jira-create [<project|path>] [--commit <git-ref>] [--type <issue-type>] [--summary <text>] [--dry-run] [--verbose]
-    Create a Jira issue in the configured Jira project based on a
-    commit message from the project's git repository.
+    Intentionally create a Jira issue in the configured project. Use
+    --dry-run for a non-mutating preview.
 
-  next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--verbose]
-    Detect whether a project needs a new release and suggest the next
-    minor version from the configured base.
+  next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>] [--create] [--verbose]
+    Read-only release inspection by default. Use --create to explicitly
+    confirm and create a suggested Jira release.
 
   releases [<project|path>] [--verbose]
     List Jira releases/fixVersions for the configured Jira project.

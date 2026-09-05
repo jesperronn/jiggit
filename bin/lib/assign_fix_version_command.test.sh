@@ -143,7 +143,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/assign-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_assign_fix_version_main project_a --release 1.3
+    run_assign_fix_version_main project_a --release 1.3 --apply
   )"
 
   local update_log
@@ -159,6 +159,51 @@ EOF
   assert_contains "${output}" "applied: \`1\`" "report applied update count"
   assert_contains "${update_log}" "https://jira.example.test|ALPHA-3|1.3.0.0" "update only the missing issue"
   assert_contains "${fetch_log}" "https://jira.example.test||ALPHA-2 ALPHA-3" "pass all issue keys with blank auth reference"
+}
+
+test_run_assign_fix_version_main_previews_without_applying_updates() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  local repo_dir="${TEST_TMPDIR}/assign-fix-version-repo"
+  create_repo_for_assign_fix_version "${repo_dir}"
+
+  local projects_file="${TEST_TMPDIR}/projects.toml"
+  cat > "${projects_file}" <<EOF
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+
+[project_a]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/assign-fix-version-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+environments = ["prod"]
+EOF
+
+  JIGGIT_TEST_ENV_VERSION_BY_NAME["project_a:prod"]="v1.2.0.0"
+
+  cat > "${TEST_TMPDIR}/assign-input.txt" <<'EOF'
+y
+EOF
+
+  local output
+  output="$(
+    JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
+    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/assign-input.txt" \
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    run_assign_fix_version_main project_a --release 1.3
+  )"
+
+  assert_contains "${output}" "status: \`read-only preview\`" "identify the default as a read-only preview"
+  assert_contains "${output}" "jiggit assign-fix-version project_a --release 1.3.0.0 --apply" "suggest explicit update command"
+  if [[ -e "${JIGGIT_TEST_ASSIGN_FIX_VERSION_UPDATE_LOG}" ]]; then
+    fail "skip Jira issue updates without --apply even when interactive"
+  else
+    pass "skip Jira issue updates without --apply even when interactive"
+  fi
 }
 
 test_run_assign_fix_version_main_prints_matches_when_release_is_ambiguous() {

@@ -502,7 +502,7 @@ render_env_diff_jira_issues() {
   done < <(printf '%s\n' "${issues_json}" | jq -c '.issues[]?')
 
   if [[ "${missing_fix_version_count}" -gt 0 ]]; then
-    printf -- "- add missing fixVersion: jiggit assign-fix-version %s --release %s\n" "${project_id}" "${suggested_version#v}"
+    printf -- "- add missing fixVersion: jiggit assign-fix-version %s --release %s --apply\n" "${project_id}" "${suggested_version#v}"
   fi
   printf '\n'
 }
@@ -549,7 +549,7 @@ render_env_diff_summary() {
   printf -- "- commit count ahead: %s\n" "${commit_count}"
   if [[ -n "${suggested_version}" ]]; then
     printf -- "- %b**suggested next release: %s**%b\n" "${C_BOLD}" "${suggested_version}" "${C_0}"
-    printf -- "- create it now: \`jiggit next-release %s\`\n" "${project_id}"
+    printf -- "- create it after review: \`jiggit next-release %s --create\`\n" "${project_id}"
   fi
   if [[ -n "${suggested_release_url}" ]]; then
     printf -- "- suggested release link: %s\n" "${suggested_release_url}"

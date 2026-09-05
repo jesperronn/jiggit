@@ -430,12 +430,12 @@ render_overview_next_release_issues() {
     printf '\n'
     render_overview_issue_list "${issues_json}" "${suggested_version}" "${project_id}" "${jira_base_url_value}"
     if [[ "${missing_fix_version_count}" -gt 0 ]]; then
-      overview_emit_line "add missing fixVersion" "jiggit assign-fix-version ${project_id} --release ${suggested_version#v}"
+      overview_emit_line "add missing fixVersion" "jiggit assign-fix-version ${project_id} --release ${suggested_version#v} --apply"
     fi
   else
     if [[ "${missing_fix_version_count}" -gt 0 ]]; then
       overview_emit_attention_line "issues" "${total_count} unreleased, ${missing_fix_version_count} missing fixVersion"
-      overview_emit_line "action" "jiggit assign-fix-version ${project_id} --release ${suggested_version#v}"
+      overview_emit_line "action" "jiggit assign-fix-version ${project_id} --release ${suggested_version#v} --apply"
     else
       overview_emit_attention_line "issues" "${total_count} unreleased"
     fi

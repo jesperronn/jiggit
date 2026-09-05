@@ -159,8 +159,15 @@ EOF
 
   JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
 
+  cat > "${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
+y
+
+EOF
+
   local output
   output="$(
+    JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
+    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
       run_next_release_main next-release-project
@@ -184,13 +191,19 @@ EOF
   assert_contains "${output}" "\`1.4.0.0\`" "render unreleased jira release inventory entry"
   assert_contains "${output}" "## Jira Release" "render jira release creation status"
   assert_contains "${output}" "status: \`missing\`" "render jira release creation outcome"
-  assert_contains "${output}" "detail: \`run interactively to create it\`" "render interactive creation next step"
+  assert_contains "${output}" "not requested; run jiggit next-release next-release-project --create --base prod after review" "require explicit release creation request"
+  assert_contains "${output}" "jiggit next-release next-release-project --create --base prod" "suggest explicit release creation command"
   assert_contains "${output}" "## Unreleased Jira Issues" "render unreleased Jira issues section"
   assert_contains "${output}" "ALPHA-3: status: Resolved, MISSING fix_version, subject: Add second feature" "render resolved issue on one line"
   assert_contains "${output}" "ALPHA-2: status: In Progress, fix_version: 1.3.0.0, subject: Add feature" "render implement issue on one line"
   assert_contains "${output}" "## Next Steps" "render next-release next steps section"
   assert_contains "${output}" "jiggit releases next-release-project" "suggest releases command"
   assert_contains "${fetch_log}" "https://jira.example.test|next-release-project|ALPHA-2 ALPHA-3" "pass all unreleased issue keys with project auth reference"
+  if [[ -e "${JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG}" ]]; then
+    fail "skip Jira release creation without --create even when interactive"
+  else
+    pass "skip Jira release creation without --create even when interactive"
+  fi
 }
 
 test_run_next_release_main_verbose_shows_project_and_jira_auth_source() {
@@ -456,7 +469,7 @@ EOF
   assert_eq "expected-fix-version" "${issue_state}" "treat matching prefixed issue fixVersion as expected"
 }
 
-test_run_next_release_main_can_create_missing_jira_release_interactively() {
+test_run_next_release_main_can_create_missing_jira_release_with_explicit_create() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
@@ -490,7 +503,7 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-      run_next_release_main next-release-project
+      run_next_release_main next-release-project --create
   )"
 
   local create_log
@@ -541,11 +554,11 @@ EOF
     JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-      run_next_release_main next-release-project --base prod --target refs/remotes/origin/main
+      run_next_release_main next-release-project --create --base prod --target refs/remotes/origin/main
   )"
 
   assert_contains "${output}" "status: \`⚠️ WARN\`" "report failed Jira release creation"
-  assert_contains "${output}" "rerun after fixing the Jira release error: \`jiggit next-release next-release-project --base prod --target refs/remotes/origin/main\`" "suggest exact rerun command after creation failure"
+  assert_contains "${output}" "rerun after fixing the Jira release error: \`jiggit next-release next-release-project --create --base prod --target refs/remotes/origin/main\`" "suggest exact rerun command after creation failure"
 }
 
 test_run_next_release_main_accepts_repo_path_selector_and_reports_up_to_date() {
