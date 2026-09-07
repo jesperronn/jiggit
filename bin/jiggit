@@ -260,12 +260,20 @@ strip_verbose_flags() {
   done
 }
 
+# Cached render of the static top-level help, keyed on the active color state.
+JIGGIT_USAGE_CACHE=""
+JIGGIT_USAGE_CACHE_COLOR=-1
+
 # Render the top-level CLI help for jiggit subcommands.
 jiggit_usage() {
-  local line
-
+  local color="${JIGGIT_COLOR_ENABLED:-0}"
+  if [[ "${color}" -eq "${JIGGIT_USAGE_CACHE_COLOR}" && -n "${JIGGIT_USAGE_CACHE}" ]]; then
+    printf '%s\n' "${JIGGIT_USAGE_CACHE}"
+    return 0
+  fi
+  local line rendered=""
   while IFS= read -r line; do
-    jiggit_render_help_line "${line}"
+    rendered+="$(jiggit_render_help_line "${line}")"$'\n'
   done <<'USAGE'
 Usage:
   jiggit [--projects=<project[,project...]>] [--all-projects] [--verbose] <command> ...
@@ -349,6 +357,9 @@ Commands:
     Run guided setup flows. Use `jiggit setup jira` for Jira auth and
     `jiggit setup explore` for project discovery.
 USAGE
+  JIGGIT_USAGE_CACHE_COLOR="${color}"
+  JIGGIT_USAGE_CACHE="${rendered%$'\n'}"
+  printf '%s\n' "${JIGGIT_USAGE_CACHE}"
 }
 
 # Parse top-level project-scope flags before dispatching to a subcommand.
