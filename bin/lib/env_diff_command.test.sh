@@ -164,6 +164,7 @@ EOF
 
   local output
   output="$(
+    COLUMNS=80 \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
     run_env_diff_main project_a --base prod --target prep
