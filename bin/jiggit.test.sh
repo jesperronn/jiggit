@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 
@@ -31,22 +31,34 @@ reset_jiggit_state() {
 }
 
 test_jiggit_help_lists_jira_create_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit jira-create [<project|path>]" "help lists jira-create command"
 }
 
 test_jiggit_help_lists_assign_fix_version_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit assign-fix-version [<project|path>] --release <fixVersion>" "help lists assign-fix-version command"
 }
 
 test_jiggit_help_uses_doctor_jira_instead_of_jira_check() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit doctor jira [--fix|--repair] [<project|path> ...]" "help lists doctor jira scope"
   if grep -Fq "jira-check" <<<"${output}"; then
@@ -57,15 +69,23 @@ test_jiggit_help_uses_doctor_jira_instead_of_jira_check() {
 }
 
 test_jiggit_help_lists_next_release_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit next-release [<project|path>] [--base <env|git-ref>] [--target <git-ref>]" "help lists next-release command"
 }
 
 test_jiggit_help_lists_dash_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit dash [<project|path> ...]" "help lists dash command"
   assert_contains "${output}" "dashboard" "help describes dashboard alias"
@@ -93,15 +113,23 @@ test_jiggit_releases_help_succeeds() {
 }
 
 test_jiggit_help_lists_env_versions_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit env-versions [<project|path>]" "help lists env-versions command"
 }
 
 test_jiggit_help_lists_changes_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit changes [<project|path>] --base <env|git-ref> [--target <env|git-ref>] [--verbose]" "help lists changes base mode"
   assert_contains "${output}" "jiggit changes [<project|path>] --from <git-ref> [--to <git-ref|release>] [--verbose]" "help lists changes range mode"
@@ -109,15 +137,23 @@ test_jiggit_help_lists_changes_command() {
 }
 
 test_jiggit_help_lists_doctor_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit doctor [--fix|--repair] [--global|--no-projects] [--fail-fast] [--ignore-failures] [<project|path> ...]" "help lists doctor command"
 }
 
 test_jiggit_help_lists_setup_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit setup" "help lists setup command"
   assert_contains "${output}" "jiggit setup jira [<jira-name>] [--verbose]" "help lists setup jira mode"
@@ -125,30 +161,46 @@ test_jiggit_help_lists_setup_command() {
 }
 
 test_jiggit_help_lists_releases_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit releases [<project|path>]" "help lists releases command"
 }
 
 test_jiggit_help_lists_global_project_flags() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "--projects=a,b" "help lists global --projects flag"
   assert_contains "${output}" "--all-projects" "help lists global --all-projects flag"
 }
 
 test_jiggit_help_lists_global_verbose_flag() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "--verbose" "help lists global --verbose flag"
 }
 
 test_jiggit_help_lists_version_command() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit --version" "help lists --version"
   assert_contains "${output}" "jiggit version" "help lists version command"
@@ -190,7 +242,7 @@ test_jiggit_config_accepts_global_verbose_flag() {
 
   mkdir -p "${tmpdir}/bin" "${tmpdir}/home/.jiggit"
 
-  cat > "${tmpdir}/projects.toml" <<'EOF'
+  cat >"${tmpdir}/projects.toml" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -203,7 +255,7 @@ jira_regexes = ["ALPHA-[0-9]+"]
 environments = []
 EOF
 
-  cat > "${tmpdir}/bin/curl" <<'EOF'
+  cat >"${tmpdir}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "__CURL_LOG__"
 printf '{ "name": "Test User" }\n'
@@ -216,10 +268,10 @@ EOF
   local output
   output="$(
     HOME="${tmpdir}/home" \
-    PATH="${tmpdir}/bin:${PATH}" \
-    JIGGIT_PROJECTS_FILE="${tmpdir}/projects.toml" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${tmpdir}/discovered.toml" \
-    bin/jiggit config --verbose 2>&1
+      PATH="${tmpdir}/bin:${PATH}" \
+      JIGGIT_PROJECTS_FILE="${tmpdir}/projects.toml" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${tmpdir}/discovered.toml" \
+      bin/jiggit config --verbose 2>&1
   )"
 
   assert_contains "${output}" "[verbose] loading project config" "config accepts global --verbose"
@@ -232,8 +284,12 @@ EOF
 }
 
 test_jiggit_config_help_lists_global_and_project_args() {
+  reset_jiggit_state
+  # Plain output, matching `bin/jiggit help` under NO_COLOR (colored tests leak JIGGIT_COLOR_ENABLED globally).
+  JIGGIT_COLOR_ENABLED=0
   local output
-  output="$(bin/jiggit help)"
+  usage >/dev/null
+  output="${JIGGIT_USAGE_CACHE}"
 
   assert_contains "${output}" "jiggit config [--global|--no-projects|--all] [<project|path> ...]" "help lists config project args and global flag"
 }
@@ -254,7 +310,10 @@ test_jiggit_version_command_prints_version() {
 
 test_jiggit_can_be_sourced_without_running_main() {
   local output
-  output="$(source bin/jiggit source >/dev/null 2>&1; printf '%s' "${JIGGIT_SOURCE_ONLY}")"
+  output="$(
+    source bin/jiggit source >/dev/null 2>&1
+    printf '%s' "${JIGGIT_SOURCE_ONLY}"
+  )"
 
   assert_eq "1" "${output}" "source mode loads helpers without dispatch"
 }
@@ -265,7 +324,7 @@ test_sourced_jiggit_keeps_project_indexes_global_for_config_loading() {
   trap '[[ -n "${tmpdir:-}" ]] && rm -rf "${tmpdir}"' RETURN
 
   local projects_file="${tmpdir}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [alpha]
 repo_path = "/tmp/alpha"
 environments = ["lt"]
@@ -287,9 +346,9 @@ EOF
   # Use a plain shell so local login/profile hooks cannot stall the test.
   output="$(
     PATH="/opt/homebrew/bin:${PATH}" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${tmpdir}/discovered.toml" \
-    /opt/homebrew/bin/bash -c '
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${tmpdir}/discovered.toml" \
+      /opt/homebrew/bin/bash -c '
       source bin/jiggit source
       fetch_env_version_for_url() {
         printf "mock-%s\n" "$1"
