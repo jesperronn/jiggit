@@ -7,6 +7,7 @@ source bin/lib/bash_test.sh
 source bin/lib/next_release_command.sh
 
 TEST_TMPDIR=""
+CACHED_REPO_DIR=""
 declare -A JIGGIT_TEST_ENV_VERSION_BY_NAME=()
 JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG=""
 JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG=""
@@ -31,31 +32,77 @@ cleanup_tmpdir() {
   fi
 }
 
+ensure_cached_repo() {
+  if [[ -z "${CACHED_REPO_DIR}" || ! -d "${CACHED_REPO_DIR}" ]]; then
+    CACHED_REPO_DIR="$(mktemp -d /tmp/jiggit-repo-cache.XXXXXX)"
+
+    mkdir -p "${CACHED_REPO_DIR}"
+    git init "${CACHED_REPO_DIR}" >/dev/null 2>&1
+    git -C "${CACHED_REPO_DIR}" config user.name "Jiggit Test"
+    git -C "${CACHED_REPO_DIR}" config user.email "jiggit@example.com"
+    git -C "${CACHED_REPO_DIR}" branch -M main
+    git -C "${CACHED_REPO_DIR}" remote add origin "git@github.com:example/next-release-repo.git"
+
+    printf 'one\n' > "${CACHED_REPO_DIR}/README.md"
+    git -C "${CACHED_REPO_DIR}" add README.md
+    git -C "${CACHED_REPO_DIR}" commit -m "ALPHA-1 initial commit" >/dev/null 2>&1
+    git -C "${CACHED_REPO_DIR}" tag v1.2.0.0
+    git -C "${CACHED_REPO_DIR}" update-ref refs/remotes/origin/main "$(git -C "${CACHED_REPO_DIR}" rev-parse HEAD)"
+    git -C "${CACHED_REPO_DIR}" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+
+    printf 'two\n' >> "${CACHED_REPO_DIR}/README.md"
+    git -C "${CACHED_REPO_DIR}" add README.md
+    git -C "${CACHED_REPO_DIR}" commit -m "ALPHA-2 add feature" >/dev/null 2>&1
+
+    printf 'three\n' >> "${CACHED_REPO_DIR}/README.md"
+    git -C "${CACHED_REPO_DIR}" add README.md
+    git -C "${CACHED_REPO_DIR}" commit -m "ALPHA-3 add second feature" >/dev/null 2>&1
+    git -C "${CACHED_REPO_DIR}" update-ref refs/remotes/origin/main "$(git -C "${CACHED_REPO_DIR}" rev-parse HEAD)"
+  fi
+}
+
 create_repo_for_next_release() {
   local repo_dir="${1}"
 
-  mkdir -p "${repo_dir}"
-  git init "${repo_dir}" >/dev/null 2>&1
-  git -C "${repo_dir}" config user.name "Jiggit Test"
-  git -C "${repo_dir}" config user.email "jiggit@example.com"
-  git -C "${repo_dir}" branch -M main
-  git -C "${repo_dir}" remote add origin "git@github.com:example/next-release-repo.git"
+  # Ensure cached base repo exists and copy it (much faster than recreating)
+  ensure_cached_repo
+  cp -r "${CACHED_REPO_DIR}" "${repo_dir}"
+}
 
-  printf 'one\n' > "${repo_dir}/README.md"
-  git -C "${repo_dir}" add README.md
-  git -C "${repo_dir}" commit -m "ALPHA-1 initial commit" >/dev/null 2>&1
-  git -C "${repo_dir}" tag v1.2.0.0
-  git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
-  git -C "${repo_dir}" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+setup_home_based_project() {
+  local should_have_bearer_token="${1:-true}"
 
-  printf 'two\n' >> "${repo_dir}/README.md"
-  git -C "${repo_dir}" add README.md
-  git -C "${repo_dir}" commit -m "ALPHA-2 add feature" >/dev/null 2>&1
+  # Create home directory structure (shared across home-based tests)
+  local home_dir="${TEST_TMPDIR}/home"
+  local repo_dir="${TEST_TMPDIR}/next-release-repo"
+  local projects_dir="${home_dir}/.jiggit/config"
+  mkdir -p "${projects_dir}"
+  create_repo_for_next_release "${repo_dir}"
 
-  printf 'three\n' >> "${repo_dir}/README.md"
-  git -C "${repo_dir}" add README.md
-  git -C "${repo_dir}" commit -m "ALPHA-3 add second feature" >/dev/null 2>&1
-  git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
+  cat > "${projects_dir}/projects.toml" <<EOF
+[next-release-project]
+repo_path = "${repo_dir}"
+remote_url = "git@github.com:example/next-release-repo.git"
+jira_project_key = "ALPHA"
+jira_regexes = ["ALPHA-[0-9]+"]
+environments = ["prod"]
+EOF
+
+  if [[ "${should_have_bearer_token}" == "true" ]]; then
+    cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+bearer_token = "token"
+EOF
+  else
+    cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
+[jira]
+base_url = "https://jira.example.test"
+EOF
+  fi
+
+  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+  echo "${home_dir}"
 }
 
 # Override environment fetches so next-release tests stay local and deterministic.
@@ -210,28 +257,8 @@ test_run_next_release_main_verbose_shows_project_and_jira_auth_source() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
-  local home_dir="${TEST_TMPDIR}/home"
-  local repo_dir="${TEST_TMPDIR}/next-release-repo"
-  local projects_dir="${home_dir}/.jiggit/config"
-  mkdir -p "${projects_dir}"
-  create_repo_for_next_release "${repo_dir}"
-
-  cat > "${projects_dir}/projects.toml" <<EOF
-[next-release-project]
-repo_path = "${repo_dir}"
-remote_url = "git@github.com:example/next-release-repo.git"
-jira_project_key = "ALPHA"
-jira_regexes = ["ALPHA-[0-9]+"]
-environments = ["prod"]
-EOF
-
-  cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
-[jira]
-base_url = "https://jira.example.test"
-bearer_token = "token"
-EOF
-
-  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+  local home_dir
+  home_dir="$(setup_home_based_project)"
 
   local output
   output="$(
@@ -252,27 +279,8 @@ test_run_next_release_main_reports_missing_jira_auth_with_clear_next_step() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
-  local home_dir="${TEST_TMPDIR}/home"
-  local repo_dir="${TEST_TMPDIR}/next-release-repo"
-  local projects_dir="${home_dir}/.jiggit/config"
-  mkdir -p "${projects_dir}"
-  create_repo_for_next_release "${repo_dir}"
-
-  cat > "${projects_dir}/projects.toml" <<EOF
-[next-release-project]
-repo_path = "${repo_dir}"
-remote_url = "git@github.com:example/next-release-repo.git"
-jira_project_key = "ALPHA"
-jira_regexes = ["ALPHA-[0-9]+"]
-environments = ["prod"]
-EOF
-
-  cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
-[jira]
-base_url = "https://jira.example.test"
-EOF
-
-  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+  local home_dir
+  home_dir="$(setup_home_based_project false)"
 
   local output
   output="$(
@@ -283,7 +291,7 @@ EOF
     }
 
     HOME="${home_dir}" \
-      JIGGIT_PROJECTS_FILE="${projects_dir}/projects.toml" \
+      JIGGIT_PROJECTS_FILE="${home_dir}/.jiggit/config/projects.toml" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
       run_next_release_main next-release-project
   )"
@@ -299,28 +307,8 @@ test_run_next_release_main_surfaces_jira_release_fetch_errors() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
 
-  local home_dir="${TEST_TMPDIR}/home"
-  local repo_dir="${TEST_TMPDIR}/next-release-repo"
-  local projects_dir="${home_dir}/.jiggit/config"
-  mkdir -p "${projects_dir}"
-  create_repo_for_next_release "${repo_dir}"
-
-  cat > "${projects_dir}/projects.toml" <<EOF
-[next-release-project]
-repo_path = "${repo_dir}"
-remote_url = "git@github.com:example/next-release-repo.git"
-jira_project_key = "ALPHA"
-jira_regexes = ["ALPHA-[0-9]+"]
-environments = ["prod"]
-EOF
-
-  cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
-[jira]
-base_url = "https://jira.example.test"
-bearer_token = "token"
-EOF
-
-  JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
+  local home_dir
+  home_dir="$(setup_home_based_project)"
 
   local output
   output="$(
