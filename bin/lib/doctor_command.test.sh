@@ -99,30 +99,6 @@ cleanup_tmpdir() {
   fi
 }
 
-# shellcheck disable=SC2329
-fetch_jira_current_user() {
-  local jira_base_url="${1}"
-  printf 'myself|%s\n' "${jira_base_url}" >> "${TEST_TMPDIR}/fetch.log"
-
-  cat <<'EOF'
-{
-  "name": "nine-jrj"
-}
-EOF
-}
-
-fetch_jira_current_user() {
-  local jira_base_url="${1}"
-  printf 'myself|%s\n' "${jira_base_url}" >> "${TEST_TMPDIR}/fetch.log"
-
-  cat <<'EOF'
-{
-  "name": "nine-jrj"
-}
-EOF
-}
-
-install_default_fetch_project_environment_version_mock
 
 test_run_doctor_main_defaults_to_all_projects() {
   setup_tmpdir
