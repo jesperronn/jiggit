@@ -195,4 +195,50 @@ EOF
   assert_eq "10.0.0" "$(cat "${TEST_TMPDIR}/home/.local/share/jiggit/VERSION")" "repeat install refreshes the installed checkout"
 }
 
+# Use an older checkout's command to reproduce PATH detection and forced relinking.
+test_install_reuses_existing_command_directory_with_force() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  mkdir -p "${TEST_TMPDIR}/home/first" "${TEST_TMPDIR}/home/old bin"
+  ln -s "$(repo_root)/bin/jiggit" "${TEST_TMPDIR}/home/old bin/jiggit"
+  local output
+  output="$(
+    env HOME="${TEST_TMPDIR}/home" \
+      PATH="${TEST_TMPDIR}/home/first:${TEST_TMPDIR}/home/old bin:/usr/bin:/bin" \
+      JIGGIT_INSTALL_SOURCE_DIR="$(repo_root)" \
+      bash bin/install --force <<< '1' 2>&1
+  )"
+  assert_not_contains "${output}" "Choose a PATH directory" "existing command avoids the directory prompt"
+  if [[ "${TEST_TMPDIR}/home/old bin/jiggit" -ef "${TEST_TMPDIR}/home/.local/share/jiggit/bin/jiggit" ]]; then
+    pass "force updates the existing command location"
+  else
+    fail "force updates the existing command location"
+  fi
+}
+
+# Preserve saved selection across replacement of the installed tree.
+test_install_preserves_saved_directory_without_existing_command() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+
+  mkdir -p "${TEST_TMPDIR}/home/first" "${TEST_TMPDIR}/home/second" \
+    "${TEST_TMPDIR}/home/.local/share/jiggit"
+  printf 'link_dir=%s\n' "${TEST_TMPDIR}/home/second" > "${TEST_TMPDIR}/home/.local/share/jiggit/.install-state"
+  local output_file="${TEST_TMPDIR}/output.txt"
+  run_real_install "${output_file}" "${TEST_TMPDIR}/home/first:${TEST_TMPDIR}/home/second:/usr/bin:/bin" <<< '1'
+  assert_contains "$(cat "${output_file}")" "- link dir: \`${TEST_TMPDIR}/home/second\`" "saved directory survives update"
+}
+
+# Explicit configuration takes priority over a command found on PATH.
+test_install_explicit_directory_overrides_existing_command() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+  mkdir -p "${TEST_TMPDIR}/old" "${TEST_TMPDIR}/chosen"
+  ln -s "$(repo_root)/bin/jiggit" "${TEST_TMPDIR}/old/jiggit"
+  local actual
+  actual="$(PATH="${TEST_TMPDIR}/old:${PATH}" JIGGIT_LINK_DIR="${TEST_TMPDIR}/chosen" installer_link_dir)"
+  assert_eq "${TEST_TMPDIR}/chosen" "${actual}" "explicit directory wins over PATH detection"
+}
+
 run_tests "$@"

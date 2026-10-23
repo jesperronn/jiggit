@@ -159,4 +159,33 @@ test_run_setup_fails_when_no_writable_path_dir_exists() {
   fi
 }
 
+# Require explicit force before replacing an unrelated command.
+test_symlink_replacement_requires_force() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+  printf 'old command\n' > "${TEST_TMPDIR}/jiggit"
+  local output
+  if output="$(ensure_jiggit_symlink "${TEST_TMPDIR}" /new/target 2>&1)"; then
+    fail "existing command requires force"
+  else
+    assert_contains "${output}" "Refusing to replace" "existing command requires force"
+  fi
+  assert_eq "old command" "$(cat "${TEST_TMPDIR}/jiggit")" "refusal preserves existing command"
+  ensure_jiggit_symlink "${TEST_TMPDIR}" /new/target true > /dev/null
+  assert_eq /new/target "$(readlink "${TEST_TMPDIR}/jiggit")" "force replaces existing command"
+}
+
+# Never remove a real directory even when force is requested.
+test_force_preserves_existing_directory() {
+  setup_tmpdir
+  trap cleanup_tmpdir RETURN
+  mkdir "${TEST_TMPDIR}/jiggit"
+  if ensure_jiggit_symlink "${TEST_TMPDIR}" /new/target true 2>/dev/null; then
+    fail "force refuses directories"
+  else
+    pass "force refuses directories"
+  fi
+  [[ -d "${TEST_TMPDIR}/jiggit" ]] || fail "directory must remain"
+}
+
 run_tests "$@"

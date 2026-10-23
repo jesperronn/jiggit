@@ -4,11 +4,11 @@ set -euo pipefail
 # Render help for the local setup helper.
 usage() {
   cat <<'EOF'
-Usage: bin/setup
+Usage: bin/setup [--force]
 
 Create or refresh a single `jiggit` symlink in one writable directory from the
 current PATH. When several writable PATH directories exist, setup prompts for
-which one to use.
+which one to use. Use --force to replace an existing command.
 EOF
 }
 
@@ -205,6 +205,7 @@ ensure_jiggit_symlink() {
   local link_dir="${1}"
   local target_path="${2}"
   local symlink_path="${link_dir}/jiggit"
+  local force="${3:-false}"
 
   if same_file "${symlink_path}" "${target_path}"; then
     printf 'already-linked\n'
@@ -212,8 +213,11 @@ ensure_jiggit_symlink() {
   fi
 
   if [[ -e "${symlink_path}" || -L "${symlink_path}" ]]; then
-    printf 'Refusing to replace an existing command at %s\n' "${symlink_path}" >&2
-    return 1
+    if [[ "${force}" != true || ( -d "${symlink_path}" && ! -L "${symlink_path}" ) ]]; then
+      printf 'Refusing to replace an existing command at %s (use --force for files or symlinks)\n' "${symlink_path}" >&2
+      return 1
+    fi
+    rm -f "${symlink_path}"
   fi
 
   ln -s "${target_path}" "${symlink_path}"
@@ -241,16 +245,25 @@ run_main() {
   local target_path
   local link_dir
   local status
+  local force=false
 
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
     return 0
   fi
 
+  while [[ $# -gt 0 ]]; do
+    case "${1}" in
+      --force) force=true ;;
+      *) printf 'Unknown option: %s\n' "${1}" >&2; return 1 ;;
+    esac
+    shift
+  done
+
   repo_root="$(setup_repo_root)"
   target_path="$(setup_command_target)"
   link_dir="$(select_link_dir "${target_path}")"
-  status="$(ensure_jiggit_symlink "${link_dir}" "${target_path}")"
+  status="$(ensure_jiggit_symlink "${link_dir}" "${target_path}" "${force}")"
 
   render_setup_summary "${repo_root}" "${target_path}" "${link_dir}" "${status}"
 }

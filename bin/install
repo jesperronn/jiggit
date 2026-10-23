@@ -4,10 +4,12 @@ set -euo pipefail
 # Render help for the remote installer entrypoint.
 usage() {
   cat <<'EOF'
-Usage: bin/install
+Usage: bin/install [--force]
 
 Download or update jiggit from GitHub into ~/.local/share/jiggit and expose a
 single `jiggit` command by symlinking it into one writable directory from PATH.
+Reuse the existing command directory by default. JIGGIT_LINK_DIR overrides it.
+Use --force to replace an existing command at the selected location.
 
 Intended public usage:
   curl -fsSL https://raw.githubusercontent.com/jesperronn/jiggit/main/bin/install | bash
@@ -186,20 +188,18 @@ read_previous_link_dir() {
 # Run the installed setup helper and let it manage the symlink.
 run_installed_setup() {
   local install_root
-  local previous_link_dir=""
+  local link_dir="${1:-}"
+  local force="${2:-false}"
   local setup_output
   local setup_status=0
 
   install_root="$(installer_install_root)"
-  if previous_link_dir="$(read_previous_link_dir 2>/dev/null)"; then
-    :
-  else
-    previous_link_dir=""
-  fi
-
   setup_output="$(
-    JIGGIT_LINK_DIR="${JIGGIT_LINK_DIR:-${previous_link_dir}}" \
-      bash "${install_root}/bin/setup"
+    if [[ "${force}" == true ]]; then
+      JIGGIT_LINK_DIR="${link_dir}" bash "${install_root}/bin/setup" --force
+    else
+      JIGGIT_LINK_DIR="${link_dir}" bash "${install_root}/bin/setup"
+    fi
   )" || setup_status=$?
 
   printf '%s\n' "${setup_output}"
@@ -212,18 +212,43 @@ run_installed_setup() {
   write_install_state "${selected_link_dir}" "$(cat "${install_root}/VERSION" 2>/dev/null || printf 'unknown')"
 }
 
+# Choose a default before activation removes the previous install metadata.
+installer_link_dir() {
+  local existing_command=""
+
+  if [[ -n "${JIGGIT_LINK_DIR:-}" ]]; then
+    printf '%s\n' "${JIGGIT_LINK_DIR}"
+  elif existing_command="$(type -P jiggit)"; then
+    # Keep the PATH entry's directory, rather than resolving its symlink target.
+    (cd "$(dirname "${existing_command}")" && pwd)
+  else
+    read_previous_link_dir || true
+  fi
+}
+
 # Coordinate the download/update flow and wire jiggit into PATH via setup.
 run_main() {
   local staging_parent
   local staging_dir
   local version_text
+  local link_dir
+  local force=false
 
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
     return 0
   fi
 
+  while [[ $# -gt 0 ]]; do
+    case "${1}" in
+      --force) force=true ;;
+      *) printf 'Unknown option: %s\n' "${1}" >&2; return 1 ;;
+    esac
+    shift
+  done
+
   ensure_prerequisites
+  link_dir="$(installer_link_dir)"
 
   staging_parent="$(installer_staging_parent)"
   mkdir -p "${staging_parent}"
@@ -239,7 +264,7 @@ run_main() {
   printf -- "- install root: \`%s\`\n" "$(installer_install_root)"
   printf -- "- version: \`%s\`\n" "${version_text}"
 
-  run_installed_setup
+  run_installed_setup "${link_dir}" "${force}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
