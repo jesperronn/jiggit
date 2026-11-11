@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The scripts need bash >= 4 (mapfile), jq and git; bin/lint needs shellcheck and, to enforce formatting, shfmt.
+      - name: Install tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck shfmt jq
+
+      # Homebrew's bin first on PATH, so `#!/usr/bin/env bash` finds bash 5 instead of macOS's 3.2.
+      - name: Install tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash shellcheck shfmt jq
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+
+      - name: Lint
+        run: bin/lint
+
+      - name: Test
+        run: bin/test
