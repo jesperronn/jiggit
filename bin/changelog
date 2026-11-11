@@ -1,0 +1,288 @@
+#!/usr/bin/env bash
+# changelog — read-only preview of "what would this release be", from conventional commits.
+# shellcheck disable=SC2329 # cmd_<sub> is dispatched by name
+set -euo pipefail
+# shellcheck source=lib/project.sh
+source "${BASH_SOURCE[0]%/*}/lib/project.sh"
+
+EX_NOTHING=3
+EX_NOT_DUE=4
+TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+usage() {
+  cat <<'USAGE'
+Usage: bin/changelog next|render|update|due [--repo DIR] [--grace 2h] [--now EPOCH]
+                     [--file CHANGELOG.md] [--date YYYY-MM-DD] [--replace-unreleased]
+
+  next    next version vX.Y.Z from conventional commits since the latest vX.Y.Z tag
+          (v0.0.0 if none); exit 3 when nothing is releasable
+  render  the changelog section for that version, on stdout
+  update  insert the section into CHANGELOG.md as "## [X.Y.Z] - DATE", above the newest
+          release (below [Unreleased], which stays); refuses if that version exists
+          --file F  (default CHANGELOG.md; created when missing)  --date D  (default today)
+          --replace-unreleased  drop the hand-written [Unreleased] body, keep its heading
+  due     time left of the quiet period since the HEAD commit; exit 4 when not yet due
+          --grace D  quiet period: 90m, 2h, 1h30m, 1d (default 2h)
+          --now EPOCH  override the clock (seconds; for tests)
+
+Bump: "!:" or a BREAKING CHANGE footer = major; feat = minor; fix, perf = patch;
+docs, test, chore, refactor, ci, build, style and revert alone = none.
+Entries: "- **scope:** description (hash)", under Changed (BREAKING), Added, Fixed, Changed.
+Read-only: never tags, fetches or writes.
+Exit: 0 ok, 1 error, 2 usage, 3 nothing releasable, 4 not yet due.
+USAGE
+}
+
+BREAKING=() ADDED=() FIXED=() CHANGED=()
+BUMP="" BASE_TAG="" NEXT=""
+
+latest_tag() {
+  git tag --list 'v*' --sort=-v:refname | grep -E "$TAG_RE" | head -n 1 || true
+}
+
+# Classify commits since the latest tag into the arrays above and set BUMP.
+collect() {
+  local range=HEAD rec hash subj body type scope desc bang entry
+  local re='^([a-zA-Z]+)(\(([^)]*)\))?(!?): (.*)$'
+  git rev-parse --verify -q HEAD >/dev/null || {
+    echo "changelog: no commits in $PWD" >&2
+    return 1
+  }
+  BASE_TAG="$(latest_tag)"
+  [[ -n "$BASE_TAG" ]] && range="$BASE_TAG..HEAD"
+  while IFS= read -r -d $'\x1e' rec; do
+    rec="${rec#$'\n'}"
+    hash="${rec%%$'\x1f'*}"
+    rec="${rec#*$'\x1f'}"
+    subj="${rec%%$'\x1f'*}"
+    body="${rec#*$'\x1f'}"
+    [[ "$subj" =~ $re ]] || continue
+    type="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+    scope="${BASH_REMATCH[3]}" bang="${BASH_REMATCH[4]}" desc="${BASH_REMATCH[5]}"
+    grep -qE '^BREAKING[ -]CHANGE' <<<"$body" && bang="!"
+    entry="- "
+    [[ -n "$scope" ]] && entry+="**$scope:** "
+    entry+="$desc ($hash)"
+    if [[ -n "$bang" ]]; then
+      BREAKING+=("$entry")
+      BUMP="major"
+      continue
+    fi
+    case "$type" in
+      feat)
+        ADDED+=("$entry")
+        [[ "$BUMP" == major ]] || BUMP="minor"
+        ;;
+      fix)
+        FIXED+=("$entry")
+        [[ -n "$BUMP" ]] || BUMP="patch"
+        ;;
+      perf)
+        CHANGED+=("$entry")
+        [[ -n "$BUMP" ]] || BUMP="patch"
+        ;;
+      revert) CHANGED+=("$entry") ;;
+    esac
+  done < <(git log --no-color --pretty=format:'%h%x1f%s%x1f%b%x1e' "$range")
+}
+
+# Set NEXT from BASE_TAG and BUMP; return 3 when nothing is releasable.
+next_version() {
+  local base ma mi pa
+  collect || return 1
+  [[ -n "$BUMP" ]] || return "$EX_NOTHING"
+  base="${BASE_TAG:-v0.0.0}"
+  IFS=. read -r ma mi pa <<<"${base#v}"
+  case "$BUMP" in
+    major) NEXT="v$((ma + 1)).0.0" ;;
+    minor) NEXT="v$ma.$((mi + 1)).0" ;;
+    *) NEXT="v$ma.$mi.$((pa + 1))" ;;
+  esac
+}
+
+nothing_msg() { echo "nothing releasable since ${BASE_TAG:-the first commit}" >&2; }
+
+cmd_next() {
+  local rc=0
+  next_version || rc=$?
+  case "$rc" in
+    0) echo "$NEXT" ;;
+    "$EX_NOTHING") nothing_msg ;;
+  esac
+  return "$rc"
+}
+
+print_group() {
+  local title="$1"
+  shift
+  [[ $# -gt 0 ]] || return 0
+  printf '\n### %s\n\n' "$title"
+  printf '%s\n' "$@"
+}
+
+cmd_render() {
+  local rc=0
+  next_version || rc=$?
+  if [[ "$rc" -eq "$EX_NOTHING" ]]; then
+    nothing_msg
+    return "$rc"
+  fi
+  [[ "$rc" -eq 0 ]] || return "$rc"
+  printf '## %s\n' "$NEXT"
+  print_group "Changed (BREAKING)" ${BREAKING[@]+"${BREAKING[@]}"}
+  print_group "Added" ${ADDED[@]+"${ADDED[@]}"}
+  print_group "Fixed" ${FIXED[@]+"${FIXED[@]}"}
+  print_group "Changed" ${CHANGED[@]+"${CHANGED[@]}"}
+}
+
+# Insert the rendered section into FILE (see usage). Not used by a release script that
+# keeps hand-written notes; delete this and the update flags if the project does not want it.
+cmd_update() {
+  local section tmp ver rc=0
+  section="$(mktemp)"
+  tmp="$(mktemp)"
+  cmd_render >"$section" || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    rm -f "$section" "$tmp"
+    return "$rc"
+  fi
+  ver="${NEXT#v}"
+  heading="## [$ver] - ${DATE:-$(date +%F)}"
+  if [[ -f "$FILE" ]] && grep -qE "^## \[?v?${ver//./\\.}\]?( |\$)" "$FILE"; then
+    echo "changelog: $FILE already has a section for $ver" >&2
+    rm -f "$section" "$tmp"
+    return "$EX_FAILED"
+  fi
+  {
+    printf '%s\n' "$heading"
+    tail -n +2 "$section"
+  } >"$tmp"
+  mv "$tmp" "$section"
+  if [[ ! -f "$FILE" ]]; then
+    printf '# Changelog\n\n## [Unreleased]\n\n' >"$FILE"
+  fi
+  awk -v secfile="$section" -v repl="$REPLACE" '
+    function emit(  l) { while ((getline l < secfile) > 0) print l; print "" }
+    /^## \[?Unreleased/ && repl == 1 { skipping = 1; print; print ""; next }
+    /^## \[?v?[0-9]/ && !done { skipping = 0; emit(); done = 1 }
+    skipping { next }
+    { print }
+    END { if (!done) { print ""; emit() } }' "$FILE" >"$tmp"
+  mv "$tmp" "$FILE"
+  rm -f "$section"
+  echo "updated $FILE with $NEXT"
+}
+
+# "1h30m" -> seconds; prints nothing when malformed.
+parse_duration() {
+  local s="$1" total=0 n u
+  [[ "$s" =~ ^([0-9]+[smhd])+$ ]] || return 0
+  while [[ -n "$s" ]]; do
+    [[ "$s" =~ ^([0-9]+)([smhd])(.*)$ ]] || return 0
+    n="${BASH_REMATCH[1]}" u="${BASH_REMATCH[2]}" s="${BASH_REMATCH[3]}"
+    case "$u" in
+      m) n=$((n * 60)) ;;
+      h) n=$((n * 3600)) ;;
+      d) n=$((n * 86400)) ;;
+    esac
+    total=$((total + n))
+  done
+  echo "$total"
+}
+
+fmt_duration() {
+  local t="$1" out=""
+  ((t >= 86400)) && out+="$((t / 86400))d" && t=$((t % 86400))
+  ((t >= 3600)) && out+="$((t / 3600))h" && t=$((t % 3600))
+  ((t >= 60)) && out+="$((t / 60))m" && t=$((t % 60))
+  if ((t > 0)) || [[ -z "$out" ]]; then out+="${t}s"; fi
+  echo "$out"
+}
+
+cmd_due() {
+  local grace_s last now left
+  git rev-parse --verify -q HEAD >/dev/null || {
+    echo "changelog: no commits in $PWD" >&2
+    return 1
+  }
+  grace_s="$(parse_duration "$GRACE")"
+  [[ -n "$grace_s" ]] || die_usage "bad --grace '$GRACE' (use e.g. 90m, 2h, 1h30m)"
+  last="$(git log -1 --format=%ct HEAD)"
+  now="${NOW:-$(date +%s)}"
+  left=$((last + grace_s - now))
+  if ((left <= 0)); then
+    echo due
+    return 0
+  fi
+  fmt_duration "$left"
+  return "$EX_NOT_DUE"
+}
+
+main() {
+  local sub="${1-}" repo=.
+  GRACE=2h NOW="" FILE=CHANGELOG.md DATE="" REPLACE=0
+  case "$sub" in
+    "")
+      usage >&2
+      exit "$EX_USAGE"
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    next | render | update | due) shift ;;
+    *) die_usage "unknown subcommand '$sub'" ;;
+  esac
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      --repo)
+        [[ $# -ge 2 ]] || die_usage "--repo needs a value"
+        repo="$2"
+        shift
+        ;;
+      --grace)
+        [[ "$sub" == due && $# -ge 2 ]] || die_usage "--grace needs a value and only applies to 'due'"
+        GRACE="$2"
+        shift
+        ;;
+      --now)
+        [[ "$sub" == due && $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || die_usage "--now needs epoch seconds and only applies to 'due'"
+        NOW="$2"
+        shift
+        ;;
+      --file)
+        [[ "$sub" == update && $# -ge 2 ]] || die_usage "--file needs a value and only applies to 'update'"
+        FILE="$2"
+        shift
+        ;;
+      --date)
+        [[ "$sub" == update && $# -ge 2 && "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die_usage "--date needs YYYY-MM-DD and only applies to 'update'"
+        DATE="$2"
+        shift
+        ;;
+      --replace-unreleased)
+        [[ "$sub" == update ]] || die_usage "--replace-unreleased only applies to 'update'"
+        REPLACE=1
+        ;;
+      *) die_usage "unknown flag '$1' for '$sub'" ;;
+    esac
+    shift
+  done
+  cd "$repo" 2>/dev/null || {
+    echo "changelog: cannot cd to $repo" >&2
+    exit "$EX_FAILED"
+  }
+  git rev-parse --git-dir >/dev/null 2>&1 || {
+    echo "changelog: $repo is not a git repository" >&2
+    exit "$EX_FAILED"
+  }
+  local rc=0
+  "cmd_$sub" || rc=$?
+  exit "$rc"
+}
+
+main "$@"

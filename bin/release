@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# release — write VERSION, commit and tag locally; push only after a prompt.
+set -euo pipefail
+# shellcheck source=lib/project.sh
+source "${BASH_SOURCE[0]%/*}/lib/project.sh"
+
+ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
+REMOTE="${JIGGIT_RELEASE_REMOTE:-origin}"
+
+# Render help for the release command.
+usage() {
+  cat <<'USAGE'
+Usage: bin/release [vX.Y.Z]
+
+Release the current branch: take the version from the argument or from
+`bin/changelog next`, show `bin/changelog render`, write VERSION, commit it as
+"chore(release): vX.Y.Z" and create the tag vX.Y.Z locally. Then ask before
+pushing the branch and the tag to the remote (JIGGIT_RELEASE_REMOTE, default
+origin); anything but "y" leaves everything local.
+
+Refuses a dirty working tree and a tag that already exists. With no vX.Y.Z tag yet,
+pass the first version explicitly: `bin/changelog next` counts from v0.0.0.
+Exit: 0 ok, 1 refused or failed, 2 usage, 3 nothing releasable.
+USAGE
+}
+
+# Print a release error and exit with EX_FAILED.
+die() {
+  printf 'release: %s\n' "$1" >&2
+  exit "$EX_FAILED"
+}
+
+# Resolve the version to release into VERSION_TAG: the argument, else bin/changelog next.
+resolve_version() {
+  local requested="${1-}" rc=0
+  if [[ -n "$requested" ]]; then
+    [[ "$requested" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die_usage "version must look like v1.2.3, got '$requested'"
+    VERSION_TAG="$requested"
+    return 0
+  fi
+  VERSION_TAG="$("$ROOT/bin/changelog" next)" || rc=$?
+  [[ "$rc" -eq 0 ]] || exit "$rc"
+}
+
+# Ask a yes/no question; anything but "y" (or no input) means no.
+confirm() {
+  local answer=""
+  printf '%s [y/N] ' "$1"
+  read -r answer || true
+  [[ "$answer" == y || "$answer" == Y ]]
+}
+
+# Release flow: check, version, preview, write, commit, tag, prompt, push.
+main() {
+  local requested=""
+  case "${1-}" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -*) die_usage "unknown flag '$1'" ;;
+    *) requested="${1-}" ;;
+  esac
+  [[ $# -le 1 ]] || die_usage "too many arguments"
+
+  cd "$ROOT"
+  [[ -z "$(git status --porcelain)" ]] || die "working tree is not clean; commit or stash first"
+
+  resolve_version "$requested"
+  git rev-parse -q --verify "refs/tags/$VERSION_TAG" >/dev/null && die "tag $VERSION_TAG already exists"
+
+  "$ROOT/bin/changelog" render --repo "$ROOT" || true
+
+  if [[ "$(cat VERSION 2>/dev/null || true)" != "${VERSION_TAG#v}" ]]; then
+    printf '%s\n' "${VERSION_TAG#v}" >VERSION
+    git add VERSION
+    git commit -q -m "chore(release): $VERSION_TAG"
+  fi
+  git tag -a "$VERSION_TAG" -m "$VERSION_TAG"
+  printf 'tagged %s locally\n' "$VERSION_TAG"
+
+  if confirm "Push $(git rev-parse --abbrev-ref HEAD) and $VERSION_TAG to $REMOTE?"; then
+    git push "$REMOTE" HEAD "$VERSION_TAG"
+  else
+    printf 'not pushed; push later with: git push %s HEAD %s\n' "$REMOTE" "$VERSION_TAG"
+  fi
+}
+
+main "$@"
