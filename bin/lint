@@ -1,37 +1,63 @@
 #!/usr/bin/env bash
-# lint — syntax-check and shellcheck the repo's shell scripts.
+# lint — syntax-check, shellcheck and shfmt-check the repo's shell scripts.
 set -euo pipefail
 
 pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 JIGGIT_LINT_VERBOSE=0
+JIGGIT_LINT_AUTOFIX=0
+# shfmt is optional; override the binary (or point it at a missing one) via this variable.
+JIGGIT_LINT_SHFMT="${JIGGIT_LINT_SHFMT:-shfmt}"
 
 # Render help for the repo lint runner.
 usage() {
-  cat <<'EOF'
-Usage: bin/lint [--verbose] [file ...]
+  cat <<'EOF2'
+Usage: bin/lint [--autofix] [--verbose] [file ...]
 
-Run syntax checks for one or more shell scripts.
-If no files are supplied, lint all shell scripts in this repository.
-If `shellcheck` is available, run it too.
-EOF
+Run bash -n, shellcheck and a shfmt format check on shell scripts.
+If no files are supplied, lint all shell scripts under bin/ and config/.
+Non-shell files are skipped.
+
+  --autofix   rewrite formatting with shfmt -w (shellcheck only reports)
+  --verbose   print the tool commands
+  -h, --help  show this help
+
+shfmt is optional: when it is missing the format check is skipped with a note.
+Style comes from .editorconfig. shellcheck reads .shellcheckrc and runs one file
+at a time without -x, because following the source chain among the libraries
+does not finish in reasonable time.
+Exit: 0 clean, 1 a check failed (every check still runs), 2 usage error.
+EOF2
+}
+
+# Succeed for a file with a .sh extension or a bash shebang.
+is_shell_file() {
+  local file="${1}" first=""
+  [[ "${file}" == *.sh ]] && return 0
+  [[ -f "${file}" ]] || return 1
+  first="$(head -n 1 "${file}" 2>/dev/null || true)"
+  [[ "${first}" =~ ^#!.*bash ]]
 }
 
 # Return the explicit file list or discover shell sources under bin/ and config/.
 collect_shell_files() {
+  local file
   if [[ $# -gt 0 ]]; then
-    printf '%s\n' "$@"
+    for file in "$@"; do
+      if is_shell_file "${file}"; then
+        printf '%s\n' "${file}"
+      else
+        printf 'lint: skipping %s (not a shell file)\n' "${file}" >&2
+      fi
+    done
     return 0
   fi
 
-  find bin config -type f \( -name '*.sh' -o -path 'bin/*' \) | sort
-}
-
-# Run Bash syntax validation for one file.
-run_bash_syntax_check() {
-  local file="${1}"
-  printf 'syntax  %s\n' "${file}"
-  bash -n "${file}"
+  while IFS= read -r file; do
+    if is_shell_file "${file}"; then
+      printf '%s\n' "${file}"
+    fi
+  done < <(find bin config -type f | sort)
 }
 
 # Print one verbose troubleshooting line for the lint runner.
@@ -41,22 +67,56 @@ lint_debug() {
   fi
 }
 
-# Run shellcheck across the selected files when the tool is available locally.
+# Run Bash syntax validation for every file; return 1 if any fails.
+run_bash_syntax_checks() {
+  local file status=0
+  for file in "$@"; do
+    printf 'syntax  %s\n' "${file}"
+    bash -n "${file}" || status=1
+  done
+  return "${status}"
+}
+
+# Run shellcheck once per file when the tool is available locally.
 run_shellcheck_if_available() {
-  local -a files=("$@")
-  local total_count="${#files[@]}"
+  local file status=0
 
   if ! command -v shellcheck >/dev/null 2>&1; then
     printf 'shellcheck not installed; skipping.\n'
     return 0
   fi
 
-  printf 'shellcheck %s files\n' "${total_count}"
-  lint_debug "run: shellcheck -x ${files[*]}"
-  shellcheck -x "${files[@]}"
+  printf 'shellcheck %s files\n' "$#"
+  for file in "$@"; do
+    lint_debug "run: shellcheck ${file}"
+    shellcheck "${file}" || status=1
+  done
+  return "${status}"
 }
 
-# Resolve files to lint, run syntax checks, and then run shellcheck if possible.
+# Check (or with --autofix rewrite) formatting with shfmt when it is installed.
+run_shfmt_if_available() {
+  if ! command -v "${JIGGIT_LINT_SHFMT}" >/dev/null 2>&1; then
+    printf 'shfmt not installed; skipping format check (brew install shfmt).\n'
+    return 0
+  fi
+
+  if [[ "${JIGGIT_LINT_AUTOFIX}" -eq 1 ]]; then
+    printf 'shfmt %s files (autofix)\n' "$#"
+    lint_debug "run: ${JIGGIT_LINT_SHFMT} -w $*"
+    "${JIGGIT_LINT_SHFMT}" -w "$@"
+    return 0
+  fi
+
+  printf 'shfmt %s files\n' "$#"
+  lint_debug "run: ${JIGGIT_LINT_SHFMT} -d $*"
+  if ! "${JIGGIT_LINT_SHFMT}" -d "$@"; then
+    printf 'shfmt: needs formatting (bin/lint --autofix fixes these)\n' >&2
+    return 1
+  fi
+}
+
+# Resolve files to lint, then run every check and report failures at the end.
 run_main() {
   local -a requested_files=()
 
@@ -70,6 +130,15 @@ run_main() {
         JIGGIT_LINT_VERBOSE=1
         shift
         ;;
+      --autofix)
+        JIGGIT_LINT_AUTOFIX=1
+        shift
+        ;;
+      -*)
+        printf 'lint: unknown option: %s\n' "${1}" >&2
+        usage >&2
+        return 2
+        ;;
       *)
         requested_files+=("${1}")
         shift
@@ -78,19 +147,23 @@ run_main() {
   done
 
   local -a files=()
-  mapfile -t files < <(collect_shell_files "${requested_files[@]}")
+  mapfile -t files < <(collect_shell_files ${requested_files[@]+"${requested_files[@]}"})
 
   if [[ ${#files[@]} -eq 0 ]]; then
     printf 'No shell files found.\n' >&2
     return 1
   fi
 
-  local file
-  for file in "${files[@]}"; do
-    run_bash_syntax_check "${file}"
-  done
+  local failures=0
+  # Format first, so --autofix output is what the other checks see.
+  run_shfmt_if_available "${files[@]}" || failures=$((failures + 1))
+  run_bash_syntax_checks "${files[@]}" || failures=$((failures + 1))
+  run_shellcheck_if_available "${files[@]}" || failures=$((failures + 1))
 
-  run_shellcheck_if_available "${files[@]}"
+  if [[ ${failures} -gt 0 ]]; then
+    printf 'lint: FAILED (%s check(s))\n' "${failures}" >&2
+    return 1
+  fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

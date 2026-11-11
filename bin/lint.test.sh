@@ -5,57 +5,94 @@ pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 
+# Create a scratch dir and remove it when the calling test returns.
 setup_test_tmpdir() {
   TEST_TMPDIR="$(mktemp -d)"
   export TEST_TMPDIR
   trap 'rm -rf "${TEST_TMPDIR}"' RETURN
 }
 
-create_fake_shellcheck() {
+# Install a stub tool in TEST_TMPDIR/bin that echoes its arguments and exits with a status.
+create_fake_tool() {
+  local name="${1}" status="${2:-0}"
   mkdir -p "${TEST_TMPDIR}/bin"
-  cat >"${TEST_TMPDIR}/bin/shellcheck" <<'EOF'
-#!/usr/bin/env bash
-printf 'fake shellcheck %s\n' "$*"
-EOF
-  chmod +x "${TEST_TMPDIR}/bin/shellcheck"
+  printf '#!/usr/bin/env bash\nprintf "fake %s %%s\\n" "$*"\nexit %s\n' "${name}" "${status}" >"${TEST_TMPDIR}/bin/${name}"
+  chmod +x "${TEST_TMPDIR}/bin/${name}"
 }
 
-test_lint_help_mentions_verbose_flag() {
+# Run bin/lint with stubs first on PATH; sets lint_output and lint_status.
+run_lint() {
+  lint_status=0
+  lint_output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" JIGGIT_LINT_SHFMT="${TEST_TMPDIR}/bin/shfmt" bash bin/lint "$@" 2>&1)" || lint_status=$?
+}
+
+test_lint_help_mentions_flags() {
   local output
   output="$(bash bin/lint --help)"
 
-  assert_contains "${output}" "Usage: bin/lint [--verbose] [file ...]" "lint help lists --verbose"
+  assert_contains "${output}" "Usage: bin/lint [--autofix] [--verbose] [file ...]" "help lists the flags"
 }
 
-test_lint_verbose_runs_shellcheck_one_file_at_a_time() {
+test_lint_runs_each_tool_per_file_set() {
   setup_test_tmpdir
-  create_fake_shellcheck
+  create_fake_tool shellcheck
+  create_fake_tool shfmt
 
-  local output
-  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash bin/lint --verbose bin/lint 2>&1)"
+  run_lint --verbose bin/lint bin/setup
 
-  assert_contains "${output}" "syntax  bin/lint" "run syntax check"
-  assert_contains "${output}" "shellcheck 1 files" "show shellcheck summary"
-  assert_contains "${output}" "[lint] run: shellcheck -x bin/lint" "show verbose shellcheck command"
-  assert_contains "${output}" "fake shellcheck -x bin/lint" "invoke stub shellcheck"
+  assert_eq "0" "${lint_status}" "clean run exits 0"
+  assert_contains "${lint_output}" "syntax  bin/setup" "syntax check for each file"
+  assert_contains "${lint_output}" "shellcheck 2 files" "shellcheck summary"
+  assert_contains "${lint_output}" "fake shellcheck bin/lint" "shellcheck runs on the first file alone"
+  assert_contains "${lint_output}" "fake shellcheck bin/setup" "shellcheck runs on the second file alone"
+  assert_contains "${lint_output}" "fake shfmt -d bin/lint bin/setup" "shfmt checks both files in one call"
 }
 
-test_lint_accepts_multiple_explicit_files() {
+test_lint_autofix_runs_shfmt_write() {
   setup_test_tmpdir
-  create_fake_shellcheck
+  create_fake_tool shellcheck
+  create_fake_tool shfmt
 
-  local output
-  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash bin/lint --verbose bin/lint bin/setup 2>&1)"
+  run_lint --autofix bin/lint
 
-  assert_contains "${output}" "syntax  bin/lint" "run syntax check for first file"
-  assert_contains "${output}" "syntax  bin/setup" "run syntax check for second file"
-  assert_contains "${output}" "shellcheck 2 files" "show shellcheck summary for multiple files"
-  assert_contains "${output}" "[lint] run: shellcheck -x bin/lint bin/setup" "show batched shellcheck command"
-  assert_contains "${output}" "fake shellcheck -x bin/lint bin/setup" "invoke stub shellcheck once for both files"
+  assert_contains "${lint_output}" "fake shfmt -w bin/lint" "autofix writes with shfmt"
+  assert_not_contains "${lint_output}" "fake shfmt -d" "autofix does not also run the check"
+}
 
-  local shellcheck_calls
-  shellcheck_calls="$(printf '%s\n' "${output}" | grep -c '^fake shellcheck ' || true)"
-  assert_eq "1" "${shellcheck_calls}" "run shellcheck once for multiple files"
+test_lint_fails_when_shfmt_reports_diffs() {
+  setup_test_tmpdir
+  create_fake_tool shellcheck
+  create_fake_tool shfmt 1
+
+  run_lint bin/lint
+
+  assert_eq "1" "${lint_status}" "shfmt diff fails lint"
+  assert_contains "${lint_output}" "bin/lint --autofix fixes these" "failure points at --autofix"
+  assert_contains "${lint_output}" "fake shellcheck bin/lint" "other checks still run"
+}
+
+test_lint_skips_shfmt_when_missing() {
+  setup_test_tmpdir
+  create_fake_tool shellcheck
+
+  lint_status=0
+  lint_output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" JIGGIT_LINT_SHFMT="${TEST_TMPDIR}/bin/no-such-shfmt" bash bin/lint bin/lint 2>&1)" || lint_status=$?
+
+  assert_eq "0" "${lint_status}" "missing shfmt is not a failure"
+  assert_contains "${lint_output}" "shfmt not installed; skipping" "says shfmt was skipped"
+}
+
+test_lint_skips_non_shell_files_and_rejects_unknown_flags() {
+  setup_test_tmpdir
+  create_fake_tool shellcheck
+  create_fake_tool shfmt
+
+  run_lint README.md bin/lint
+  assert_contains "${lint_output}" "skipping README.md (not a shell file)" "non-shell file is skipped"
+  assert_not_contains "${lint_output}" "syntax  README.md" "non-shell file is not syntax-checked"
+
+  run_lint --nope
+  assert_eq "2" "${lint_status}" "unknown flag exits 2"
 }
 
 run_tests "$@"
