@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# jira_endpoint_smoke.sh — probe Jira endpoints with curl for manual smoke checks.
 
 set -euo pipefail
 

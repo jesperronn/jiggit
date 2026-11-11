@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# setup — link this checkout as jiggit on your shell PATH.
 set -euo pipefail
 
 # Render help for the local setup helper.

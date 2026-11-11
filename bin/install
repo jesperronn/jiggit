@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# install — remote installer: clone or update jiggit and link it on PATH.
 set -euo pipefail
 
 # Render help for the remote installer entrypoint.

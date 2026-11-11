@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# test — run the colocated bin/**/*.test.sh suites.
 set -euo pipefail
 
 pushd "$(dirname "$0")/.." > /dev/null || exit 1

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# workflows — print the commands for each maintainer workflow. Prints only, runs nothing.
+set -euo pipefail
+
+# Render help for the workflow index.
+usage() {
+  cat <<'USAGE'
+Usage: bin/workflows [commands|setup|test|lint|release]
+
+Print the commands for a workflow (no argument: all). Only prints; runs nothing.
+Exit: 0 ok, 2 unknown workflow.
+USAGE
+}
+
+# List every script in bin/ and bin/adhoc/ with the description from its
+# "# <name> — <text>" line, so the list cannot go stale.
+commands() {
+  local dir f name desc
+  dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  echo "== commands =="
+  for f in "$dir"/* "$dir"/adhoc/*; do
+    [[ -f "$f" && "$(head -c 2 "$f")" == "#!" ]] || continue
+    name="${f##*/}"
+    [[ "$name" == *.test.sh ]] && continue
+    desc="$(grep -m1 "^# $name — " "$f" | cut -d' ' -f4- || true)"
+    printf '  %-26s %s\n' "$name" "${desc:-(no description line)}"
+  done
+}
+
+# Print the setup cheat sheet.
+setup() {
+  cat <<'EOT'
+== setup ==
+  bin/setup                  # link this checkout as `jiggit` on PATH
+  bin/test                   # first check after setup
+EOT
+}
+
+# Print the test cheat sheet.
+test_() {
+  cat <<'EOT'
+== test ==
+  bin/test                   # every bin/**/*.test.sh
+  bin/test FILE...           # only these test files
+  bin/test --verbose FILE    # per-test RUN lines
+EOT
+}
+
+# Print the lint cheat sheet.
+lint() {
+  cat <<'EOT'
+== lint ==
+  bin/lint                   # whole repo: bash -n, shellcheck, shfmt check
+  bin/lint FILE...           # only these files
+  bin/lint --autofix [FILE]  # rewrite formatting with shfmt
+EOT
+}
+
+# Print the release cheat sheet.
+release() {
+  cat <<'EOT'
+== release ==
+  bin/changelog next|render  # read-only preview from conventional commits
+  bin/release [vX.Y.Z]       # writes VERSION, tags locally, pushes only after a prompt
+  deploy: none
+EOT
+}
+
+# Dispatch on the requested workflow.
+main() {
+  case "${1-all}" in
+    -h | --help) usage ;;
+    commands) commands ;;
+    setup) setup ;;
+    test) test_ ;;
+    lint) lint ;;
+    release) release ;;
+    all)
+      commands
+      setup
+      test_
+      lint
+      release
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# git_diff_expr — print a normalised vA..vB git tag range.
 # Print a normalized git tag range for use with `git log` / `git diff`.
 # Accepts two positional tags: start_tag end_tag. Supports -v/--verbose and --.
 # Normalizes tags to a single leading 'v', preferring tags that exist in the Git repo.

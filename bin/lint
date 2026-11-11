@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint — syntax-check and shellcheck the repo's shell scripts.
 set -euo pipefail
 
 pushd "$(dirname "$0")/.." > /dev/null || exit 1

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# jira_requests.sh — run manual Jira REST request probes with curl.
 
 set -euo pipefail
 
