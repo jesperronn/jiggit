@@ -39,7 +39,7 @@ run_setup_main() {
   local mode="${1:-}"
 
   case "${mode}" in
-    ""|-h|--help)
+    "" | -h | --help)
       setup_usage
       ;;
     jira)

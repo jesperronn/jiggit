@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/explore.sh
@@ -27,7 +27,7 @@ test_run_config_main_renders_loaded_files_projects_and_overrides() {
   local repo_config_dir="${TEST_TMPDIR}/repo-config"
   mkdir -p "${home_dir}/.jiggit/config" "${repo_config_dir}"
 
-  cat > "${repo_config_dir}/projects.toml" <<'EOF'
+  cat >"${repo_config_dir}/projects.toml" <<'EOF'
 [alpha]
 repo_path = "/tmp/alpha"
 remote_url = "git@github.com:example/alpha.git"
@@ -36,7 +36,7 @@ jira_regexes = ["ALPHA-[0-9]+"]
 environments = ["prod"]
 EOF
 
-  cat > "${home_dir}/.jiggit/config/projects.toml" <<'EOF'
+  cat >"${home_dir}/.jiggit/config/projects.toml" <<'EOF'
 [alpha]
 repo_path = "/tmp/alpha-override"
 remote_url = "git@github.com:example/alpha.git"
@@ -60,10 +60,10 @@ EOF
   local output
   output="$(
     HOME="${home_dir}" \
-    JIGGIT_CONFIG_DIR="${home_dir}/.jiggit/config" \
-    JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/config/projects.toml" \
-    run_config_main
+      JIGGIT_CONFIG_DIR="${home_dir}/.jiggit/config" \
+      JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/config/projects.toml" \
+      run_config_main
   )"
 
   assert_contains "${output}" "## Loaded Config Files" "render loaded config files section"
@@ -87,7 +87,7 @@ test_run_config_main_can_force_colored_headings_and_project_items() {
   local repo_config_dir="${TEST_TMPDIR}/repo-config"
   mkdir -p "${home_dir}/.jiggit/config" "${repo_config_dir}"
 
-  cat > "${repo_config_dir}/projects.toml" <<'EOF'
+  cat >"${repo_config_dir}/projects.toml" <<'EOF'
 [alpha]
 repo_path = "/tmp/alpha"
 remote_url = "git@github.com:example/alpha.git"
@@ -98,10 +98,10 @@ EOF
   local output
   output="$(
     HOME="${home_dir}" \
-    JIGGIT_COLOR_OUTPUT=always \
-    JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
-    run_config_main
+      JIGGIT_COLOR_OUTPUT=always \
+      JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+      run_config_main
   )"
 
   assert_contains "${output}" $'\e[1m\e[34m# jiggit config\e[0m' "render colored top heading"
@@ -126,7 +126,7 @@ test_run_config_main_can_show_named_projects_and_globals_only() {
   local repo_config_dir="${TEST_TMPDIR}/repo-config"
   mkdir -p "${home_dir}/.jiggit/config" "${repo_config_dir}"
 
-  cat > "${repo_config_dir}/projects.toml" <<'EOF'
+  cat >"${repo_config_dir}/projects.toml" <<'EOF'
 [alpha]
 repo_path = "/tmp/alpha"
 remote_url = "git@github.com:example/alpha.git"
@@ -145,9 +145,9 @@ EOF
   local named_output
   named_output="$(
     HOME="${home_dir}" \
-    JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
-    run_config_main alpha
+      JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+      run_config_main alpha
   )"
 
   assert_contains "${named_output}" "## Projects" "render projects section for named lookup"
@@ -161,9 +161,9 @@ EOF
   local global_output
   global_output="$(
     HOME="${home_dir}" \
-    JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
-    run_config_main --global
+      JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+      run_config_main --global
   )"
 
   assert_contains "${global_output}" "## Loaded Config Files" "render globals when --global is used"
@@ -182,7 +182,7 @@ test_run_config_main_shows_env_overrides_for_shared_jira_fields() {
   local repo_config_dir="${TEST_TMPDIR}/repo-config"
   mkdir -p "${home_dir}/.jiggit/config" "${repo_config_dir}"
 
-  cat > "${repo_config_dir}/projects.toml" <<'EOF'
+  cat >"${repo_config_dir}/projects.toml" <<'EOF'
 [jira]
 base_url = "https://jira.config.example.test"
 bearer_token = "config-secret"
@@ -195,11 +195,11 @@ EOF
   local output
   output="$(
     HOME="${home_dir}" \
-    JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
-    JIRA_BASE_URL="https://jira.env.example.test" \
-    JIRA_API_TOKEN="env-api-token" \
-    run_config_main --global
+      JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+      JIRA_BASE_URL="https://jira.env.example.test" \
+      JIRA_API_TOKEN="env-api-token" \
+      run_config_main --global
   )"
 
   assert_contains "${output}" "Jira base URL: \`https://jira.env.example.test\` (env: JIRA_BASE_URL)" "prefer env base url and show source"
@@ -218,7 +218,7 @@ test_run_config_main_hides_same_source_redefinition_noise_from_overrides() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [alpha]
 repo_path = "/tmp/alpha-one"
 
@@ -229,8 +229,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_config_main
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_config_main
   )"
 
   assert_contains "${output}" "repo path: \`/tmp/alpha-two\` (${projects_file})" "keep last effective same-file value"

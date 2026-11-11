@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/env_versions_command.sh
@@ -31,7 +31,7 @@ compare_issue_keys() {
   local repo_path="${1}"
   local range="${2}"
   local project_id="${3}"
-  printf '%s|%s|%s\n' "${repo_path}" "${range}" "${project_id}" >> "${TEST_TMPDIR}/issue-keys.log"
+  printf '%s|%s|%s\n' "${repo_path}" "${range}" "${project_id}" >>"${TEST_TMPDIR}/issue-keys.log"
   printf '%s' "${JIGGIT_TEST_ISSUE_KEYS:-}"
 }
 
@@ -43,7 +43,7 @@ fetch_jira_issues_by_keys() {
   if [[ -z "${issues_json}" ]]; then
     issues_json='{"issues":[]}'
   fi
-  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${TEST_TMPDIR}/jira-issues.log"
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >>"${TEST_TMPDIR}/jira-issues.log"
   printf '%s\n' "${issues_json}"
 }
 
@@ -53,7 +53,7 @@ fetch_env_version_for_url() {
   local info_url="${2}"
   local version_expr="${3}"
 
-  printf '%s|%s|%s\n' "${environment_name}" "${info_url}" "${version_expr}" >> "${TEST_TMPDIR}/fetch.log"
+  printf '%s|%s|%s\n' "${environment_name}" "${info_url}" "${version_expr}" >>"${TEST_TMPDIR}/fetch.log"
 
   case "${environment_name}" in
     prod)
@@ -74,7 +74,7 @@ test_run_env_versions_main_renders_versions_for_configured_environments() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [project-a]
 repo_path = "/tmp/project-a"
 remote_url = "git@github.com:example/project-a.git"
@@ -91,8 +91,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_versions_main project-a
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_versions_main project-a
   )"
 
   assert_contains "${output}" "# jiggit env-versions" "render env-versions heading"
@@ -115,7 +115,7 @@ test_run_env_versions_main_can_force_colored_missing_and_drift_lines() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [project-a]
 repo_path = "/tmp/project-a"
 remote_url = "git@github.com:example/project-a.git"
@@ -130,9 +130,9 @@ EOF
   local output=""
   if output="$(
     JIGGIT_COLOR_OUTPUT=always \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_versions_main project-a 2>&1
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_versions_main project-a 2>&1
   )"; then
     fail "fail when one configured environment has no info url"
   else
@@ -146,7 +146,7 @@ test_run_env_versions_main_fails_when_environment_url_is_missing() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [project-a]
 repo_path = "/tmp/project-a"
 remote_url = "git@github.com:example/project-a.git"
@@ -161,8 +161,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_versions_main project-a 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_versions_main project-a 2>&1
   )"; then
     fail "fail when one configured environment has no info url"
   else
@@ -177,7 +177,7 @@ test_run_env_versions_main_reports_unknown_project_with_config_next_step() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [project-a]
 repo_path = "/tmp/project-a"
 environments = ["prod"]
@@ -186,8 +186,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_versions_main missing-project 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_versions_main missing-project 2>&1
   )"; then
     fail "fail env-versions for an unknown project"
   else
@@ -202,7 +202,7 @@ test_run_env_versions_main_reports_missing_environment_configuration() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [project-a]
 repo_path = "/tmp/project-a"
 environments = []
@@ -211,8 +211,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_versions_main project-a 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_versions_main project-a 2>&1
   )"; then
     fail "fail env-versions without configured environments"
   else
@@ -231,7 +231,7 @@ test_run_env_versions_main_defaults_to_current_configured_repo() {
   git init "${repo_dir}" >/dev/null 2>&1
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project-a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/project-a.git"
@@ -248,8 +248,8 @@ EOF
   output="$(
     cd "${repo_dir}"
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_versions_main
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_versions_main
   )"
 
   assert_contains "${output}" "# jiggit env-versions" "render env-versions heading from current repo"
@@ -266,7 +266,7 @@ test_run_env_versions_main_renders_unreleased_issues_when_prod_drift_exists() {
   git init "${repo_dir}" >/dev/null 2>&1
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -285,18 +285,19 @@ prep = "https://prep.project-a.example.com/actuator/info"
 EOF
 
   local issues_json
-  issues_json="$(cat <<'EOF'
+  issues_json="$(
+    cat <<'EOF'
 {"issues":[{"key":"JIRA-1","fields":{"summary":"Ship drift fix","status":{"name":"In Progress"},"fixVersions":[{"name":"1.3.0"}]}},{"key":"JIRA-2","fields":{"summary":"Missing release tag","status":{"name":"To Do"},"fixVersions":[]}}]}
 EOF
-)"
+  )"
 
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    JIGGIT_TEST_ISSUE_KEYS=$'JIRA-1\nJIRA-2\n' \
-    JIGGIT_TEST_ISSUES_JSON="${issues_json}" \
-    run_env_versions_main project-a
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      JIGGIT_TEST_ISSUE_KEYS=$'JIRA-1\nJIRA-2\n' \
+      JIGGIT_TEST_ISSUES_JSON="${issues_json}" \
+      run_env_versions_main project-a
   )"
 
   assert_contains "${output}" "## Unreleased Issues" "render unreleased issues section for prod drift"

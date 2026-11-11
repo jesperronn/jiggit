@@ -210,7 +210,7 @@ run_config_main() {
 
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      --global|--no-projects)
+      --global | --no-projects)
         show_global=1
         show_projects=0
         shift
@@ -220,7 +220,7 @@ run_config_main() {
         show_projects=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         config_usage
         return 0
         ;;

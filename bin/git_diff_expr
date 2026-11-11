@@ -8,7 +8,7 @@
 # start section #1 - euo pipefail, pushd, fixed variables
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 # fixed variables go here
 DEFAULT_JIRA_PATTERN='JIRA-[0-9]{3,5}'
@@ -95,14 +95,13 @@ load_config() {
 
 function parse_args() {
   # parse options and positional args (VERSION_START, VERSION_END)
-  while [[ $# -gt 0 ]]
-  do
+  while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
+      -h | --help)
         usage
         exit 0
         ;;
-      -v|--verbose)
+      -v | --verbose)
         VERBOSE=1
         debug "Verbose mode enabled"
         ;;
@@ -126,7 +125,7 @@ function parse_args() {
         SHOW_JIRA_ONLY=1
         debug "Jira-only mode enabled"
         ;;
-      --show-compare-url|--show-bitbucket-diff)
+      --show-compare-url | --show-bitbucket-diff)
         SHOW_COMPARE_URL=1
         debug "Show-compare-url mode enabled"
         ;;
@@ -258,12 +257,10 @@ check_prereqs() {
   check_program git
   debug "✅Check prereqs... All relevant commands available"
 
-
 }
 # start section #3. Specific functions
 
 # (deliberately empty in the template)
-
 
 # start section #4. Main: run_main function. This is a separate function to make file testable
 
@@ -307,8 +304,14 @@ action_show_db_migrations() {
   # Use Git pathspecs to restrict the diff to SQL changelog files under the two modules.
   # Use explicit src/main/**/changelog pattern for accuracy across layouts.
   git diff --numstat "${VERSION_GIT_RANGE}" -- \
-    "${DB_MIGRATION_PATHS[@]}" \
-    | { output=$(cat); if [[ -n "${output}" ]]; then printf '%s\n' "${output}"; exit 0; else exit 2; fi }
+    "${DB_MIGRATION_PATHS[@]}" |
+    {
+      output=$(cat)
+      if [[ -n "${output}" ]]; then
+        printf '%s\n' "${output}"
+        exit 0
+      else exit 2; fi
+    }
 }
 
 # Print git diff numstat output for the resolved range.
@@ -357,7 +360,7 @@ action_show_jira_issues() {
   # Use a commit separator and then collapse each commit (subject+body) into a single line.
   # We mirror the pretty-log format but make each commit a single output line.
   local commit_lines
-  commit_lines=$(git log --pretty=format:'%h - %s%n%+b%n==GIT_COMMIT_END==' "${VERSION_GIT_RANGE}" 2>/dev/null | \
+  commit_lines=$(git log --pretty=format:'%h - %s%n%+b%n==GIT_COMMIT_END==' "${VERSION_GIT_RANGE}" 2>/dev/null |
     awk 'BEGIN{RS="==GIT_COMMIT_END=="; ORS=""} {gsub(/\n/, " "); gsub(/==GIT_COMMIT_END==/, ""); sub(/^ +/, ""); sub(/ +$/, ""); if(length($0)) print $0 "\n"}' || true)
 
   # Only print commit lines and the blank separator when running in verbose mode and not jira-only.
@@ -376,7 +379,7 @@ action_show_jira_issues() {
   if [[ -n "${issues}" ]]; then
     while read -r issue; do
       printf '%s/%s\n' "${JIRA_HOST}" "${issue}"
-    done <<< "${issues}"
+    done <<<"${issues}"
   fi
 }
 
@@ -439,7 +442,7 @@ parse_git_remote_url() {
   fi
 
   path=${path%%.git}
-  IFS='/' read -r -a parts <<< "${path}"
+  IFS='/' read -r -a parts <<<"${path}"
 
   if [[ "${host}" =~ github\.com$ ]]; then
     if [[ ${#parts[@]} -lt 2 ]]; then
@@ -447,18 +450,24 @@ parse_git_remote_url() {
       return 4
     fi
     GIT_HOSTING_PROVIDER="github"
-    GIT_HOSTING_REPO="${parts[${#parts[@]}-1]}"
+    GIT_HOSTING_REPO="${parts[${#parts[@]} - 1]}"
     unset 'parts[${#parts[@]}-1]'
-    GIT_HOSTING_NAMESPACE="$(IFS=/; echo "${parts[*]}")"
+    GIT_HOSTING_NAMESPACE="$(
+      IFS=/
+      echo "${parts[*]}"
+    )"
   elif [[ "${host}" =~ gitlab ]]; then
     if [[ ${#parts[@]} -lt 2 ]]; then
       echo "ERROR: GitLab remote path '${path}' does not contain namespace and repo segments" >&2
       return 4
     fi
     GIT_HOSTING_PROVIDER="gitlab"
-    GIT_HOSTING_REPO="${parts[${#parts[@]}-1]}"
+    GIT_HOSTING_REPO="${parts[${#parts[@]} - 1]}"
     unset 'parts[${#parts[@]}-1]'
-    GIT_HOSTING_NAMESPACE="$(IFS=/; echo "${parts[*]}")"
+    GIT_HOSTING_NAMESPACE="$(
+      IFS=/
+      echo "${parts[*]}"
+    )"
   else
     if [[ "${parts[0]:-}" == "scm" ]]; then
       parts=("${parts[@]:1}")
@@ -644,7 +653,6 @@ run_main() {
   debug "Normalized versions: ${VERSION_START_NORM} ${VERSION_END_NORM}"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
-then
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   run_main "$@"
 fi

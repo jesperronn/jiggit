@@ -218,7 +218,7 @@ env_diff_is_breaking_commit() {
   local breaking_marker=""
 
   parsed="$(env_diff_parse_commit_subject "${subject_line}")"
-  IFS='|' read -r _ _ _ breaking_marker <<< "${parsed}"
+  IFS='|' read -r _ _ _ breaking_marker <<<"${parsed}"
   if [[ -n "${breaking_marker}" ]]; then
     return 0
   fi
@@ -385,7 +385,7 @@ env_diff_grouped_commit_items() {
     line="${line#*$'\x1f'}"
     subject_line="${line%%$'\x1f'*}"
     commit_body="${line#*$'\x1f'}"
-    IFS='|' read -r commit_type commit_scope commit_subject breaking_marker <<< "$(env_diff_parse_commit_subject "${subject_line}")"
+    IFS='|' read -r commit_type commit_scope commit_subject breaking_marker <<<"$(env_diff_parse_commit_subject "${subject_line}")"
     jira_key="$(env_diff_commit_jira_key "${project_id}" "${subject_line}" "${commit_body}")"
 
     if env_diff_is_breaking_commit "${subject_line}" "${commit_body}"; then
@@ -436,7 +436,7 @@ render_env_diff_commit_section() {
   while IFS= read -r item; do
     [[ -z "${item}" ]] && continue
     printf '%s\n' "${item}"
-  done <<< "${section_items}"
+  done <<<"${section_items}"
   printf '\n'
 }
 
@@ -606,7 +606,7 @@ run_env_diff_main() {
         JIGGIT_ENV_VERSIONS_VERBOSE=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         env_diff_usage
         return 0
         ;;
@@ -628,7 +628,7 @@ run_env_diff_main() {
     fi
   fi
 
-  if [[ -n "${base_input}" && ( -n "${from_env}" || -n "${from_ref}" || -n "${to_ref}" ) ]]; then
+  if [[ -n "${base_input}" && (-n "${from_env}" || -n "${from_ref}" || -n "${to_ref}") ]]; then
     printf 'Use either --base/--target or --from/--to mode, not both.\n' >&2
     env_diff_usage >&2
     return 1
@@ -715,14 +715,14 @@ run_env_diff_main() {
     render_env_diff_failure "${project_id}" "${repo_path}" "${base_resolution#ERROR|}" "jiggit doctor --fix ${project_id}"
     return 1
   }
-  IFS='|' read -r _ base_label base_value base_norm base_compare_ref <<< "${base_resolution}"
+  IFS='|' read -r _ base_label base_value base_norm base_compare_ref <<<"${base_resolution}"
 
   if [[ -n "${target_input}" ]]; then
     target_resolution="$(env_diff_resolve_operand "${project_id}" "${repo_path}" "${configured_environments}" "${target_input}")" || {
       render_env_diff_failure "${project_id}" "${repo_path}" "${target_resolution#ERROR|}" "jiggit changes ${project_id} --base ${base_input}"
       return 1
     }
-    IFS='|' read -r _ target_label target_value target_norm target_compare_ref <<< "${target_resolution}"
+    IFS='|' read -r _ target_label target_value target_norm target_compare_ref <<<"${target_resolution}"
   else
     target_ref="$(default_target_git_ref "${repo_path}")"
     target_label="${target_ref}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 
@@ -15,7 +15,7 @@ setup_test_tmpdir() {
 
 # Install a fake curl that records calls and returns a small JSON body.
 create_fake_curl() {
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -27,7 +27,7 @@ EOF
 
 # Install a fake op CLI that resolves the configured op:// secret reference.
 create_fake_op() {
-  cat > "${TEST_TMPDIR}/bin/op" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/op" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 

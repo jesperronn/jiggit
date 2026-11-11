@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/git_diff_expr

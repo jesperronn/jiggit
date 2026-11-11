@@ -134,7 +134,7 @@ staged_version() {
   local version_file="${staging_dir}/VERSION"
 
   if [[ -f "${version_file}" ]]; then
-    tr -d '\n' < "${version_file}"
+    tr -d '\n' <"${version_file}"
     return 0
   fi
 
@@ -168,7 +168,7 @@ write_install_state() {
   local link_dir="${1:-}"
   local version_text="${2:-}"
 
-  cat > "$(installer_state_file)" <<EOF
+  cat >"$(installer_state_file)" <<EOF
 link_dir=${link_dir}
 version=${version_text}
 EOF
@@ -243,7 +243,10 @@ run_main() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
       --force) force=true ;;
-      *) printf 'Unknown option: %s\n' "${1}" >&2; return 1 ;;
+      *)
+        printf 'Unknown option: %s\n' "${1}" >&2
+        return 1
+        ;;
     esac
     shift
   done

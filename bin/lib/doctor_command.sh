@@ -216,8 +216,8 @@ doctor_maybe_repair_project_config() {
       if prompt_confirm_toml_preview \
         "Project ${project_id} is missing jira_project_key in ${target_file}. About to write:" \
         "$(render_toml_upsert_preview "${target_file}" "${project_id}" "jira_project_key" "${jira_project_key_value}")"; then
-          upsert_toml_string_in_section "${target_file}" "${project_id}" "jira_project_key" "${jira_project_key_value}"
-          changed=1
+        upsert_toml_string_in_section "${target_file}" "${project_id}" "jira_project_key" "${jira_project_key_value}"
+        changed=1
       else
         jira_project_key_value=""
       fi
@@ -230,8 +230,8 @@ doctor_maybe_repair_project_config() {
       if prompt_confirm_toml_preview \
         "Project ${project_id} is missing jira_project_key in ${target_file}. About to write:" \
         "$(render_toml_upsert_preview "${target_file}" "${project_id}" "jira_project_key" "${jira_project_key_value}")"; then
-          upsert_toml_string_in_section "${target_file}" "${project_id}" "jira_project_key" "${jira_project_key_value}"
-          changed=1
+        upsert_toml_string_in_section "${target_file}" "${project_id}" "jira_project_key" "${jira_project_key_value}"
+        changed=1
       fi
     fi
   fi
@@ -301,8 +301,8 @@ doctor_maybe_repair_project_config() {
       if prompt_confirm_toml_preview \
         "Project ${project_id} is missing an info URL for ${environment_name} in ${target_file}. About to write:" \
         "$(render_toml_upsert_preview "${target_file}" "${project_id}.environment_info_urls" "${environment_name}" "${environment_url}")"; then
-          upsert_toml_string_in_section "${target_file}" "${project_id}.environment_info_urls" "${environment_name}" "${environment_url}"
-          changed=1
+        upsert_toml_string_in_section "${target_file}" "${project_id}.environment_info_urls" "${environment_name}" "${environment_url}"
+        changed=1
       fi
     fi
   done
@@ -498,10 +498,10 @@ run_doctor_jira_main() {
     doctor_maybe_repair_project_config "${project_id}"
     if ! run_jira_check_for_project "${project_id}"; then
       saw_failure=1
-      if [[ "${JIGGIT_DOCTOR_ALLOW_REPAIR:-0}" -ne 1 ]] \
-        && { [[ -z "$(project_jira_project_key "${project_id}")" ]] \
-          || [[ -z "$(jira_base_url "${project_id}")" ]] \
-          || [[ "$(jira_auth_mode "${project_id}")" == "missing" ]]; }; then
+      if [[ "${JIGGIT_DOCTOR_ALLOW_REPAIR:-0}" -ne 1 ]] &&
+        { [[ -z "$(project_jira_project_key "${project_id}")" ]] ||
+          [[ -z "$(jira_base_url "${project_id}")" ]] ||
+          [[ "$(jira_auth_mode "${project_id}")" == "missing" ]]; }; then
         doctor_emit_next_step "repair Jira configuration" "jiggit doctor --fix ${project_id}"
       fi
     fi
@@ -532,11 +532,11 @@ run_doctor_main() {
 
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      --fix|--repair)
+      --fix | --repair)
         JIGGIT_DOCTOR_ALLOW_REPAIR=1
         shift
         ;;
-      --global|--no-projects)
+      --global | --no-projects)
         global_only=1
         shift
         ;;
@@ -548,7 +548,7 @@ run_doctor_main() {
         JIGGIT_DOCTOR_IGNORE_FAILURES=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         doctor_usage
         return 0
         ;;

@@ -2,7 +2,7 @@
 # test — run the colocated bin/**/*.test.sh suites.
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 # Render help for the repo test runner.
 usage() {
@@ -63,7 +63,7 @@ run_main() {
 
   for arg in "$@"; do
     case "${arg}" in
-      -h|--help)
+      -h | --help)
         usage
         return 0
         ;;

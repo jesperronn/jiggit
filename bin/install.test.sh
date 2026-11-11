@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/install
@@ -25,15 +25,15 @@ create_mock_install_source() {
   local source_dir="${1}"
 
   mkdir -p "${source_dir}/bin"
-  cat > "${source_dir}/VERSION" <<'EOF'
+  cat >"${source_dir}/VERSION" <<'EOF'
 9.9.9
 EOF
-  cat > "${source_dir}/bin/jiggit" <<'EOF'
+  cat >"${source_dir}/bin/jiggit" <<'EOF'
 #!/usr/bin/env bash
 printf 'mock jiggit\n'
 EOF
   chmod +x "${source_dir}/bin/jiggit"
-  cat > "${source_dir}/bin/setup" <<'EOF'
+  cat >"${source_dir}/bin/setup" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'setup-ran\n' >> "${SETUP_LOG_PATH}"
@@ -57,7 +57,7 @@ run_real_install() {
     PATH="$*" \
     JIGGIT_INSTALL_ROOT="${TEST_TMPDIR}/home/.local/share/jiggit" \
     JIGGIT_INSTALL_SOURCE_DIR="$(repo_root)" \
-    bash bin/install > "${output_file}"
+    bash bin/install >"${output_file}"
 }
 
 test_install_help_mentions_public_usage() {
@@ -159,7 +159,7 @@ test_install_runs_installed_setup_script() {
     JIGGIT_INSTALL_ROOT="${TEST_TMPDIR}/home/.local/share/jiggit" \
     JIGGIT_INSTALL_SOURCE_DIR="${source_dir}" \
     SETUP_LOG_PATH="${setup_log}" \
-    bash bin/install > /dev/null
+    bash bin/install >/dev/null
 
   assert_contains "$(cat "${setup_log}")" "setup-ran" "install invokes the installed setup script"
 }
@@ -178,9 +178,9 @@ test_install_updates_existing_install_root_contents() {
     JIGGIT_INSTALL_ROOT="${TEST_TMPDIR}/home/.local/share/jiggit" \
     JIGGIT_INSTALL_SOURCE_DIR="${source_dir}" \
     SETUP_LOG_PATH="${TEST_TMPDIR}/setup.log" \
-    bash bin/install > /dev/null
+    bash bin/install >/dev/null
 
-  cat > "${source_dir}/VERSION" <<'EOF'
+  cat >"${source_dir}/VERSION" <<'EOF'
 10.0.0
 EOF
 
@@ -190,7 +190,7 @@ EOF
     JIGGIT_INSTALL_ROOT="${TEST_TMPDIR}/home/.local/share/jiggit" \
     JIGGIT_INSTALL_SOURCE_DIR="${source_dir}" \
     SETUP_LOG_PATH="${TEST_TMPDIR}/setup.log" \
-    bash bin/install > /dev/null
+    bash bin/install >/dev/null
 
   assert_eq "10.0.0" "$(cat "${TEST_TMPDIR}/home/.local/share/jiggit/VERSION")" "repeat install refreshes the installed checkout"
 }
@@ -207,7 +207,7 @@ test_install_reuses_existing_command_directory_with_force() {
     env HOME="${TEST_TMPDIR}/home" \
       PATH="${TEST_TMPDIR}/home/first:${TEST_TMPDIR}/home/old bin:/usr/bin:/bin" \
       JIGGIT_INSTALL_SOURCE_DIR="$(repo_root)" \
-      bash bin/install --force <<< '1' 2>&1
+      bash bin/install --force <<<'1' 2>&1
   )"
   assert_not_contains "${output}" "Choose a PATH directory" "existing command avoids the directory prompt"
   if [[ "${TEST_TMPDIR}/home/old bin/jiggit" -ef "${TEST_TMPDIR}/home/.local/share/jiggit/bin/jiggit" ]]; then
@@ -224,9 +224,9 @@ test_install_preserves_saved_directory_without_existing_command() {
 
   mkdir -p "${TEST_TMPDIR}/home/first" "${TEST_TMPDIR}/home/second" \
     "${TEST_TMPDIR}/home/.local/share/jiggit"
-  printf 'link_dir=%s\n' "${TEST_TMPDIR}/home/second" > "${TEST_TMPDIR}/home/.local/share/jiggit/.install-state"
+  printf 'link_dir=%s\n' "${TEST_TMPDIR}/home/second" >"${TEST_TMPDIR}/home/.local/share/jiggit/.install-state"
   local output_file="${TEST_TMPDIR}/output.txt"
-  run_real_install "${output_file}" "${TEST_TMPDIR}/home/first:${TEST_TMPDIR}/home/second:/usr/bin:/bin" <<< '1'
+  run_real_install "${output_file}" "${TEST_TMPDIR}/home/first:${TEST_TMPDIR}/home/second:/usr/bin:/bin" <<<'1'
   assert_contains "$(cat "${output_file}")" "- link dir: \`${TEST_TMPDIR}/home/second\`" "saved directory survives update"
 }
 

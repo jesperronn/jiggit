@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/explore.sh
@@ -39,7 +39,7 @@ create_repo() {
   if [[ -n "${remote_url}" ]]; then
     git -C "${repo_dir}" remote add origin "${remote_url}"
   fi
-  printf 'hello\n' > "${repo_dir}/README.md"
+  printf 'hello\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "${commit_message}" >/dev/null 2>&1
   git -C "${repo_dir}" tag v1.2.3
@@ -88,13 +88,13 @@ test_load_project_config_reads_toml_from_home_and_discovered_repo() {
   local repo_dir="${TEST_TMPDIR}/delta-api"
   mkdir -p "${user_config_dir}" "${repo_dir}/config"
 
-  cat > "${user_shared_file}" <<'EOF'
+  cat >"${user_shared_file}" <<'EOF'
 [jira]
 base_url = "https://jira.user.example.test"
 bearer_token = "user-secret"
 EOF
 
-  cat > "${user_config_dir}/projects.toml" <<'EOF'
+  cat >"${user_config_dir}/projects.toml" <<'EOF'
 
 [home-api]
 repo_path = "$HOME/src/home-api"
@@ -104,7 +104,7 @@ jira_regexes = ["HOME-[0-9]+", "PLAT-[0-9]+"]
 environments = ["prod", "prep"]
 EOF
 
-  cat > "${repo_dir}/config/projects.toml" <<'EOF'
+  cat >"${repo_dir}/config/projects.toml" <<'EOF'
 [delta-api]
 repo_path = "~/src/delta-api"
 remote_url = "git@github.com:example/delta-api.git"
@@ -147,7 +147,7 @@ test_shared_jira_env_vars_override_toml_and_report_env_sources() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.config.example.test"
 bearer_token = "config-secret"
@@ -194,7 +194,7 @@ test_resolve_project_selector_accepts_project_id_path_and_current_directory() {
   create_repo "${repo_dir}" "git@github.com:example/selector-repo.git" "SEL-1 initial commit"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [selector-project]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/selector-repo.git"
@@ -203,8 +203,8 @@ jira_regexes = ["SEL-[0-9]+"]
 EOF
 
   JIGGIT_PROJECTS_FILE="${projects_file}" \
-  JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-  load_project_config
+    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+    load_project_config
 
   assert_eq "selector-project" "$(resolve_project_selector "selector-project")" "resolve explicit project id"
   assert_eq "selector-project" "$(resolve_project_selector "${repo_dir}")" "resolve explicit repo path"
@@ -228,7 +228,7 @@ test_effective_single_and_multi_project_selectors_follow_global_flags() {
   git init "${repo_one}" >/dev/null 2>&1
   git init "${repo_two}" >/dev/null 2>&1
 
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [alpha]
 repo_path = "${repo_one}"
 
@@ -270,14 +270,14 @@ test_run_explore_main_writes_candidate_file() {
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
   local discovered_file="${TEST_TMPDIR}/home/.jiggit/discovered_projects.toml"
-  : > "${projects_file}"
+  : >"${projects_file}"
 
   local output
   output="$(
     HOME="${TEST_TMPDIR}/home" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
-    run_explore_main --append "${TEST_TMPDIR}"
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
+      run_explore_main --append "${TEST_TMPDIR}"
   )"
 
   assert_contains "${output}" "Newly discovered: 1" "report discovered repo count"
@@ -303,8 +303,8 @@ test_run_explore_main_dry_run_does_not_write_candidate_file() {
   local projects_file="${TEST_TMPDIR}/projects.toml"
   local discovered_file="${TEST_TMPDIR}/home/.jiggit/discovered_projects.toml"
   mkdir -p "$(dirname "${discovered_file}")"
-  : > "${projects_file}"
-  cat > "${discovered_file}" <<'EOF'
+  : >"${projects_file}"
+  cat >"${discovered_file}" <<'EOF'
 #!/usr/bin/env bash
 # keep me
 EOF
@@ -312,10 +312,10 @@ EOF
   local output
   output="$(
     HOME="${TEST_TMPDIR}/home" \
-    JIGGIT_CAN_PROMPT_INTERACTIVELY="false" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
-    run_explore_main --dry-run --verbose "${TEST_TMPDIR}" 2>&1
+      JIGGIT_CAN_PROMPT_INTERACTIVELY="false" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
+      run_explore_main --dry-run --verbose "${TEST_TMPDIR}" 2>&1
   )"
 
   assert_contains "${output}" "Mode: \`dry-run\`" "report dry-run mode"
@@ -332,16 +332,16 @@ test_write_discovery_file_requires_mode_when_file_exists_non_interactively() {
 
   local discovered_file="${TEST_TMPDIR}/home/.jiggit/discovered_projects.toml"
   mkdir -p "$(dirname "${discovered_file}")"
-  cat > "${discovered_file}" <<'EOF'
+  cat >"${discovered_file}" <<'EOF'
 # existing
 EOF
 
   local output=""
   if output="$(
     HOME="${TEST_TMPDIR}/home" \
-    JIGGIT_CAN_PROMPT_INTERACTIVELY="false" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
-    write_discovery_file "[alpha]" 2>&1
+      JIGGIT_CAN_PROMPT_INTERACTIVELY="false" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
+      write_discovery_file "[alpha]" 2>&1
   )"; then
     fail "require explicit write mode when discovery file exists"
   else
@@ -358,7 +358,7 @@ test_explore_can_create_missing_shared_jira_config() {
   create_repo "${repo_dir}" "git@example.com:org/create-missing-repo.git" "ALPHA-1 feat: one"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [alpha]
 repo_path = "/tmp/alpha"
 remote_url = "git@example.com:org/alpha.git"
@@ -367,7 +367,7 @@ jira_regexes = ["ALPHA-[0-9]+"]
 environments = []
 EOF
 
-  cat > "${TEST_TMPDIR}/explore-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/explore-input.txt" <<'EOF'
 https://jira.example.com
 token-123
 y
@@ -400,14 +400,14 @@ test_explore_can_fill_discovered_candidate_details() {
   create_repo "${repo_dir}" "git@example.com:org/gamma-api.git" "GAMMA-1 feat: one"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token-123"
 EOF
 
   local discovered_file="${TEST_TMPDIR}/discovered.toml"
-  cat > "${TEST_TMPDIR}/explore-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/explore-input.txt" <<'EOF'
 GAMMA
 prod prep
 https://prod.example.com/actuator/info
@@ -439,7 +439,7 @@ test_explore_can_skip_discovered_project_interactively() {
   create_repo "${repo_dir}" "git@example.com:org/skip-me.git" "SKIP-1 feat: one"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token-123"
@@ -447,7 +447,7 @@ EOF
 
   local discovered_file="${TEST_TMPDIR}/discovered.toml"
   local output
-  cat > "${TEST_TMPDIR}/explore-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/explore-input.txt" <<'EOF'
 !
 EOF
 
@@ -472,16 +472,16 @@ test_write_discovery_file_appends_when_requested() {
 
   local discovered_file="${TEST_TMPDIR}/home/.jiggit/discovered_projects.toml"
   mkdir -p "$(dirname "${discovered_file}")"
-  cat > "${discovered_file}" <<'EOF'
+  cat >"${discovered_file}" <<'EOF'
 [existing]
 EOF
 
   local output
   output="$(
     HOME="${TEST_TMPDIR}/home" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
-    JIGGIT_EXPLORE_WRITE_MODE="append" \
-    write_discovery_file "[beta-api]
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${discovered_file}" \
+      JIGGIT_EXPLORE_WRITE_MODE="append" \
+      write_discovery_file "[beta-api]
 repo_path = \"/tmp/beta-api\""
   )"
 

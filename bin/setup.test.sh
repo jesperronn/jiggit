@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/setup
@@ -163,7 +163,7 @@ test_run_setup_fails_when_no_writable_path_dir_exists() {
 test_symlink_replacement_requires_force() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
-  printf 'old command\n' > "${TEST_TMPDIR}/jiggit"
+  printf 'old command\n' >"${TEST_TMPDIR}/jiggit"
   local output
   if output="$(ensure_jiggit_symlink "${TEST_TMPDIR}" /new/target 2>&1)"; then
     fail "existing command requires force"
@@ -171,7 +171,7 @@ test_symlink_replacement_requires_force() {
     assert_contains "${output}" "Refusing to replace" "existing command requires force"
   fi
   assert_eq "old command" "$(cat "${TEST_TMPDIR}/jiggit")" "refusal preserves existing command"
-  ensure_jiggit_symlink "${TEST_TMPDIR}" /new/target true > /dev/null
+  ensure_jiggit_symlink "${TEST_TMPDIR}" /new/target true >/dev/null
   assert_eq /new/target "$(readlink "${TEST_TMPDIR}/jiggit")" "force replaces existing command"
 }
 

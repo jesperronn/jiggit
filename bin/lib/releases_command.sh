@@ -73,15 +73,15 @@ find_matching_releases() {
   local lowered_query
 
   lowered_query="$(lowercase_text "${query}")"
-  printf '%s\n' "${releases_json}" \
-    | jq -c '.[]' \
-    | while IFS= read -r release_json; do
-        local release_name
-        release_name="$(printf '%s\n' "${release_json}" | jq -r '.name // ""')"
-        if [[ "$(lowercase_text "${release_name}")" == *"${lowered_query}"* ]]; then
-          printf '%s\n' "${release_json}"
-        fi
-      done
+  printf '%s\n' "${releases_json}" |
+    jq -c '.[]' |
+    while IFS= read -r release_json; do
+      local release_name
+      release_name="$(printf '%s\n' "${release_json}" | jq -r '.name // ""')"
+      if [[ "$(lowercase_text "${release_name}")" == *"${lowered_query}"* ]]; then
+        printf '%s\n' "${release_json}"
+      fi
+    done
 }
 
 # Return one best-default Jira release JSON object from a versions payload.
@@ -311,8 +311,8 @@ render_releases_summary() {
     render_release_entry "${repo_path}" "${release_json}"
     rendered_any=1
   done < <(
-    printf '%s\n' "${releases_json}" \
-      | jq -c 'sort_by((.released // false), (.archived // false), (.releaseDate // ""), (.name // "")) | reverse[]'
+    printf '%s\n' "${releases_json}" |
+      jq -c 'sort_by((.released // false), (.archived // false), (.releaseDate // ""), (.name // "")) | reverse[]'
   )
 
   if [[ ${rendered_any} -eq 0 ]]; then
@@ -345,7 +345,7 @@ render_releases_failure() {
 # Load config, fetch Jira releases, and render the report.
 run_releases_main() {
   local project_selector=""
-  if [[ $# -gt 0 && ( "${1}" == "-h" || "${1}" == "--help" ) ]]; then
+  if [[ $# -gt 0 && ("${1}" == "-h" || "${1}" == "--help") ]]; then
     releases_usage
     return 0
   fi

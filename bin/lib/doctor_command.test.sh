@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/doctor_command.sh
@@ -99,7 +99,6 @@ cleanup_tmpdir() {
   fi
 }
 
-
 test_run_doctor_main_defaults_to_all_projects() {
   setup_tmpdir
   trap cleanup_tmpdir RETURN
@@ -108,7 +107,7 @@ test_run_doctor_main_defaults_to_all_projects() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -133,7 +132,7 @@ EOF
     PATH="$(doctor_test_path)" \
     JIGGIT_PROJECTS_FILE="${projects_file}" \
     JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main
+      run_doctor_main
   )"
 
   assert_contains "${output}" "# jiggit doctor" "render doctor heading"
@@ -154,7 +153,7 @@ test_run_doctor_main_can_force_colored_headings() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -170,9 +169,9 @@ EOF
   local output
   output="$(
     JIGGIT_COLOR_OUTPUT=always \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   assert_contains "${output}" $'\e[1m\e[34m# jiggit doctor\e[0m' "render colored doctor top heading"
@@ -188,7 +187,7 @@ test_run_doctor_main_scopes_release_summary_by_jira_release_prefix() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -206,7 +205,7 @@ EOF
   fetch_jira_releases() {
     local jira_base_url="${1}"
     local jira_project_key="${2}"
-    printf 'releases|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
+    printf 'releases|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >>"${TEST_TMPDIR}/fetch.log"
 
     cat <<'EOF'
 [
@@ -220,8 +219,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main project-a
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main project-a
   )"
 
   assert_contains "${output}" "jira releases: \`✅ OK\` (1 released, 1 unreleased -- ProjectA_2.1.0.26)" "summarize only project-scoped jira releases"
@@ -235,7 +234,7 @@ test_run_doctor_main_fail_fast_stops_after_first_project_failure() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -257,8 +256,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fail-fast 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fail-fast 2>&1
   )"; then
     fail "doctor should fail when the first project fails"
   else
@@ -289,7 +288,7 @@ test_run_doctor_main_fails_fast_on_jira_auth_probe_and_marks_remaining_jira_chec
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -305,7 +304,7 @@ EOF
   # shellcheck disable=SC2329
   fetch_jira_current_user() {
     local jira_base_url="${1}"
-    printf 'myself|%s\n' "${jira_base_url}" >> "${TEST_TMPDIR}/fetch.log"
+    printf 'myself|%s\n' "${jira_base_url}" >>"${TEST_TMPDIR}/fetch.log"
     printf 'unauthorized\n' >&2
     return 1
   }
@@ -325,8 +324,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main 2>&1
   )"; then
     fail "doctor should fail when the shared Jira auth probe fails"
   else
@@ -353,7 +352,7 @@ test_run_doctor_main_can_ignore_unknown_project_failure() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [project-a]
 repo_path = "/tmp/project-a"
 remote_url = "git@github.com:example/project-a.git"
@@ -365,8 +364,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures missing-project
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --ignore-failures missing-project
   )"
 
   assert_contains "${output}" "## missing-project" "render explicit unknown project section"
@@ -381,7 +380,7 @@ test_run_doctor_main_fails_when_shared_jira_config_is_missing() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project-a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/project-a.git"
@@ -393,8 +392,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main 2>&1
   )"; then
     fail "fail doctor when shared jira config is missing"
   else
@@ -402,7 +401,7 @@ EOF
     assert_contains "${output}" "jira project: \`❌ FAIL\` (missing Jira config)" "render missing shared jira config as failure"
     assert_contains "${output}" "jira releases: \`❌ FAIL\` (missing Jira config)" "render missing shared jira release config as failure"
     assert_contains "${output}" "Next Steps" "render next steps heading for missing jira config"
-  assert_contains "${output}" "review effective config: \`jiggit config\`" "suggest config command for missing jira config"
+    assert_contains "${output}" "review effective config: \`jiggit config\`" "suggest config command for missing jira config"
   fi
 }
 
@@ -415,7 +414,7 @@ test_run_doctor_main_accepts_repo_path_selector() {
   git init "${repo_dir}" >/dev/null 2>&1
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project-a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/project-a.git"
@@ -427,8 +426,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --ignore-failures "${repo_dir}"
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --ignore-failures "${repo_dir}"
   )"
 
   assert_contains "${output}" "# jiggit doctor" "render doctor heading from repo path"
@@ -443,7 +442,7 @@ test_run_doctor_main_suggests_env_versions_when_environment_lookup_fails() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -459,8 +458,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   assert_contains "${output}" "env ft: \`⚠️ WARN\` (unable to resolve)" "render unresolved environment warning"
@@ -472,7 +471,7 @@ test_run_doctor_main_global_only_hides_project_sections() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -486,8 +485,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --global
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --global
   )"
 
   assert_contains "${output}" "# jiggit doctor" "render doctor heading in global mode"
@@ -508,7 +507,7 @@ test_run_doctor_main_can_create_missing_shared_jira_config() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project-a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/project-a.git"
@@ -517,7 +516,7 @@ jira_regexes = ["JIRA-[0-9]+"]
 environments = []
 EOF
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 https://jira.example.test
 token-123
 y
@@ -526,10 +525,10 @@ EOF
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -548,7 +547,7 @@ test_run_doctor_main_can_create_missing_project_jira_key() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -560,17 +559,17 @@ jira_regexes = ["JIRA-[0-9]+"]
 environments = []
 EOF
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 y
 EOF
 
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -589,7 +588,7 @@ test_run_doctor_main_can_create_missing_remote_url_from_git_origin() {
   git -C "${repo_dir}" remote add origin "git@github.com:example/project-a.git"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -601,17 +600,17 @@ jira_regexes = ["JIRA-[0-9]+"]
 environments = []
 EOF
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 y
 EOF
 
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -629,12 +628,12 @@ test_run_doctor_main_can_create_missing_jira_regexes_from_git_history() {
   git init "${repo_dir}" >/dev/null 2>&1
   git -C "${repo_dir}" config user.name "Jiggit Test"
   git -C "${repo_dir}" config user.email "jiggit@example.com"
-  printf 'one\n' > "${repo_dir}/README.md"
+  printf 'one\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "JIRA-123 add feature" >/dev/null 2>&1
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -646,17 +645,17 @@ jira_project_key = "JIRA"
 environments = []
 EOF
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 y
 EOF
 
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -673,7 +672,7 @@ test_run_doctor_main_can_infer_jira_project_key_from_existing_regex() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -685,17 +684,17 @@ jira_regexes = ["JIRA-[0-9]+"]
 environments = []
 EOF
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 y
 EOF
 
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -712,7 +711,7 @@ test_run_doctor_main_can_infer_environments_from_existing_info_urls() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -728,7 +727,7 @@ prod = "https://prod.example.com/actuator/info"
 prep = "https://prep.example.com/actuator/info"
 EOF
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 y
 cat
 y
@@ -737,10 +736,10 @@ EOF
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -757,7 +756,7 @@ test_run_doctor_main_can_create_missing_environment_info_url() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -785,7 +784,7 @@ EOF
     printf 'v2.1.0.26\n'
   }
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 cat
 y
 https://prod.example.com/actuator/info
@@ -795,10 +794,10 @@ EOF
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -816,7 +815,7 @@ test_run_doctor_main_can_create_missing_environments_and_info_expr() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -828,7 +827,7 @@ jira_project_key = "JIRA"
 jira_regexes = ["JIRA-[0-9]+"]
 EOF
 
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 prod prep
 y
 jq -r '.git.branch'
@@ -842,10 +841,10 @@ EOF
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_doctor_main --fix --ignore-failures 2>&1
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/doctor-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_doctor_main --fix --ignore-failures 2>&1
   )"
 
   local updated_file
@@ -864,7 +863,7 @@ test_run_doctor_jira_reports_identity_and_never_prints_credentials() {
   local repo_dir="${TEST_TMPDIR}/repo"
   mkdir -p "${repo_dir}"
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "super-secret-token"
@@ -934,7 +933,7 @@ test_run_doctor_is_read_only_by_default_and_repair_alias_writes() {
   local repo_dir="${TEST_TMPDIR}/repo"
   mkdir -p "${repo_dir}"
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project-a]
 repo_path = "${repo_dir}"
 jira_project_key = "JIRA"
@@ -942,7 +941,7 @@ jira_regexes = ["JIRA-[0-9]+"]
 environments = []
 EOF
   cp "${projects_file}" "${TEST_TMPDIR}/before.toml"
-  cat > "${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/doctor-input.txt" <<'EOF'
 https://jira.example.test
 token-123
 y

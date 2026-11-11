@@ -115,7 +115,7 @@ assign_fix_version_resolve_base() {
     return 1
   fi
 
-  IFS='|' read -r base_kind base_label base_value base_git_ref _ <<< "${resolved}"
+  IFS='|' read -r base_kind base_label base_value base_git_ref _ <<<"${resolved}"
   if [[ "${base_kind}" == "environment" ]]; then
     printf '%s|%s|%s|%s\n' "${base_kind}" "${base_label}" "${base_value}" "${base_git_ref}"
     return 0
@@ -205,7 +205,7 @@ render_assign_fix_version_issue_entry() {
 
   case "${issue_state}" in
     expected-fix-version) issue_color="${C_GREEN}" ;;
-    missing-fix-version|other-fix-version) issue_color="${C_ORANGE}" ;;
+    missing-fix-version | other-fix-version) issue_color="${C_ORANGE}" ;;
   esac
 
   if use_color_output && [[ "${issue_color}" != "${C_DIM}" ]]; then
@@ -247,7 +247,7 @@ render_assign_fix_version_summary() {
     render_assign_fix_version_issue_entry "${issue_json}" "${release_name}"
     printf '\n'
     case "$(next_release_issue_fix_version_state "${issue_json}" "${release_name}")" in
-      missing-fix-version|other-fix-version)
+      missing-fix-version | other-fix-version)
         missing_count=$((missing_count + 1))
         ;;
     esac
@@ -361,7 +361,7 @@ run_assign_fix_version_main() {
         apply_requested=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         assign_fix_version_usage
         return 0
         ;;
@@ -432,7 +432,7 @@ run_assign_fix_version_main() {
   fi
 
   release_resolution="$(resolve_assign_fix_version_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${release_query}")"
-  IFS='|' read -r release_resolution_state release_resolution_detail <<< "${release_resolution}"
+  IFS='|' read -r release_resolution_state release_resolution_detail <<<"${release_resolution}"
   case "${release_resolution_state}" in
     ok) ;;
     ambiguous)
@@ -462,7 +462,7 @@ run_assign_fix_version_main() {
     render_assign_fix_version_failure "${project_id}" "${repo_path}" "unable to resolve base" "jiggit env-versions ${project_id}"
     return 1
   fi
-  IFS='|' read -r _ base_label _ base_git_ref <<< "${base_resolved}"
+  IFS='|' read -r _ base_label _ base_git_ref <<<"${base_resolved}"
 
   issue_keys_text="$(compare_issue_keys "${repo_path}" "${base_git_ref}..${target_ref}" "${project_id}")"
   if [[ -n "${issue_keys_text}" ]]; then
@@ -478,7 +478,7 @@ run_assign_fix_version_main() {
   while IFS= read -r issue_json; do
     [[ -z "${issue_json}" ]] && continue
     case "$(next_release_issue_fix_version_state "${issue_json}" "${release_resolution_detail}")" in
-      missing-fix-version|other-fix-version)
+      missing-fix-version | other-fix-version)
         missing_count=$((missing_count + 1))
         ;;
     esac
@@ -502,9 +502,9 @@ run_assign_fix_version_main() {
       if can_prompt_interactively; then
         apply_choice="$(prompt_input_line "Add fixVersion ${release_resolution_detail} to ${missing_count} issue(s)? [y/N]: ")"
         case "${apply_choice}" in
-          y|Y)
+          y | Y)
             update_result="$(apply_assign_fix_version_updates "${jira_base_url_value}" "${release_resolution_detail}" "${issues_json}")"
-            IFS='|' read -r applied_count failed_count <<< "${update_result}"
+            IFS='|' read -r applied_count failed_count <<<"${update_result}"
             print_markdown_h2 "Update Result" "${C_MAGENTA}"
             printf '\n'
             printf -- "- applied: \`%s\`\n" "${applied_count}"
@@ -525,11 +525,11 @@ run_assign_fix_version_main() {
             ;;
         esac
       else
-          print_markdown_h2 "Update Result" "${C_ORANGE}"
-          printf '\n'
-          printf -- "- applied: \`0\`\n"
-          printf -- "- status: \`%s\` (interactive confirmation required)\n" "$(render_status_label "warn")"
-          printf -- "- next step: \`%s\`\n\n" "${apply_command}"
+        print_markdown_h2 "Update Result" "${C_ORANGE}"
+        printf '\n'
+        printf -- "- applied: \`0\`\n"
+        printf -- "- status: \`%s\` (interactive confirmation required)\n" "$(render_status_label "warn")"
+        printf -- "- next step: \`%s\`\n\n" "${apply_command}"
       fi
     fi
   fi

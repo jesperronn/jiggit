@@ -224,14 +224,20 @@ overview_render_grouped_versions() {
       continue
     fi
 
-    overview_emit_grouped_version_line "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}" "${prod_version}"
+    overview_emit_grouped_version_line "$(
+      IFS=,
+      printf '%s' "${group_names[*]}"
+    )" "${group_value}" "${prod_version}"
     rendered_any=1
     group_value="${value}"
     group_names=("${environment_name}")
   done
 
   if [[ "${rendered_any}" -eq 1 || -n "${group_value}" ]]; then
-    overview_emit_grouped_version_line "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}" "${prod_version}"
+    overview_emit_grouped_version_line "$(
+      IFS=,
+      printf '%s' "${group_names[*]}"
+    )" "${group_value}" "${prod_version}"
   fi
 
   if [[ "${saw_error}" -eq 1 ]]; then
@@ -280,7 +286,10 @@ overview_versions_summary_text() {
     if [[ "${rendered_any}" -eq 1 ]]; then
       printf ', '
     fi
-    printf '%s=%s' "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}"
+    printf '%s=%s' "$(
+      IFS=,
+      printf '%s' "${group_names[*]}"
+    )" "${group_value}"
     rendered_any=1
     group_value="${value}"
     group_names=("${environment_name}")
@@ -289,7 +298,10 @@ overview_versions_summary_text() {
   if [[ "${rendered_any}" -eq 1 ]]; then
     printf ', '
   fi
-  printf '%s=%s' "$(IFS=,; printf '%s' "${group_names[*]}")" "${group_value}"
+  printf '%s=%s' "$(
+    IFS=,
+    printf '%s' "${group_names[*]}"
+  )" "${group_value}"
   printf '\n'
 }
 
@@ -312,7 +324,7 @@ overview_lt_prod_drift_summary() {
 
   relation="$(classify_env_version_against_prod "${prod_version}" "${lt_version}")"
   case "${relation}" in
-    same-minor-different-build|ahead-major-minor)
+    same-minor-different-build | ahead-major-minor)
       printf 'lt %s ahead of prod %s\n' "${lt_version}" "${prod_version}"
       ;;
     behind-major-minor)
@@ -526,7 +538,7 @@ render_overview_next_release() {
     return 0
   fi
 
-  IFS='|' read -r _ base_label _ base_git_ref <<< "${base_resolved}"
+  IFS='|' read -r _ base_label _ base_git_ref <<<"${base_resolved}"
   if ! commit_count="$(git -C "${repo_path}" rev-list --count "${base_git_ref}..${target_ref}" 2>/dev/null)"; then
     overview_emit_plain_line "release" "unable to compare refs"
     printf '\n'
@@ -662,7 +674,7 @@ run_overview_main() {
 
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      -h|--help)
+      -h | --help)
         overview_usage
         return 0
         ;;

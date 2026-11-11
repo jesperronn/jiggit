@@ -205,7 +205,7 @@ print_excerpt_or_full_output_hint() {
   local normalized_output
 
   normalized_output="$(printf '%s' "${output_text}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-  if (( ${#normalized_output} > max_chars )); then
+  if ((${#normalized_output} > max_chars)); then
     printf '%s...\n' "${normalized_output:0:max_chars}"
     printf "Full output, run \`bin/adhoc/jira_requests.sh %s\`\n" "${command_name}"
   else
@@ -220,7 +220,7 @@ print_short_output_excerpt() {
   local normalized_output
 
   normalized_output="$(printf '%s' "${output_text}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-  if (( ${#normalized_output} > max_chars )); then
+  if ((${#normalized_output} > max_chars)); then
     printf '%s...\n' "${normalized_output:0:max_chars}"
   else
     printf '%s\n' "${normalized_output}"
@@ -461,7 +461,7 @@ main() {
         JIRA_REQUESTS_FAIL_FAST=0
         shift
         ;;
-      -h|--help)
+      -h | --help)
         usage
         return 0
         ;;

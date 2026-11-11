@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/jira_create.sh
@@ -31,7 +31,7 @@ create_repo_with_commit() {
   git init "${repo_dir}" >/dev/null 2>&1
   git -C "${repo_dir}" config user.name "Jiggit Test"
   git -C "${repo_dir}" config user.email "jiggit@example.com"
-  printf 'hello\n' > "${repo_dir}/README.md"
+  printf 'hello\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
 
   if [[ -n "${commit_body_text}" ]]; then
@@ -64,7 +64,7 @@ test_run_jira_create_main_dry_run_uses_commit_message() {
   create_repo_with_commit "${repo_dir}" "PLAT-42 feat: add issue creator" "Body line one"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [worker-project]
 repo_path = "${repo_dir}"
 remote_url = "git@example.com:worker/repo.git"
@@ -75,8 +75,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
-    run_jira_create_main "worker-project" --dry-run
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+      run_jira_create_main "worker-project" --dry-run
   )"
 
   assert_contains "${output}" "- Project: \`worker-project\`" "dry run prints project id"
@@ -94,7 +94,7 @@ test_run_jira_create_main_defaults_to_current_configured_repo() {
   create_repo_with_commit "${repo_dir}" "PLAT-42 feat: add issue creator" "Body line one"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [worker-project]
 repo_path = "${repo_dir}"
 remote_url = "git@example.com:worker/repo.git"
@@ -106,8 +106,8 @@ EOF
   output="$(
     cd "${repo_dir}"
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
-    run_jira_create_main --dry-run
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+      run_jira_create_main --dry-run
   )"
 
   assert_contains "${output}" "- Project: \`worker-project\`" "resolve jira-create project from current repo"
@@ -119,7 +119,7 @@ test_run_jira_create_main_reports_unknown_project() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [worker-project]
 repo_path = "/tmp/worker-repo"
 jira_project_key = "PLAT"
@@ -128,8 +128,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
-    run_jira_create_main missing-project 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+      run_jira_create_main missing-project 2>&1
   )"; then
     fail "fail jira-create for an unknown project"
   else
@@ -147,7 +147,7 @@ test_run_jira_create_main_reports_missing_jira_url_without_mutating() {
   create_repo_with_commit "${repo_dir}" "PLAT-42 feat: add issue creator"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [worker-project]
 repo_path = "${repo_dir}"
 jira_project_key = "PLAT"
@@ -158,8 +158,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
-    run_jira_create_main worker-project 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+      run_jira_create_main worker-project 2>&1
   )"; then
     fail "fail jira-create without a Jira base URL"
   else
@@ -178,7 +178,7 @@ test_run_jira_create_main_reports_missing_auth_without_networking() {
   create_repo_with_commit "${repo_dir}" "PLAT-42 feat: add issue creator"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 
@@ -190,8 +190,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
-    run_jira_create_main worker-project 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.sh" \
+      run_jira_create_main worker-project 2>&1
   )"; then
     fail "fail jira-create without Jira authentication"
   else

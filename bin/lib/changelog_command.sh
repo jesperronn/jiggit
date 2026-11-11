@@ -59,7 +59,7 @@ render_changelog_section() {
   while IFS= read -r item; do
     [[ -z "${item}" ]] && continue
     printf -- '* %s\n' "${item}"
-  done <<< "${section_items}"
+  done <<<"${section_items}"
   printf '\n'
 }
 
@@ -168,7 +168,7 @@ run_changelog_main() {
         to_ref="${2:-}"
         shift 2
         ;;
-      -h|--help)
+      -h | --help)
         changelog_usage
         return 0
         ;;

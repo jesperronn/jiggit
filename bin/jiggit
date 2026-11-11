@@ -13,7 +13,7 @@ fi
 
 JIGGIT_SCRIPT_PATH="${BASH_SOURCE[0]}"
 while [[ -L "${JIGGIT_SCRIPT_PATH}" ]]; do
-  JIGGIT_SCRIPT_DIR="$(cd -P "$(dirname "${JIGGIT_SCRIPT_PATH}")" > /dev/null 2>&1 && pwd)"
+  JIGGIT_SCRIPT_DIR="$(cd -P "$(dirname "${JIGGIT_SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
   JIGGIT_NEXT_PATH="$(readlink "${JIGGIT_SCRIPT_PATH}")"
   if [[ "${JIGGIT_NEXT_PATH}" != /* ]]; then
     JIGGIT_SCRIPT_PATH="${JIGGIT_SCRIPT_DIR}/${JIGGIT_NEXT_PATH}"
@@ -21,8 +21,8 @@ while [[ -L "${JIGGIT_SCRIPT_PATH}" ]]; do
     JIGGIT_SCRIPT_PATH="${JIGGIT_NEXT_PATH}"
   fi
 done
-JIGGIT_SCRIPT_DIR="$(cd -P "$(dirname "${JIGGIT_SCRIPT_PATH}")" > /dev/null 2>&1 && pwd)"
-JIGGIT_REPO_ROOT="$(cd -P "${JIGGIT_SCRIPT_DIR}/.." > /dev/null 2>&1 && pwd)"
+JIGGIT_SCRIPT_DIR="$(cd -P "$(dirname "${JIGGIT_SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
+JIGGIT_REPO_ROOT="$(cd -P "${JIGGIT_SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd)"
 readonly JIGGIT_SCRIPT_PATH
 readonly JIGGIT_SCRIPT_DIR
 readonly JIGGIT_REPO_ROOT
@@ -41,7 +41,7 @@ jiggit_version() {
   local version_file="${JIGGIT_REPO_ROOT}/VERSION"
 
   if [[ -f "${version_file}" ]]; then
-    tr -d '\n' < "${version_file}"
+    tr -d '\n' <"${version_file}"
     return 0
   fi
 
@@ -135,7 +135,7 @@ jiggit_style_help_token() {
     jiggit)
       jiggit_help_fragment $'\033[1;95m' "${token}"
       ;;
-    --*|-*)
+    --* | -*)
       jiggit_help_fragment $'\033[1;32m' "${token}"
       ;;
     *)
@@ -185,7 +185,7 @@ jiggit_render_help_tokens() {
     content="${content# }"
   done
 
-  read -r -a tokens <<< "${content}"
+  read -r -a tokens <<<"${content}"
   styled_line="${indent}"
 
   for token in "${tokens[@]}"; do
@@ -204,7 +204,7 @@ jiggit_render_help_line() {
   local line="${1:-}"
 
   case "${line}" in
-    "Usage:"|"Commands:"|"  Global flags:")
+    "Usage:" | "Commands:" | "  Global flags:")
       jiggit_help_heading "${line}"
       ;;
     "  jiggit "*)
@@ -213,7 +213,7 @@ jiggit_render_help_line() {
     "    --"*)
       jiggit_render_help_tokens "${line}" "option"
       ;;
-    "  help"|"  version, --version"|"  assign-fix-version "*|"  changes "*|"  config "*|"  dash "*|"  dashboard "*|"  doctor "*|"  env-versions "*|"  jira-create "*|"  next-release "*|"  releases "*|"  setup"*)
+    "  help" | "  version, --version" | "  assign-fix-version "* | "  changes "* | "  config "* | "  dash "* | "  dashboard "* | "  doctor "* | "  env-versions "* | "  jira-create "* | "  next-release "* | "  releases "* | "  setup"*)
       jiggit_render_help_tokens "${line}" "command"
       ;;
     *)
@@ -375,8 +375,8 @@ parse_opts() {
       --projects)
         if [[ $# -lt 2 ]]; then
           jiggit_error "Missing value for --projects"
-      jiggit_usage >&2
-      return 2
+          jiggit_usage >&2
+          return 2
         fi
         JIGGIT_GLOBAL_PROJECTS_VALUE="${2}"
         shift 2
@@ -385,7 +385,7 @@ parse_opts() {
         JIGGIT_GLOBAL_ALL_PROJECTS=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         JIGGIT_POSITIONAL_ARGS=("help")
         break
         ;;
@@ -443,7 +443,7 @@ jiggit_enter_repo_root() {
     return 0
   fi
 
-  pushd "${JIGGIT_REPO_ROOT}" > /dev/null || {
+  pushd "${JIGGIT_REPO_ROOT}" >/dev/null || {
     jiggit_error "Failed to enter repo root: ${JIGGIT_REPO_ROOT}"
     return 1
   }
@@ -455,10 +455,10 @@ dispatch_command() {
   local command="${1:-help}"
 
   case "${command}" in
-    version|--version)
+    version | --version)
       printf 'jiggit %s\n' "$(jiggit_version)"
       ;;
-    help|-h|--help)
+    help | -h | --help)
       usage
       ;;
     assign-fix-version)
@@ -473,7 +473,7 @@ dispatch_command() {
       shift || true
       run_config_main "$@"
       ;;
-    dash|dashboard|status)
+    dash | dashboard | status)
       shift || true
       run_overview_main "$@"
       ;;
@@ -555,6 +555,6 @@ run_main() {
   jiggit_run_main "$@"
 }
 
-if (( ! JIGGIT_SOURCE_ONLY )); then
+if ((! JIGGIT_SOURCE_ONLY)); then
   run_main "$@"
 fi

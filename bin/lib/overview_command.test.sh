@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/overview_command.sh
@@ -34,14 +34,14 @@ create_repo_for_overview() {
   git -C "${repo_dir}" branch -M main
   git -C "${repo_dir}" remote add origin "${remote_url}"
 
-  printf 'one\n' > "${repo_dir}/README.md"
+  printf 'one\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "ALPHA-1 initial commit" >/dev/null 2>&1
   git -C "${repo_dir}" tag v1.2.0.0
   git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
   git -C "${repo_dir}" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 
-  printf 'two\n' >> "${repo_dir}/README.md"
+  printf 'two\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "ALPHA-2 add feature" >/dev/null 2>&1
   git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
@@ -61,7 +61,7 @@ fetch_jira_releases() {
   local jira_project_key="${2}"
   local auth_reference="${3:-}"
 
-  printf '%s|%s|%s\n' "${jira_base_url}" "${jira_project_key}" "${auth_reference}" >> "${TEST_TMPDIR}/releases.log"
+  printf '%s|%s|%s\n' "${jira_base_url}" "${jira_project_key}" "${auth_reference}" >>"${TEST_TMPDIR}/releases.log"
   cat <<'EOF'
 [
   {"name":"v1.3.0.0","released":false,"archived":false,"releaseDate":"2026-03-28"},
@@ -75,7 +75,7 @@ fetch_jira_issues_by_keys() {
   local auth_reference="${2:-}"
   shift 2 || true
 
-  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${TEST_TMPDIR}/jira-issues.log"
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >>"${TEST_TMPDIR}/jira-issues.log"
   cat <<'EOF'
 {
   "issues": [
@@ -107,7 +107,7 @@ test_run_overview_main_shows_unreleased_issue_fetch_failure() {
   local repo_dir="${TEST_TMPDIR}/project-a"
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_dir}" "git@github.com:example/project-a.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -145,7 +145,7 @@ test_run_overview_main_renders_missing_shared_jira_config_diagnostic() {
   local repo_dir="${TEST_TMPDIR}/project-a"
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_dir}" "git@github.com:example/project-a.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project-a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/project-a.git"
@@ -181,18 +181,18 @@ test_run_overview_main_shows_no_jira_keys_for_commit_span() {
   git -C "${repo_dir}" config user.email "jiggit@example.com"
   git -C "${repo_dir}" branch -M main
   git -C "${repo_dir}" remote add origin "git@github.com:example/docs-only.git"
-  printf 'one\n' > "${repo_dir}/README.md"
+  printf 'one\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "initial commit" >/dev/null 2>&1
   git -C "${repo_dir}" tag v1.2.0.0
   git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
   git -C "${repo_dir}" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
-  printf 'two\n' >> "${repo_dir}/README.md"
+  printf 'two\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "docs: expand readme" >/dev/null 2>&1
   git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
 
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -225,7 +225,7 @@ test_run_overview_main_defaults_to_current_configured_repo() {
   local repo_dir="${TEST_TMPDIR}/project-a"
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_dir}" "git@github.com:example/project-a.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -241,11 +241,11 @@ EOF
   JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["project-a:prod"]="v1.2.0.0"
   JIGGIT_TEST_OVERVIEW_ENV_VERSION_BY_NAME["project-a:prep"]="v1.2.0.0"
 
-  printf 'three\n' >> "${repo_dir}/README.md"
+  printf 'three\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "chore(deps): update test dependency" >/dev/null 2>&1
 
-  printf 'four\n' >> "${repo_dir}/README.md"
+  printf 'four\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "fix(deps): patch test dependency" >/dev/null 2>&1
   git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
@@ -300,7 +300,7 @@ test_run_overview_main_defaults_to_all_projects_outside_configured_repo() {
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_one}" "git@github.com:example/alpha.git"
   create_repo_for_overview "${repo_two}" "git@github.com:example/beta.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -353,7 +353,7 @@ test_run_overview_main_uses_ansi_bold_for_compact_attention_lines() {
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_one}" "git@github.com:example/alpha.git"
   create_repo_for_overview "${repo_two}" "git@github.com:example/beta.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -432,7 +432,7 @@ test_run_overview_main_shows_source_hint_for_missing_jira_project_key() {
   local repo_dir="${TEST_TMPDIR}/project-b"
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_dir}" "git@github.com:example/project-b.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -464,7 +464,7 @@ test_run_overview_main_renders_version_diagnostics_for_prod_drift() {
   local repo_dir="${TEST_TMPDIR}/project-b"
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_dir}" "git@github.com:example/project-b.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"
@@ -507,7 +507,7 @@ test_run_overview_main_honors_global_project_selector() {
   local projects_file="${TEST_TMPDIR}/projects.toml"
   create_repo_for_overview "${repo_one}" "git@github.com:example/alpha.git"
   create_repo_for_overview "${repo_two}" "git@github.com:example/beta.git"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.com"
 bearer_token = "token"

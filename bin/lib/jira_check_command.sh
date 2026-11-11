@@ -241,7 +241,7 @@ jira_check_any_access_failures() {
 
   for jira_name in "${!JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME[@]}"; do
     case "${JIGGIT_JIRA_CHECK_ACCESS_STATE_BY_NAME["${jira_name}"]}" in
-      failed|missing-prereq)
+      failed | missing-prereq)
         return 0
         ;;
     esac
@@ -354,7 +354,7 @@ render_jira_check_access_body() {
       render_jira_check_identity "$(resolve_jira_name "${jira_name}")"
     fi
     case "${access_state}" in
-      missing-config|failed)
+      missing-config | failed)
         printf -- "- next step: \`jiggit setup jira\`\n"
         if [[ "${access_state}" == "failed" ]]; then
           printf -- "- verify Jira access once: \`bin/adhoc/jira_requests.sh myself\`\n"
@@ -491,14 +491,14 @@ run_jira_check_for_project() {
 
   metadata_error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-jira-check-metadata.XXXXXX")"
   if ! metadata_json="$(fetch_jira_project_metadata "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>"${metadata_error_file}")"; then
-    metadata_error="$(tr '\n' ' ' < "${metadata_error_file}")"
+    metadata_error="$(tr '\n' ' ' <"${metadata_error_file}")"
     metadata_json=""
   fi
   rm -f "${metadata_error_file}"
 
   releases_error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-jira-check-releases.XXXXXX")"
   if ! releases_json="$(fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${project_id}" 2>"${releases_error_file}")"; then
-    releases_error="$(tr '\n' ' ' < "${releases_error_file}")"
+    releases_error="$(tr '\n' ' ' <"${releases_error_file}")"
     rm -f "${releases_error_file}"
     render_jira_check_failure "${project_id}" "${jira_name}" "${jira_project_key}" "${releases_error}" "${metadata_url}" "${releases_url}" "ok" "jiggit doctor jira ${project_id}"
     return 1
@@ -552,7 +552,7 @@ run_jira_check_main() {
         check_all=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         jira_check_usage
         return 0
         ;;

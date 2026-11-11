@@ -70,7 +70,7 @@ bump_minor_version() {
     had_v_prefix=1
   fi
 
-  IFS='.' read -r -a parts <<< "${version_core}"
+  IFS='.' read -r -a parts <<<"${version_core}"
   if [[ "${#parts[@]}" -eq 0 || ! "${parts[0]}" =~ ^[0-9]+$ ]]; then
     return 1
   fi
@@ -100,9 +100,15 @@ bump_minor_version() {
   parts=("${parts[0]}" "${parts[1]}" "0")
 
   if [[ "${had_v_prefix}" -eq 1 ]]; then
-    printf 'v%s\n' "$(IFS=.; printf '%s' "${parts[*]}")"
+    printf 'v%s\n' "$(
+      IFS=.
+      printf '%s' "${parts[*]}"
+    )"
   else
-    printf '%s\n' "$(IFS=.; printf '%s' "${parts[*]}")"
+    printf '%s\n' "$(
+      IFS=.
+      printf '%s' "${parts[*]}"
+    )"
   fi
 }
 
@@ -123,7 +129,7 @@ next_release_resolve_base() {
     return 1
   fi
 
-  IFS='|' read -r base_kind base_label base_value base_git_ref _ <<< "${resolved}"
+  IFS='|' read -r base_kind base_label base_value base_git_ref _ <<<"${resolved}"
   if [[ "${base_kind}" == "environment" ]]; then
     printf '%s|%s|%s|%s\n' "${base_kind}" "${base_label}" "${base_value}" "${base_git_ref}"
     return 0
@@ -448,19 +454,19 @@ next_release_issue_status_bucket() {
 
   lowered_status="$(printf '%s\n' "${status_name}" | tr '[:upper:]' '[:lower:]')"
   case "${lowered_status}" in
-    *resolved*|*done*|*closed*)
+    *resolved* | *done* | *closed*)
       printf '%s\n' "resolved"
       ;;
     *business*validation*)
       printf '%s\n' "business-validation"
       ;;
-    *quality*assurance*|qa)
+    *quality*assurance* | qa)
       printf '%s\n' "quality-assurance"
       ;;
-    *implement*|*in\ progress*)
+    *implement* | *in\ progress*)
       printf '%s\n' "implement"
       ;;
-    *reopen*|*re-open*|*open*|*to\ do*)
+    *reopen* | *re-open* | *open* | *to\ do*)
       printf '%s\n' "open-reopen"
       ;;
     *)
@@ -748,7 +754,7 @@ maybe_create_next_jira_release() {
   releases_error_file="$(mktemp "${TMPDIR:-/tmp}/jiggit-next-release-releases.XXXXXX")"
   if ! releases_json="$(next_release_fetch_jira_releases "${jira_base_url_value}" "${jira_project_key}" "${auth_reference}" "${releases_error_file}")"; then
     next_release_emit_captured_stderr "${releases_error_file}"
-    releases_error="$(trim "$(tr '\n' ' ' < "${releases_error_file}")")"
+    releases_error="$(trim "$(tr '\n' ' ' <"${releases_error_file}")")"
     rm -f "${releases_error_file}"
     releases_error_file=""
     printf '%s\n' "warn|${releases_error:-unable to fetch existing releases}"
@@ -775,7 +781,7 @@ maybe_create_next_jira_release() {
   release_name_default="$(next_release_project_release_name_candidates "${project_id}" "${suggested_version}" | head -n 1)"
   choice="$(prompt_input_line "Jira release ${release_name_default} is missing. Create it now? [y/N]: ")"
   case "${choice}" in
-    y|Y)
+    y | Y)
       release_name="$(prompt_input_line "Jira release name [${release_name_default}]: ")"
       release_name="${release_name:-${release_name_default}}"
       ;;
@@ -876,8 +882,8 @@ render_next_release_jira_release_status() {
       render_release_entry "${repo_path}" "${release_json}"
       rendered_any=1
     done < <(
-      printf '%s\n' "${inventory_json}" \
-        | jq -c 'sort_by((.releaseDate // ""), (.name // "")) | reverse[]'
+      printf '%s\n' "${inventory_json}" |
+        jq -c 'sort_by((.releaseDate // ""), (.name // "")) | reverse[]'
     )
 
     if [[ ${rendered_any} -eq 0 ]]; then
@@ -991,7 +997,7 @@ run_next_release_main() {
         create_requested=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         next_release_usage
         return 0
         ;;
@@ -1062,7 +1068,7 @@ run_next_release_main() {
     local jira_auth_source_value=""
 
     jira_auth_summary="$(next_release_jira_auth_summary "${project_id}")"
-    IFS='|' read -r jira_auth_mode_value jira_auth_source_value <<< "${jira_auth_summary}"
+    IFS='|' read -r jira_auth_mode_value jira_auth_source_value <<<"${jira_auth_summary}"
     jiggit_verbose_log "next-release cwd=${PWD} project=${project_id} repo=${repo_path:-missing} jira=${jira_project_key:-missing} auth=${jira_auth_mode_value} auth-source=${jira_auth_source_value}"
   fi
   if [[ -z "${repo_path}" || ! -d "${repo_path}" ]]; then
@@ -1084,7 +1090,7 @@ run_next_release_main() {
     return 1
   fi
 
-  IFS='|' read -r base_kind base_label base_value base_git_ref <<< "${base_resolved}"
+  IFS='|' read -r base_kind base_label base_value base_git_ref <<<"${base_resolved}"
   if ! commit_count="$(git -C "${repo_path}" rev-list --count "${base_git_ref}..${target_ref}" 2>/dev/null)"; then
     render_next_release_failure "${project_id}" "${repo_path}" "unable to compare refs" "jiggit changes ${project_id} --base ${base_operand}"
     return 1
@@ -1107,7 +1113,7 @@ run_next_release_main() {
         rm -f "${releases_error_file}"
       fi
       if [[ "${jira_release_fetch_state}" != "ok" ]]; then
-        releases_error="$(trim "$(tr '\n' ' ' < "${releases_error_file}")")"
+        releases_error="$(trim "$(tr '\n' ' ' <"${releases_error_file}")")"
         next_release_emit_captured_stderr "${releases_error_file}"
         rm -f "${releases_error_file}"
         jira_release_fetch_detail="${releases_error:-unable to fetch existing releases}"
@@ -1203,7 +1209,7 @@ run_next_release_main() {
       jira_release_detail="release already exists; no creation needed"
     elif [[ "${create_requested}" -eq 1 ]]; then
       jira_release_result="$(maybe_create_next_jira_release "${project_id}" "${jira_base_url_value}" "${jira_project_key}" "${suggested_version}" "${project_id}")"
-      IFS='|' read -r jira_release_state jira_release_detail <<< "${jira_release_result}"
+      IFS='|' read -r jira_release_state jira_release_detail <<<"${jira_release_result}"
     else
       jira_release_state="missing"
       jira_release_detail="not requested; run ${jira_create_command} after review"

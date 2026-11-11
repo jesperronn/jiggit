@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/next_release_command.sh
@@ -43,18 +43,18 @@ ensure_cached_repo() {
     git -C "${CACHED_REPO_DIR}" branch -M main
     git -C "${CACHED_REPO_DIR}" remote add origin "git@github.com:example/next-release-repo.git"
 
-    printf 'one\n' > "${CACHED_REPO_DIR}/README.md"
+    printf 'one\n' >"${CACHED_REPO_DIR}/README.md"
     git -C "${CACHED_REPO_DIR}" add README.md
     git -C "${CACHED_REPO_DIR}" commit -m "ALPHA-1 initial commit" >/dev/null 2>&1
     git -C "${CACHED_REPO_DIR}" tag v1.2.0.0
     git -C "${CACHED_REPO_DIR}" update-ref refs/remotes/origin/main "$(git -C "${CACHED_REPO_DIR}" rev-parse HEAD)"
     git -C "${CACHED_REPO_DIR}" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 
-    printf 'two\n' >> "${CACHED_REPO_DIR}/README.md"
+    printf 'two\n' >>"${CACHED_REPO_DIR}/README.md"
     git -C "${CACHED_REPO_DIR}" add README.md
     git -C "${CACHED_REPO_DIR}" commit -m "ALPHA-2 add feature" >/dev/null 2>&1
 
-    printf 'three\n' >> "${CACHED_REPO_DIR}/README.md"
+    printf 'three\n' >>"${CACHED_REPO_DIR}/README.md"
     git -C "${CACHED_REPO_DIR}" add README.md
     git -C "${CACHED_REPO_DIR}" commit -m "ALPHA-3 add second feature" >/dev/null 2>&1
     git -C "${CACHED_REPO_DIR}" update-ref refs/remotes/origin/main "$(git -C "${CACHED_REPO_DIR}" rev-parse HEAD)"
@@ -79,7 +79,7 @@ setup_home_based_project() {
   mkdir -p "${projects_dir}"
   create_repo_for_next_release "${repo_dir}"
 
-  cat > "${projects_dir}/projects.toml" <<EOF
+  cat >"${projects_dir}/projects.toml" <<EOF
 [next-release-project]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/next-release-repo.git"
@@ -89,13 +89,13 @@ environments = ["prod"]
 EOF
 
   if [[ "${should_have_bearer_token}" == "true" ]]; then
-    cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
+    cat >"${home_dir}/.jiggit/config.toml" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
 EOF
   else
-    cat > "${home_dir}/.jiggit/config.toml" <<'EOF'
+    cat >"${home_dir}/.jiggit/config.toml" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 EOF
@@ -118,7 +118,7 @@ fetch_jira_issues_by_keys() {
   local auth_reference="${2:-}"
   shift 2 || true
 
-  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG}"
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >>"${JIGGIT_TEST_NEXT_RELEASE_FETCH_ISSUES_LOG}"
   cat <<'EOF'
 {
   "issues": [
@@ -178,7 +178,7 @@ create_jira_release_version() {
   local jira_base_url="${1}"
   local payload="${2}"
 
-  printf '%s|%s\n' "${jira_base_url}" "${payload}" >> "${JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG}"
+  printf '%s|%s\n' "${jira_base_url}" "${payload}" >>"${JIGGIT_TEST_NEXT_RELEASE_CREATE_LOG}"
   printf '%s\n' "${payload}" | jq '{name: .name}'
 }
 
@@ -191,7 +191,7 @@ test_run_next_release_main_defaults_to_prod_and_suggests_minor_bump() {
   git -C "${repo_dir}" tag v1.22.0.83
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -206,7 +206,7 @@ EOF
 
   JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
 
-  cat > "${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
 y
 
 EOF
@@ -214,8 +214,8 @@ EOF
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
       run_next_release_main next-release-project
   )"
@@ -262,11 +262,11 @@ test_run_next_release_main_verbose_shows_project_and_jira_auth_source() {
 
   local output
   output="$(
-    cd "${TEST_TMPDIR}" && \
+    cd "${TEST_TMPDIR}" &&
       HOME="${home_dir}" \
-      JIGGIT_VERBOSE=1 \
-      JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
-      run_next_release_main next-release-project 2>&1
+        JIGGIT_VERBOSE=1 \
+        JIGGIT_DISCOVERED_PROJECTS_FILE="${home_dir}/.jiggit/discovered_projects.toml" \
+        run_next_release_main next-release-project 2>&1
   )"
 
   assert_contains "${output}" "[verbose] next-release cwd=${TEST_TMPDIR}" "report the current working directory"
@@ -337,7 +337,7 @@ test_run_next_release_main_can_force_colored_issue_states() {
   create_repo_for_next_release "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -355,7 +355,7 @@ EOF
   local output
   output="$(
     JIGGIT_COLOR_OUTPUT=always \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
       run_next_release_main next-release-project
   )"
@@ -401,7 +401,7 @@ test_next_release_project_releases_json_filters_by_project_prefix() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -465,7 +465,7 @@ test_run_next_release_main_can_create_missing_jira_release_with_explicit_create(
   create_repo_for_next_release "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -480,7 +480,7 @@ EOF
 
   JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
 
-  cat > "${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
 y
 
 EOF
@@ -488,8 +488,8 @@ EOF
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
       run_next_release_main next-release-project --create
   )"
@@ -512,7 +512,7 @@ test_run_next_release_main_reports_exact_rerun_after_jira_release_creation_failu
   create_repo_for_next_release "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -525,7 +525,7 @@ jira_regexes = ["ALPHA-[0-9]+"]
 environments = ["prod"]
 EOF
 
-  cat > "${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/next-release-input.txt" <<'EOF'
 y
 
 EOF
@@ -539,8 +539,8 @@ EOF
 
     JIGGIT_TEST_ENV_VERSION_BY_NAME["next-release-project:prod"]="v1.2.0.0"
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/next-release-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
       run_next_release_main next-release-project --create --base prod --target refs/remotes/origin/main
   )"
@@ -558,7 +558,7 @@ test_run_next_release_main_accepts_repo_path_selector_and_reports_up_to_date() {
   git -C "${repo_dir}" tag v1.3.0.0
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -594,7 +594,7 @@ test_run_next_release_main_renders_config_guidance_when_jira_config_is_missing()
   create_repo_for_next_release "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [next-release-project]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/next-release-repo.git"
@@ -621,7 +621,7 @@ test_run_next_release_main_fails_with_guidance_when_repo_path_is_missing() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [next-release-project]
 repo_path = "/tmp/does-not-exist"
 remote_url = "git@github.com:example/next-release-repo.git"

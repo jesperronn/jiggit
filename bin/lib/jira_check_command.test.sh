@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/jira_check_command.sh
@@ -81,7 +81,7 @@ test_run_jira_check_main_treats_release_access_as_sufficient_when_metadata_fails
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -112,7 +112,7 @@ test_run_jira_check_main_renders_connectivity_report() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -152,7 +152,7 @@ test_run_jira_check_main_scopes_release_summary_by_jira_release_prefix() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -170,7 +170,7 @@ EOF
   fetch_jira_releases() {
     local jira_base_url="${1}"
     local jira_project_key="${2}"
-    printf 'releases|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
+    printf 'releases|%s|%s\n' "${jira_base_url}" "${jira_project_key}" >>"${TEST_TMPDIR}/fetch.log"
 
     cat <<'EOF'
 [
@@ -199,7 +199,7 @@ test_run_jira_check_main_all_checks_every_project_and_fails_at_end() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -246,7 +246,7 @@ test_run_jira_check_main_all_reports_missing_base_url_per_project() {
   mkdir -p "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project-a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/project-a.git"
@@ -285,7 +285,7 @@ test_run_jira_check_main_verbose_reports_per_project_urls() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -317,7 +317,7 @@ test_run_jira_check_main_verbose_keeps_probe_json_clean_when_stderr_has_logs() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # you can test output of the colors by calling directly this file and it will call `_testcolors()` method
 
-
 C_0="\e[0m"
 C_BOLD="\e[1m"
 C_U="\e[4m"
@@ -98,7 +97,7 @@ render_status_label() {
     warn)
       printf '⚠️ WARN'
       ;;
-    fail|failed)
+    fail | failed)
       printf '❌ FAIL'
       ;;
     error)
@@ -142,7 +141,7 @@ print_jiggit_usage_line() {
         printf '%s\n' "${line}"
       fi
       ;;
-    "  jiggit "*|"  --"*|"\t--"*)
+    "  jiggit "* | "  --"* | "\t--"*)
       jiggit_render_help_tokens "${line}" "usage"
       ;;
     *)
@@ -172,7 +171,6 @@ jiggit_verbose_log() {
     printf '[verbose] %s\n' "$*" >&2
   fi
 }
-
 
 _testcolors() {
   echo -e "${C_0}color C_0${C_0}"
@@ -220,12 +218,10 @@ function error {
   echo -e "${C_RED}${C_BOLD}❌ [ERROR] $1${C_0}" >&2
 }
 
-
 run_main() {
   _testcolors
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
-then
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   run_main "$@"
 fi

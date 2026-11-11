@@ -34,15 +34,15 @@ bash_test_verbose_enabled() {
 
 # Print failure and increment FAILED counter (test scripts should define FAILED)
 fail() {
-  local msg="${1:-}";
+  local msg="${1:-}"
   printf '%s %s\n' "$(colorize_test_label "${TEST_COLOR_BOLD}${TEST_COLOR_RED}" "[FAIL]")" "$msg" >&2
   if [[ -n "${FAILED+x}" ]]; then
-    FAILED=$((FAILED+1))
+    FAILED=$((FAILED + 1))
   fi
 }
 
 pass() {
-  local msg="${1:-}";
+  local msg="${1:-}"
   printf '%s %s\n' "$(colorize_test_label "${TEST_COLOR_GREEN}" "[PASS]")" "$msg"
 }
 
@@ -121,14 +121,15 @@ help_check() {
 run_with_env_unset() {
   local -a envvars=()
   while [[ "$1" != "--" ]]; do
-    envvars+=("$1"); shift || break
+    envvars+=("$1")
+    shift || break
   done
   shift || true
   local -a env_cmd=(env)
   for v in "${envvars[@]}"; do
-    env_cmd+=( -u "$v" )
+    env_cmd+=(-u "$v")
   done
-  env_cmd+=( "$@" )
+  env_cmd+=("$@")
   "${env_cmd[@]}"
 }
 

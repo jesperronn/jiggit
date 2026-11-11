@@ -35,15 +35,15 @@ jira_setup_conflict_choice() {
   while true; do
     response="$(prompt_input_line "${prompt_text} [o]verride/[s]kip/[q]uit: ")"
     case "${response}" in
-      o|O|override|OVERRIDE)
+      o | O | override | OVERRIDE)
         printf '%s\n' "override"
         return 0
         ;;
-      s|S|skip|SKIP|'')
+      s | S | skip | SKIP | '')
         printf '%s\n' "skip"
         return 0
         ;;
-      q|Q|quit|QUIT)
+      q | Q | quit | QUIT)
         printf '%s\n' "quit"
         return 0
         ;;
@@ -97,7 +97,7 @@ jira_setup_append_envrc_export() {
   if grep -Fqx "${export_line}" "${envrc_file}"; then
     return 0
   fi
-  printf '%s\n' "${export_line}" >> "${envrc_file}"
+  printf '%s\n' "${export_line}" >>"${envrc_file}"
 }
 
 # Upsert one Jira key inside the target TOML section, asking before overrides.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 
@@ -16,7 +16,7 @@ create_jira_requests_fixture() {
   cp bin/adhoc/jira_requests.sh "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh"
   chmod +x "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh"
 
-  cat > "${TEST_TMPDIR}/bin/adhoc/_jira_variables.sh" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/adhoc/_jira_variables.sh" <<'EOF'
 # shellcheck shell=bash
 export JIRA_BASE_URL="https://jira.stil.dk"
 export JIRA_PROJECT_KEY="SKOLELOGIN"
@@ -33,7 +33,7 @@ create_jira_requests_fixture_without_local_config() {
 }
 
 create_fake_curl_success() {
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -71,7 +71,7 @@ EOF
 }
 
 create_fake_curl_fail_on_project() {
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -99,7 +99,7 @@ EOF
 }
 
 create_fake_curl_fail_on_myself() {
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -123,7 +123,7 @@ test_jira_requests_dry_run_prints_commands_without_calling_curl() {
   setup_test_tmpdir
   create_jira_requests_fixture
   create_fake_curl_success
-  : > "${TEST_TMPDIR}/curl.log"
+  : >"${TEST_TMPDIR}/curl.log"
 
   local output
   output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" --dry-run all 2>&1)"
@@ -139,7 +139,7 @@ test_jira_requests_dry_run_all_works_without_local_config_file() {
   setup_test_tmpdir
   create_jira_requests_fixture_without_local_config
   create_fake_curl_success
-  : > "${TEST_TMPDIR}/curl.log"
+  : >"${TEST_TMPDIR}/curl.log"
 
   local output
   output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" --dry-run all 2>&1)"
@@ -276,7 +276,7 @@ test_jira_requests_versions_accepts_raw_after_project_key() {
   output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" versions SKOLELOGIN --raw 2>&1)"
 
   assert_contains "${output}" '[{"name":"1.2.3"}]' "raw versions output includes json body"
-    if [[ "${output}" == *"Next steps:"* || "${output}" == *"if successful:"* || "${output}" == *"if failing:"* ]]; then
+  if [[ "${output}" == *"Next steps:"* || "${output}" == *"if successful:"* || "${output}" == *"if failing:"* ]]; then
     fail "raw versions output should omit next steps"
     return 1
   fi
@@ -287,7 +287,7 @@ test_jira_requests_search_uses_exact_release_tag_in_jql() {
   setup_test_tmpdir
   create_jira_requests_fixture
 
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -318,7 +318,7 @@ test_jira_requests_versions_accepts_short_after_project_key() {
   setup_test_tmpdir
   create_jira_requests_fixture
 
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -401,7 +401,7 @@ test_jira_requests_all_prints_excerpt_for_long_output() {
   setup_test_tmpdir
   create_jira_requests_fixture
 
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 

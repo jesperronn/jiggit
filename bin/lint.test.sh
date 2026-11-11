@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/.." > /dev/null || exit 1
+pushd "$(dirname "$0")/.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 
@@ -13,7 +13,7 @@ setup_test_tmpdir() {
 
 create_fake_shellcheck() {
   mkdir -p "${TEST_TMPDIR}/bin"
-  cat > "${TEST_TMPDIR}/bin/shellcheck" <<'EOF'
+  cat >"${TEST_TMPDIR}/bin/shellcheck" <<'EOF'
 #!/usr/bin/env bash
 printf 'fake shellcheck %s\n' "$*"
 EOF

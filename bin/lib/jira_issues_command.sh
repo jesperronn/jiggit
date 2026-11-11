@@ -113,7 +113,7 @@ render_release_match_candidates() {
   while IFS= read -r release_json; do
     [[ -z "${release_json}" ]] && continue
     printf -- '- %s\n' "$(printf '%s\n' "${release_json}" | jq -r '.name // "unknown"')" >&2
-  done <<< "${matches_json}"
+  done <<<"${matches_json}"
 }
 
 # Render the Jira issue report.
@@ -184,7 +184,7 @@ run_jira_issues_main() {
         release_query="${2:-}"
         shift 2
         ;;
-      -h|--help)
+      -h | --help)
         jira_issues_usage
         return 0
         ;;

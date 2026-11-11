@@ -91,7 +91,7 @@ resolve_secret() {
       return 0
     fi
     if [[ -s "${stderr_file}" ]]; then
-      verbose_log "op read error: $(tr '\n' ' ' < "${stderr_file}" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+      verbose_log "op read error: $(tr '\n' ' ' <"${stderr_file}" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
     fi
 
     item_name="${value#op://}"
@@ -110,11 +110,11 @@ resolve_secret() {
             fi
           fi
           if [[ -s "${stderr_file}" ]]; then
-            verbose_log "op item get error: $(tr '\n' ' ' < "${stderr_file}" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+            verbose_log "op item get error: $(tr '\n' ' ' <"${stderr_file}" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
           fi
         fi
       elif [[ -s "${stderr_file}" ]]; then
-        verbose_log "op item list error: $(tr '\n' ' ' < "${stderr_file}" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+        verbose_log "op item list error: $(tr '\n' ' ' <"${stderr_file}" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
       fi
     fi
 
@@ -333,7 +333,7 @@ main() {
         JIRA_SMOKE_VERBOSE=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         command="${1}"
         shift
         ;;
@@ -357,7 +357,7 @@ main() {
     create-issue) cmd_create_issue ;;
     update-fix-version) cmd_update_fix_version ;;
     create-version) cmd_create_version ;;
-    -h|--help|"")
+    -h | --help | "")
       usage
       [[ "${command}" == -h || "${command}" == --help ]]
       ;;

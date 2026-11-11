@@ -20,7 +20,7 @@ resolve_script_path() {
   local next_path=""
 
   while [[ -L "${source_path}" ]]; do
-    source_dir="$(cd -P "$(dirname "${source_path}")" > /dev/null 2>&1 && pwd)"
+    source_dir="$(cd -P "$(dirname "${source_path}")" >/dev/null 2>&1 && pwd)"
     next_path="$(readlink "${source_path}")"
     if [[ "${next_path}" != /* ]]; then
       source_path="${source_dir}/${next_path}"
@@ -29,7 +29,7 @@ resolve_script_path() {
     fi
   done
 
-  source_dir="$(cd -P "$(dirname "${source_path}")" > /dev/null 2>&1 && pwd)"
+  source_dir="$(cd -P "$(dirname "${source_path}")" >/dev/null 2>&1 && pwd)"
   printf '%s/%s\n' "${source_dir}" "$(basename "${source_path}")"
 }
 
@@ -38,7 +38,7 @@ setup_repo_root() {
   local script_path
 
   script_path="$(resolve_script_path "${BASH_SOURCE[0]}")"
-  cd -P "$(dirname "${script_path}")/.." > /dev/null 2>&1
+  cd -P "$(dirname "${script_path}")/.." >/dev/null 2>&1
   pwd
 }
 
@@ -94,7 +94,7 @@ collect_writable_path_dirs() {
 
   while IFS= read -r candidate_dir; do
     [[ -w "${candidate_dir}" ]] || continue
-    if printf '%s\n' "${seen_dirs}" | grep -Fx -- "${candidate_dir}" > /dev/null 2>&1; then
+    if printf '%s\n' "${seen_dirs}" | grep -Fx -- "${candidate_dir}" >/dev/null 2>&1; then
       continue
     fi
     seen_dirs="${seen_dirs}${candidate_dir}
@@ -112,7 +112,7 @@ read_prompt_choice() {
     return 0
   fi
 
-  if exec 3<> /dev/tty 2>/dev/null; then
+  if exec 3<>/dev/tty 2>/dev/null; then
     if IFS= read -r choice <&3; then
       exec 3<&-
       exec 3>&-
@@ -150,7 +150,7 @@ prompt_for_link_dir() {
 
     normalized_choice="$(printf '%s' "${choice}" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
 
-    if [[ "${normalized_choice}" =~ ^[0-9]+$ ]] && (( normalized_choice >= 1 && normalized_choice <= ${#candidate_dirs[@]} )); then
+    if [[ "${normalized_choice}" =~ ^[0-9]+$ ]] && ((normalized_choice >= 1 && normalized_choice <= ${#candidate_dirs[@]})); then
       printf '%s\n' "${candidate_dirs[$((normalized_choice - 1))]}"
       return 0
     fi
@@ -214,7 +214,7 @@ ensure_jiggit_symlink() {
   fi
 
   if [[ -e "${symlink_path}" || -L "${symlink_path}" ]]; then
-    if [[ "${force}" != true || ( -d "${symlink_path}" && ! -L "${symlink_path}" ) ]]; then
+    if [[ "${force}" != true || (-d "${symlink_path}" && ! -L "${symlink_path}") ]]; then
       printf 'Refusing to replace an existing command at %s (use --force for files or symlinks)\n' "${symlink_path}" >&2
       return 1
     fi
@@ -256,7 +256,10 @@ run_main() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
       --force) force=true ;;
-      *) printf 'Unknown option: %s\n' "${1}" >&2; return 1 ;;
+      *)
+        printf 'Unknown option: %s\n' "${1}" >&2
+        return 1
+        ;;
     esac
     shift
   done

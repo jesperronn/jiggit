@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/assign_fix_version_command.sh
@@ -39,18 +39,18 @@ create_repo_for_assign_fix_version() {
   git -C "${repo_dir}" branch -M main
   git -C "${repo_dir}" remote add origin "git@github.com:example/assign-fix-version-repo.git"
 
-  printf 'one\n' > "${repo_dir}/README.md"
+  printf 'one\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "ALPHA-1 initial commit" >/dev/null 2>&1
   git -C "${repo_dir}" tag v1.2.0.0
   git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
   git -C "${repo_dir}" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 
-  printf 'two\n' >> "${repo_dir}/README.md"
+  printf 'two\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "ALPHA-2 add feature" >/dev/null 2>&1
 
-  printf 'three\n' >> "${repo_dir}/README.md"
+  printf 'three\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "ALPHA-3 add second feature" >/dev/null 2>&1
   git -C "${repo_dir}" update-ref refs/remotes/origin/main "$(git -C "${repo_dir}" rev-parse HEAD)"
@@ -77,7 +77,7 @@ fetch_jira_issues_by_keys() {
   local auth_reference="${2:-}"
   shift 2 || true
 
-  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${JIGGIT_TEST_ASSIGN_FIX_VERSION_FETCH_LOG}"
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >>"${JIGGIT_TEST_ASSIGN_FIX_VERSION_FETCH_LOG}"
   cat <<'EOF'
 {
   "issues": [
@@ -107,7 +107,7 @@ update_jira_issue_fix_version() {
   local issue_key="${2}"
   local release_name="${3}"
 
-  printf '%s|%s|%s\n' "${jira_base_url_value}" "${issue_key}" "${release_name}" >> "${JIGGIT_TEST_ASSIGN_FIX_VERSION_UPDATE_LOG}"
+  printf '%s|%s|%s\n' "${jira_base_url_value}" "${issue_key}" "${release_name}" >>"${JIGGIT_TEST_ASSIGN_FIX_VERSION_UPDATE_LOG}"
 }
 
 test_run_assign_fix_version_main_can_apply_missing_fix_version_updates() {
@@ -118,7 +118,7 @@ test_run_assign_fix_version_main_can_apply_missing_fix_version_updates() {
   create_repo_for_assign_fix_version "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -133,17 +133,17 @@ EOF
 
   JIGGIT_TEST_ENV_VERSION_BY_NAME["project_a:prod"]="v1.2.0.0"
 
-  cat > "${TEST_TMPDIR}/assign-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/assign-input.txt" <<'EOF'
 y
 EOF
 
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/assign-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_assign_fix_version_main project_a --release 1.3 --apply
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/assign-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_assign_fix_version_main project_a --release 1.3 --apply
   )"
 
   local update_log
@@ -169,7 +169,7 @@ test_run_assign_fix_version_main_previews_without_applying_updates() {
   create_repo_for_assign_fix_version "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -184,17 +184,17 @@ EOF
 
   JIGGIT_TEST_ENV_VERSION_BY_NAME["project_a:prod"]="v1.2.0.0"
 
-  cat > "${TEST_TMPDIR}/assign-input.txt" <<'EOF'
+  cat >"${TEST_TMPDIR}/assign-input.txt" <<'EOF'
 y
 EOF
 
   local output
   output="$(
     JIGGIT_CAN_PROMPT_INTERACTIVELY=true \
-    JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/assign-input.txt" \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_assign_fix_version_main project_a --release 1.3
+      JIGGIT_PROMPT_INPUT_FILE="${TEST_TMPDIR}/assign-input.txt" \
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_assign_fix_version_main project_a --release 1.3
   )"
 
   assert_contains "${output}" "status: \`read-only preview\`" "identify the default as a read-only preview"
@@ -214,7 +214,7 @@ test_run_assign_fix_version_main_prints_matches_when_release_is_ambiguous() {
   create_repo_for_assign_fix_version "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -230,8 +230,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_assign_fix_version_main project_a --release 1. 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_assign_fix_version_main project_a --release 1. 2>&1
   )"; then
     fail "exit when release query matches multiple releases"
   else
@@ -250,7 +250,7 @@ test_run_assign_fix_version_main_scopes_release_resolution_by_project_prefix() {
   create_repo_for_assign_fix_version "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -279,8 +279,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_assign_fix_version_main project_a --release 1.23.0
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_assign_fix_version_main project_a --release 1.23.0
   )"
 
   assert_contains "${output}" "Release: \`Udbyderportal_1.23.0\`" "resolve the project-scoped prefixed release"

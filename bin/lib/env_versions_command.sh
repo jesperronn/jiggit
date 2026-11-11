@@ -99,7 +99,7 @@ env_versions_bump_minor_version() {
     had_v_prefix=1
   fi
 
-  IFS='.' read -r -a parts <<< "${version_core}"
+  IFS='.' read -r -a parts <<<"${version_core}"
   if [[ "${#parts[@]}" -eq 0 || ! "${parts[0]}" =~ ^[0-9]+$ ]]; then
     return 1
   fi
@@ -115,14 +115,20 @@ env_versions_bump_minor_version() {
   done
 
   parts[1]=$((parts[1] + 1))
-  for (( index=2; index<${#parts[@]}; index+=1 )); do
+  for ((index = 2; index < ${#parts[@]}; index += 1)); do
     parts[index]=0
   done
 
   if [[ "${had_v_prefix}" -eq 1 ]]; then
-    printf 'v%s\n' "$(IFS=.; printf '%s' "${parts[*]}")"
+    printf 'v%s\n' "$(
+      IFS=.
+      printf '%s' "${parts[*]}"
+    )"
   else
-    printf '%s\n' "$(IFS=.; printf '%s' "${parts[*]}")"
+    printf '%s\n' "$(
+      IFS=.
+      printf '%s' "${parts[*]}"
+    )"
   fi
 }
 
@@ -311,7 +317,7 @@ env_version_major_minor() {
   local -a parts=()
 
   core="$(env_version_core "${version}")"
-  IFS='.' read -r -a parts <<< "${core}"
+  IFS='.' read -r -a parts <<<"${core}"
   if [[ "${#parts[@]}" -lt 2 ]]; then
     return 1
   fi
@@ -327,19 +333,19 @@ compare_major_minor_versions() {
   local right_major="${right%%.*}"
   local right_minor="${right#*.}"
 
-  if (( left_major > right_major )); then
+  if ((left_major > right_major)); then
     printf '%s\n' "gt"
     return 0
   fi
-  if (( left_major < right_major )); then
+  if ((left_major < right_major)); then
     printf '%s\n' "lt"
     return 0
   fi
-  if (( left_minor > right_minor )); then
+  if ((left_minor > right_minor)); then
     printf '%s\n' "gt"
     return 0
   fi
-  if (( left_minor < right_minor )); then
+  if ((left_minor < right_minor)); then
     printf '%s\n' "lt"
     return 0
   fi
@@ -450,7 +456,7 @@ env_versions_has_release_drift() {
     [[ "${version}" == ERROR:* ]] && continue
     relation="$(classify_env_version_against_prod "${prod_version}" "${version}")"
     case "${relation}" in
-      same-minor-different-build|ahead-major-minor)
+      same-minor-different-build | ahead-major-minor)
         return 0
         ;;
     esac
@@ -517,7 +523,7 @@ render_env_versions_issue_summary() {
           issue_color="${C_CYAN}"
         fi
         ;;
-      missing-fix-version|other-fix-version)
+      missing-fix-version | other-fix-version)
         issue_color="${C_ORANGE}"
         ;;
       *)
@@ -605,7 +611,7 @@ run_env_versions_main() {
         JIGGIT_ENV_VERSIONS_VERBOSE=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         env_versions_usage
         return 0
         ;;

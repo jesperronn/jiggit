@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/env_diff_command.sh
@@ -32,16 +32,16 @@ create_repo_for_env_diff() {
   git -C "${repo_dir}" config user.email "jiggit@example.com"
   git -C "${repo_dir}" remote add origin "git@github.com:example/env-diff-repo.git"
 
-  printf 'one\n' > "${repo_dir}/README.md"
+  printf 'one\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "ALPHA-1 feat: initial feature" >/dev/null 2>&1
   git -C "${repo_dir}" tag v1.0.0
 
-  printf 'two\n' >> "${repo_dir}/README.md"
+  printf 'two\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "ALPHA-2 fix: repair edge case in callback parsing when the response payload contains nested continuation markers and trailing metadata that should be clipped for display" >/dev/null 2>&1
 
-  printf 'three\n' >> "${repo_dir}/README.md"
+  printf 'three\n' >>"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "docs: update setup notes" >/dev/null 2>&1
   git -C "${repo_dir}" tag v1.1.0
@@ -56,7 +56,7 @@ fetch_env_version_for_url() {
   local environment_name="${1}"
   local info_url="${2}"
   local jq_expr="${3}"
-  printf '%s|%s|%s\n' "${environment_name}" "${info_url}" "${jq_expr}" >> "${TEST_TMPDIR}/fetch.log"
+  printf '%s|%s|%s\n' "${environment_name}" "${info_url}" "${jq_expr}" >>"${TEST_TMPDIR}/fetch.log"
 
   case "${environment_name}" in
     prod)
@@ -80,7 +80,7 @@ fetch_jira_issues_by_keys() {
   local auth_reference="${2:-}"
   shift 2 || true
 
-  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >> "${TEST_TMPDIR}/jira-fetch.log"
+  printf '%s|%s|%s\n' "${jira_base_url}" "${auth_reference}" "$*" >>"${TEST_TMPDIR}/jira-fetch.log"
   cat <<'EOF'
 {
   "issues": [
@@ -107,7 +107,7 @@ test_run_env_diff_main_reports_no_difference_for_equal_versions() {
   fix_sha="$(git -C "${repo_dir}" rev-parse --short HEAD~1)"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project_a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/env-diff-repo.git"
@@ -124,8 +124,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_diff_main project_a --base prep --target ft
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_diff_main project_a --base prep --target ft
   )"
 
   assert_contains "${output}" "No difference: both operands resolve to the same ref." "report equal-version no-diff case"
@@ -144,7 +144,7 @@ test_run_env_diff_main_preserves_requested_base_and_target_environments() {
   fix_sha="$(git -C "${repo_dir}" rev-parse --short HEAD~1)"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -165,9 +165,9 @@ EOF
   local output
   output="$(
     COLUMNS=80 \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_diff_main project_a --base prod --target prep
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_diff_main project_a --base prod --target prep
   )"
 
   assert_contains "${output}" "# jiggit changes" "render changes heading"
@@ -205,7 +205,7 @@ test_env_diff_parse_commit_subject_preserves_non_conventional_subject() {
   local commit_subject=""
   local breaking_marker=""
 
-  IFS='|' read -r commit_type commit_scope commit_subject breaking_marker <<< "$(env_diff_parse_commit_subject 'Ship provider rewrite')"
+  IFS='|' read -r commit_type commit_scope commit_subject breaking_marker <<<"$(env_diff_parse_commit_subject 'Ship provider rewrite')"
 
   assert_eq "other" "${commit_type}" "classify non-conventional subject as other"
   assert_eq "" "${commit_scope}" "keep non-conventional scope empty"
@@ -231,7 +231,7 @@ test_run_env_diff_main_can_color_commit_suffixes_and_release_callout() {
   fix_sha="$(git -C "${repo_dir}" rev-parse --short HEAD~1)"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project_a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/env-diff-repo.git"
@@ -248,9 +248,9 @@ EOF
   local output
   output="$(
     JIGGIT_COLOR_OUTPUT=always \
-    JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_diff_main project_a --base prod --target prep
+      JIGGIT_PROJECTS_FILE="${projects_file}" \
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_diff_main project_a --base prod --target prep
   )"
 
   assert_contains "${output}" '* ' "preserve bullet prefix on single-line commit entry"
@@ -269,7 +269,7 @@ test_run_env_diff_main_defaults_target_to_remote_default_branch() {
   create_repo_for_env_diff "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project_a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/env-diff-repo.git"
@@ -285,8 +285,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_diff_main project_a --base prod
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_diff_main project_a --base prod
   )"
 
   assert_contains "${output}" "Target: \`refs/remotes/origin/main\`" "default target to remote default branch"
@@ -302,7 +302,7 @@ test_run_env_diff_main_accepts_git_refs_for_base_and_target() {
   create_repo_for_env_diff "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [project_a]
 repo_path = "${repo_dir}"
 remote_url = "git@github.com:example/env-diff-repo.git"
@@ -319,8 +319,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_env_diff_main project_a --base prod --target main
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_env_diff_main project_a --base prod --target main
   )"
 
   assert_contains "${output}" "Target: \`main\`" "treat non-environment target as git ref"

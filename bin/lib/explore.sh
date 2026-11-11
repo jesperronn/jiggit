@@ -100,11 +100,11 @@ prompt_input_line() {
   if [[ -n "${input_file}" ]]; then
     if [[ -f "${input_file}" ]]; then
       response="$(sed -n '1p' "${input_file}")"
-      tail -n +2 "${input_file}" > "${input_file}.tmp"
+      tail -n +2 "${input_file}" >"${input_file}.tmp"
       mv "${input_file}.tmp" "${input_file}"
     fi
   else
-    IFS= read -r response < /dev/tty || true
+    IFS= read -r response </dev/tty || true
   fi
 
   printf '%s\n' "${response}"
@@ -120,7 +120,7 @@ prompt_confirm_toml_preview() {
   [[ -n "${preview_text}" ]] && printf '%s\n' "${preview_text}" >&2
   response="$(prompt_input_line "Apply this change? [y/N]: ")"
   case "${response}" in
-    y|Y) return 0 ;;
+    y | Y) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -267,7 +267,7 @@ upsert_toml_array_in_section() {
           print rendered_line
         }
       }
-    ' "${target_file}" > "${temp_file}"
+    ' "${target_file}" >"${temp_file}"
 
   mv "${temp_file}" "${target_file}"
 }
@@ -779,7 +779,7 @@ parse_projects_toml() {
           ;;
       esac
     fi
-  done < "${config_file}"
+  done <"${config_file}"
 
   flush_current_project
   flush_current_jira
@@ -882,21 +882,30 @@ project_exists() {
 # Return the configured repo path for a project id.
 project_repo_path() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_REPO_PATH_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured Jira project key for a project id.
 project_jira_project_key() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_JIRA_PROJECT_KEY_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured remote URL for a project id.
 project_remote_url() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_REMOTE_URL_BY_ID["${project_id}"]:-}"
 }
 
@@ -929,35 +938,50 @@ project_jira_name() {
 # Return the configured Jira regexes for a project id as a space-separated string.
 project_jira_regexes() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_JIRA_REGEXES_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured Jira release prefixes for a project id as a space-separated string.
 project_jira_release_prefixes() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_JIRA_RELEASE_PREFIX_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured environments for a project id as a space-separated string.
 project_environments() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_ENVIRONMENTS_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured environment info URL pairs for a project id as space-separated env=url values.
 project_environment_info_urls() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_ENV_INFO_URLS_BY_ID["${project_id}"]:-}"
 }
 
 # Return the configured expression for extracting a version from actuator info.
 project_info_version_expr() {
   local project_id="${1:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   printf '%s\n' "${JIGGIT_PROJECT_INFO_VERSION_EXPR_BY_ID["${project_id}"]:-}"
 }
 
@@ -965,7 +989,10 @@ project_info_version_expr() {
 project_field_source() {
   local project_id="${1:-}"
   local field_name="${2:-}"
-  [[ -n "${project_id}" ]] || { printf '%s\n' "unknown"; return 0; }
+  [[ -n "${project_id}" ]] || {
+    printf '%s\n' "unknown"
+    return 0
+  }
 
   case "${field_name}" in
     repo_path)
@@ -1043,7 +1070,10 @@ jira_base_url() {
   local jira_name
   local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
-  [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${jira_name}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
   if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_BASE_URL:-}" ]]; then
     printf '%s\n' "${JIRA_BASE_URL}"
@@ -1057,7 +1087,10 @@ jira_bearer_token() {
   local jira_name
   local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
-  [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${jira_name}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
   if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_BEARER_TOKEN:-}" ]]; then
     printf '%s\n' "${JIRA_BEARER_TOKEN}"
@@ -1079,7 +1112,10 @@ jira_user_email() {
   local jira_name
   local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
-  [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${jira_name}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
   if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_USER_EMAIL:-}" ]]; then
     printf '%s\n' "${JIRA_USER_EMAIL}"
@@ -1097,7 +1133,10 @@ jira_api_token() {
   local jira_name
   local jira_storage_name
   jira_name="$(resolve_jira_name "${1:-}")"
-  [[ -n "${jira_name}" ]] || { printf '%s\n' ""; return 0; }
+  [[ -n "${jira_name}" ]] || {
+    printf '%s\n' ""
+    return 0
+  }
   jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
   if [[ "${jira_storage_name}" == "${JIGGIT_SHARED_JIRA_NAME}" && -n "${JIRA_API_TOKEN:-}" ]]; then
     printf '%s\n' "${JIRA_API_TOKEN}"
@@ -1118,7 +1157,10 @@ jira_field_source() {
   local jira_storage_name=""
 
   jira_name="$(resolve_jira_name "${reference}")"
-  [[ -n "${jira_name}" ]] || { printf '%s\n' "none"; return 0; }
+  [[ -n "${jira_name}" ]] || {
+    printf '%s\n' "none"
+    return 0
+  }
   jira_storage_name="$(jiggit_jira_storage_name "${jira_name}")"
 
   case "${field_name}" in
@@ -1286,7 +1328,10 @@ render_jira_config_diagnostic() {
 jira_config_source() {
   local jira_name
   jira_name="$(resolve_jira_name "${1:-}")"
-  [[ -n "${jira_name}" ]] || { printf '%s\n' "none"; return 0; }
+  [[ -n "${jira_name}" ]] || {
+    printf '%s\n' "none"
+    return 0
+  }
   printf '%s\n' "${JIGGIT_JIRA_SOURCE_BY_NAME["${jira_name}"]:-none}"
 }
 
@@ -1322,7 +1367,7 @@ append_shared_jira_config_block() {
 
   mkdir -p "$(dirname "${target_file}")"
   if [[ -s "${target_file}" ]]; then
-    printf '\n' >> "${target_file}"
+    printf '\n' >>"${target_file}"
   fi
 
   {
@@ -1333,7 +1378,7 @@ append_shared_jira_config_block() {
     else
       printf '%s\n' 'bearer_token = ""'
     fi
-  } >> "${target_file}"
+  } >>"${target_file}"
 }
 
 # Escape one string value for a minimal TOML double-quoted literal.
@@ -1411,7 +1456,7 @@ upsert_toml_string_in_section() {
           print rendered_line
         }
       }
-    ' "${target_file}" > "${temp_file}"
+    ' "${target_file}" >"${temp_file}"
 
   mv "${temp_file}" "${target_file}"
 }
@@ -1490,7 +1535,7 @@ global_project_selectors() {
     return 0
   fi
 
-  IFS=',' read -r -a selectors <<< "${raw_selectors}"
+  IFS=',' read -r -a selectors <<<"${raw_selectors}"
   for selector in "${selectors[@]}"; do
     selector="$(trim "${selector}")"
     [[ -z "${selector}" ]] && continue
@@ -1615,9 +1660,9 @@ slugify_repo_name() {
   local input="${1:-project}"
   local slug
 
-  slug=$(printf '%s' "${input}" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-{2,}/-/g')
+  slug=$(printf '%s' "${input}" |
+    tr '[:upper:]' '[:lower:]' |
+    sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-{2,}/-/g')
 
   if [[ -z "${slug}" ]]; then
     slug="project"
@@ -1726,9 +1771,9 @@ detect_jira_regexes() {
   local prefix
 
   explore_run_log "git -C ${repo} log --format=%B -n 200"
-  matches=$(git -C "${repo}" log --format='%B' -n 200 2>/dev/null \
-    | grep -oE "${JIGGIT_FALLBACK_JIRA_REGEX}" \
-    | sort -u || true)
+  matches=$(git -C "${repo}" log --format='%B' -n 200 2>/dev/null |
+    grep -oE "${JIGGIT_FALLBACK_JIRA_REGEX}" |
+    sort -u || true)
 
   if [[ -z "${matches}" ]]; then
     printf '%s\n' ""
@@ -1742,7 +1787,7 @@ detect_jira_regexes() {
       continue
     fi
     regexes+=("${prefix}-[0-9]+")
-  done <<< "${prefixes}"
+  done <<<"${prefixes}"
 
   printf '%s\n' "${regexes[*]}"
 }
@@ -1873,7 +1918,7 @@ candidate_completion_requests_skip() {
   local response="${1:-}"
 
   case "$(trim "${response}")" in
-    '!'|skip|SKIP)
+    '!' | skip | SKIP)
       return 0
       ;;
     *)
@@ -1943,7 +1988,7 @@ ensure_discovery_file_header() {
     printf '%s\n' '# Generated candidate project entries from jiggit explore.'
     printf '%s\n' '# Review before merging into a curated config file.'
     printf '\n'
-  } > "${output_file}"
+  } >"${output_file}"
 }
 
 # Ask interactively whether a discovered entry should be appended to the discovery file.
@@ -1968,10 +2013,10 @@ prompt_append_candidate_entry() {
   choice="$(prompt_input_line)"
 
   case "${choice}" in
-    y|Y)
+    y | Y)
       return 0
       ;;
-    q|Q)
+    q | Q)
       return 2
       ;;
     *)
@@ -2017,7 +2062,7 @@ write_discovery_file() {
         {
           printf '%s\n' "${entry}"
           printf '\n'
-        } >> "${output_file}"
+        } >>"${output_file}"
         wrote_any=1
       else
         case "$?" in
@@ -2036,7 +2081,7 @@ write_discovery_file() {
         printf '%s\n' "${entry}"
         printf '\n'
       done
-    } >> "${output_file}"
+    } >>"${output_file}"
     wrote_any=1
   else
     {
@@ -2047,7 +2092,7 @@ write_discovery_file() {
         printf '%s\n' "${entry}"
         printf '\n'
       done
-    } > "${output_file}"
+    } >"${output_file}"
     wrote_any=1
   fi
 
@@ -2132,7 +2177,7 @@ parse_explore_args() {
       --replace)
         JIGGIT_EXPLORE_WRITE_MODE="replace"
         ;;
-      -h|--help)
+      -h | --help)
         explore_usage
         return 2
         ;;

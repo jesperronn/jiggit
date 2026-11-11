@@ -287,7 +287,7 @@ run_jira_create_main() {
         dry_run=1
         shift
         ;;
-      -h|--help)
+      -h | --help)
         jira_create_usage
         return 0
         ;;

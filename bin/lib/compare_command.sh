@@ -228,7 +228,7 @@ render_compare_summary() {
     while IFS= read -r issue_key; do
       [[ -z "${issue_key}" ]] && continue
       printf -- "- \`%s\`\n" "${issue_key}"
-    done <<< "${issue_keys_text}"
+    done <<<"${issue_keys_text}"
   fi
 
   printf '\n'
@@ -273,7 +273,7 @@ run_compare_main() {
         to_ref="${2:-}"
         shift 2
         ;;
-      -h|--help)
+      -h | --help)
         compare_usage
         return 0
         ;;

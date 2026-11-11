@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pushd "$(dirname "$0")/../.." > /dev/null || exit 1
+pushd "$(dirname "$0")/../.." >/dev/null || exit 1
 
 source bin/lib/bash_test.sh
 source bin/lib/releases_command.sh
@@ -29,7 +29,7 @@ create_repo_for_releases() {
   git init "${repo_dir}" >/dev/null 2>&1
   git -C "${repo_dir}" config user.name "Jiggit Test"
   git -C "${repo_dir}" config user.email "jiggit@example.com"
-  printf 'one\n' > "${repo_dir}/README.md"
+  printf 'one\n' >"${repo_dir}/README.md"
   git -C "${repo_dir}" add README.md
   git -C "${repo_dir}" commit -m "initial" >/dev/null 2>&1
   git -C "${repo_dir}" tag v2.1.0.26
@@ -39,7 +39,7 @@ create_repo_for_releases() {
 fetch_jira_releases() {
   local jira_base_url="${1}"
   local jira_project_key="${2}"
-  printf '%s|%s\n' "${jira_base_url}" "${jira_project_key}" >> "${TEST_TMPDIR}/fetch.log"
+  printf '%s|%s\n' "${jira_base_url}" "${jira_project_key}" >>"${TEST_TMPDIR}/fetch.log"
 
   cat <<'EOF'
 [
@@ -76,7 +76,7 @@ test_run_releases_main_renders_releases_report() {
   create_repo_for_releases "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -93,8 +93,8 @@ EOF
   local output
   output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_releases_main project-a
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_releases_main project-a
   )"
 
   assert_contains "${output}" "# jiggit releases" "render releases heading"
@@ -124,7 +124,7 @@ test_run_releases_main_defaults_to_current_configured_repo() {
   create_repo_for_releases "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -141,8 +141,8 @@ EOF
   output="$(
     cd "${repo_dir}"
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_releases_main
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_releases_main
   )"
 
   assert_contains "${output}" "# jiggit releases" "render releases heading from current repo"
@@ -157,7 +157,7 @@ test_run_releases_main_renders_next_step_when_jira_project_key_is_missing() {
   create_repo_for_releases "${repo_dir}"
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<EOF
+  cat >"${projects_file}" <<EOF
 [jira]
 base_url = "https://jira.example.test"
 bearer_token = "token"
@@ -171,8 +171,8 @@ EOF
   local output=""
   if output="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    run_releases_main project-a 2>&1
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      run_releases_main project-a 2>&1
   )"; then
     fail "fail releases when jira project key is missing"
   else
@@ -188,7 +188,7 @@ test_project_release_inventory_summary_scopes_by_jira_release_prefix() {
   trap cleanup_tmpdir RETURN
 
   local projects_file="${TEST_TMPDIR}/projects.toml"
-  cat > "${projects_file}" <<'EOF'
+  cat >"${projects_file}" <<'EOF'
 [project-a]
 jira_release_prefix = ["2."]
 EOF
@@ -196,8 +196,8 @@ EOF
   local summary
   summary="$(
     JIGGIT_PROJECTS_FILE="${projects_file}" \
-    JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
-    bash -lc '
+      JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
+      bash -lc '
       source bin/lib/releases_command.sh
       load_project_config
       project_release_inventory_summary "project-a" '"'"'[

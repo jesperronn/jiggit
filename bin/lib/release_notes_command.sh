@@ -155,7 +155,7 @@ render_release_notes_target_candidates() {
   while IFS= read -r release_json; do
     [[ -z "${release_json}" ]] && continue
     printf -- "- \`%s\`\n" "$(printf '%s\n' "${release_json}" | jq -r '.name // "unknown"')"
-  done <<< "${matching_releases}"
+  done <<<"${matching_releases}"
 }
 
 # Resolve the target string as either an exact git ref, a unique Jira release, or an ambiguous match.
@@ -309,7 +309,7 @@ render_release_notes_issue_section() {
     while IFS= read -r key; do
       [[ -z "${key}" ]] && continue
       printf -- "- \`%s\`\n" "${key}"
-    done <<< "${suspicious}"
+    done <<<"${suspicious}"
     printf '\n'
   fi
 }
@@ -328,7 +328,7 @@ render_release_notes_mismatches() {
     while IFS= read -r item; do
       [[ -z "${item}" ]] && continue
       printf -- "- %s\n" "${item}"
-    done <<< "${RELEASE_NOTES_WITHOUT_ISSUE}"
+    done <<<"${RELEASE_NOTES_WITHOUT_ISSUE}"
     printf '\n'
   fi
 
@@ -339,7 +339,7 @@ render_release_notes_mismatches() {
       if [[ "$(printf '%s\n' "${RELEASE_NOTES_ISSUE_KEYS}")" != *"${key}"* ]]; then
         missing_from_git="${missing_from_git}${key}"$'\n'
       fi
-    done <<< "${release_issue_keys}"
+    done <<<"${release_issue_keys}"
 
     if [[ -n "${missing_from_git}" ]]; then
       print_markdown_h2 "Jira Release Issues Missing From Git Evidence" "${C_CYAN}"
@@ -347,7 +347,7 @@ render_release_notes_mismatches() {
       while IFS= read -r key; do
         [[ -z "${key}" ]] && continue
         printf -- "- \`%s\`\n" "${key}"
-      done <<< "${missing_from_git}"
+      done <<<"${missing_from_git}"
       printf '\n'
     fi
   fi
@@ -416,7 +416,7 @@ run_release_notes_main() {
         from_ref="${2:-}"
         shift 2
         ;;
-      -h|--help)
+      -h | --help)
         release_notes_usage
         return 0
         ;;
@@ -486,7 +486,7 @@ run_release_notes_main() {
 
   start_ref_raw="$(release_notes_resolve_start_ref "${project_id}" "${from_env}" "${from_ref}")"
   target_resolution="$(release_notes_resolve_target "${repo_path}" "${jira_base_url_value}" "${jira_project_key}" "${target_input}")"
-  IFS='|' read -r target_kind target_payload <<< "${target_resolution}"
+  IFS='|' read -r target_kind target_payload <<<"${target_resolution}"
 
   if [[ "${target_kind}" == "ambiguous" ]]; then
     ambiguous_payload="$(printf '%s\n' "${target_payload}" | jq -r '.')"
