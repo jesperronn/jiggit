@@ -99,15 +99,20 @@ dev = "https://dev.project-a.example.com/actuator/info"
 ## Jira adapter
 
 Jira reads use the existing adapter by default. To try the shared
-[jira-connect](https://github.com/jesperronn/jira-connect) read adapter, build
-that checkout with its `bin/build`, then select explicit absolute paths:
+[jira-connect](https://github.com/jesperronn/jira-connect) read adapter from
+source, select its launcher using explicit absolute paths:
 
 ```sh
 export JIGGIT_JIRA_ADAPTER=jira-connect
-export JIRA_CONNECT_BIN=/absolute/path/to/jira-connect/.bin/jira-connect
+export JIRA_CONNECT_BIN=/absolute/path/to/jira-connect/bin/jira-connect
 export JIRA_CONNECT_BRIDGE_PATH=/absolute/path/to/jira-connect/bridges/jiggit.sh
 jiggit releases project_a
 ```
+
+The launcher runs Go's cached build before each connector invocation, so source
+changes are picked up automatically. A source checkout requires Go; set
+`JIRA_CONNECT_BIN` to a prebuilt binary instead to run without Go. Jiggit itself
+is Bash and runs directly from source.
 
 This uses jiggit's existing project/Jira configuration and translates it for the
 connector. Search pagination is handled by jira-connect. Selecting the adapter
