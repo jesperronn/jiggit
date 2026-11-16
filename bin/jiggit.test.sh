@@ -344,11 +344,11 @@ EOF
 
   local output=""
   # Use a plain shell so local login/profile hooks cannot stall the test.
+  # shellcheck disable=SC2016 # The child Bash expands this script.
   output="$(
-    PATH="/opt/homebrew/bin:${PATH}" \
-      JIGGIT_PROJECTS_FILE="${projects_file}" \
+    JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${tmpdir}/discovered.toml" \
-      /opt/homebrew/bin/bash -c '
+      "${BASH}" -c '
       source bin/jiggit source
       fetch_env_version_for_url() {
         printf "mock-%s\n" "$1"

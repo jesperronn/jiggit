@@ -306,7 +306,7 @@ EOF
   chmod +x "${TEST_TMPDIR}/bin/curl"
 
   local output
-  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" /opt/homebrew/bin/bash "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" search SKOLELOGIN Api-server_1.2.0 2>&1)"
+  output="$(PATH="${TEST_TMPDIR}/bin:${PATH}" "${BASH}" "${TEST_TMPDIR}/bin/adhoc/jira_requests.sh" search SKOLELOGIN Api-server_1.2.0 2>&1)"
 
   assert_contains "${output}" '"SKOLELOGIN-321"' "print resolved release search response"
   assert_contains "$(cat "${TEST_TMPDIR}/curl.log")" "fixVersion%20%3D%20%22Api-server_1.2.0%22" "search uses the exact release tag for fixVersion"
