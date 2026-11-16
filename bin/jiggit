@@ -560,6 +560,6 @@ run_main() {
   jiggit_run_main "$@"
 }
 
-if ((! JIGGIT_SOURCE_ONLY)); then
+if [[ "${JIGGIT_SOURCE_ONLY}" -eq 0 ]]; then
   run_main "$@"
 fi
