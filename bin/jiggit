@@ -545,6 +545,11 @@ source "${JIGGIT_REPO_ROOT}/bin/lib/releases_command.sh"
 # shellcheck source=bin/lib/setup_command.sh
 source "${JIGGIT_REPO_ROOT}/bin/lib/setup_command.sh"
 
+# Select read replacements last so helper definitions cannot overwrite them.
+# shellcheck source=bin/lib/jira_adapter.sh
+source "${JIGGIT_REPO_ROOT}/bin/lib/jira_adapter.sh"
+jiggit_select_jira_adapter || exit "$?"
+
 # Reclaim the public entrypoint name after sourcing helpers that may define run_main.
 usage() {
   jiggit_usage

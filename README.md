@@ -96,6 +96,37 @@ staging = "https://staging.project-a.example.com/actuator/info"
 dev = "https://dev.project-a.example.com/actuator/info"
 ```
 
+## Jira adapter
+
+Jira reads use the existing adapter by default. To try the shared
+[jira-connect](https://github.com/jesperronn/jira-connect) read adapter, build
+that checkout with its `bin/build`, then select explicit absolute paths:
+
+```sh
+export JIGGIT_JIRA_ADAPTER=jira-connect
+export JIRA_CONNECT_BIN=/absolute/path/to/jira-connect/.bin/jira-connect
+export JIRA_CONNECT_BRIDGE_PATH=/absolute/path/to/jira-connect/bridges/jiggit.sh
+jiggit releases project_a
+```
+
+This uses jiggit's existing project/Jira configuration and translates it for the
+connector. Search pagination is handled by jira-connect. Selecting the adapter
+runs no requests by itself; reads resolve credentials when called. Missing paths,
+invalid selections and connector errors fail without falling back to legacy.
+
+The switch covers release, issue, project and current-user reads. Git operations
+and environment probes stay in jiggit. Jira writes (`jira-create`,
+`next-release --create` and `assign-fix-version --apply`) retain their existing
+implementation; this is a read adapter migration.
+
+To switch back for one invocation:
+
+```sh
+JIGGIT_JIRA_ADAPTER=legacy jiggit releases project_a
+```
+
+Unset `JIGGIT_JIRA_ADAPTER` to restore the default for later invocations.
+
 ## Typical Usecases
 
 ### Daily Flow
