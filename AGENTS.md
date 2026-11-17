@@ -13,7 +13,7 @@ jiggit: a bash CLI that connects git history, deployed versions and Jira release
 - `bin/test` keeps file headers bold and colored and relies on colored `[PASS]`/`[FAIL]` markers.
 - Keep functions small and comment each one with its purpose, so the code ports to other languages.
 - On macOS use `gsed`, not BSD `sed`.
-- Console Markdown: headings bold and colored; blue/cyan/magenta/green for normal output, red/orange only for errors and warnings; project entries green bold.
+- Console output: cyan headings and commands, green flags and success, yellow warnings, and red errors; project entries green bold. Color only terminal streams, and disable it when NO_COLOR is set or TERM=dumb.
 - `config/` in the repo is curated example config; `~/.jiggit/` is the user-specific area (README, "Project config is loaded from").
 
 ## Hard rules

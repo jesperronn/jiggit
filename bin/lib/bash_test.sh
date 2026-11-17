@@ -12,7 +12,7 @@ TEST_COLOR_RED=$'\033[31m'
 
 # Return success when test output should be colorized.
 bash_test_color_output_enabled() {
-  [[ "${NO_COLOR:-}" == "" ]]
+  [[ -t "${1:-1}" && "${TERM:-}" != dumb && ! ${NO_COLOR+x} ]]
 }
 
 # Wrap one label in color when supported.
@@ -20,7 +20,7 @@ colorize_test_label() {
   local color_code="${1:-}"
   local label_text="${2:-}"
 
-  if bash_test_color_output_enabled; then
+  if bash_test_color_output_enabled "${3:-1}"; then
     printf '%b%s%b' "${color_code}" "${label_text}" "${TEST_COLOR_RESET}"
   else
     printf '%s' "${label_text}"
@@ -35,7 +35,8 @@ bash_test_verbose_enabled() {
 # Print failure and increment FAILED counter (test scripts should define FAILED)
 fail() {
   local msg="${1:-}"
-  printf '%s %s\n' "$(colorize_test_label "${TEST_COLOR_BOLD}${TEST_COLOR_RED}" "[FAIL]")" "$msg" >&2
+  colorize_test_label "${TEST_COLOR_BOLD}${TEST_COLOR_RED}" "[FAIL]" 2 >&2
+  printf ' %s\n' "$msg" >&2
   if [[ -n "${FAILED+x}" ]]; then
     FAILED=$((FAILED + 1))
   fi
@@ -43,7 +44,8 @@ fail() {
 
 pass() {
   local msg="${1:-}"
-  printf '%s %s\n' "$(colorize_test_label "${TEST_COLOR_GREEN}" "[PASS]")" "$msg"
+  colorize_test_label "${TEST_COLOR_GREEN}" "[PASS]"
+  printf ' %s\n' "$msg"
 }
 
 assert_eq() {
@@ -156,7 +158,8 @@ run_tests() {
   if [[ $FAILED -eq 0 ]]; then
     return 0
   else
-    printf '%s %d tests failed\n' "$(colorize_test_label "${TEST_COLOR_BOLD}${TEST_COLOR_RED}" "[FAIL]")" "$FAILED" >&2
+    colorize_test_label "${TEST_COLOR_BOLD}${TEST_COLOR_RED}" "[FAIL]" 2 >&2
+    printf ' %d tests failed\n' "$FAILED" >&2
     return 2
   fi
 }

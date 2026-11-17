@@ -97,6 +97,8 @@ EOF
 
   local output
   output="$(
+    # shellcheck disable=SC2329 # Called by the renderer under test.
+    use_color_output() { return 0; }
     HOME="${home_dir}" \
       JIGGIT_COLOR_OUTPUT=always \
       JIGGIT_PROJECTS_FILE="${repo_config_dir}/projects.toml" \
@@ -104,18 +106,18 @@ EOF
       run_config_main
   )"
 
-  assert_contains "${output}" $'\e[1m\e[34m# jiggit config\e[0m' "render colored top heading"
+  assert_contains "${output}" $'\e[1m\e[36m# jiggit config\e[0m' "render colored top heading"
   assert_contains "${output}" $'\e[1m\e[36m## Loaded Config Files\e[0m' "render colored loaded-files heading"
-  assert_contains "${output}" $'\e[1m\e[35m## Jira\e[0m' "render colored jira heading"
+  assert_contains "${output}" $'\e[1m\e[36m## Jira\e[0m' "render colored jira heading"
   assert_contains "${output}" "Jira base URL: \`missing\` (none)" "render shared jira base url diagnostic"
   assert_contains "${output}" "Jira bearer token: \`missing\` (none)" "render shared jira bearer token diagnostic"
   assert_contains "${output}" "Jira user email: \`missing\` (none)" "render shared jira user email diagnostic"
   assert_contains "${output}" "Jira auth mode: \`missing\` (none)" "render shared jira auth diagnostic"
   assert_contains "${output}" "Jira API token: \`missing\` (none)" "render shared jira token diagnostic"
-  assert_contains "${output}" $'\e[1m\e[34m## Projects\e[0m' "render colored projects heading"
+  assert_contains "${output}" $'\e[1m\e[36m## Projects\e[0m' "render colored projects heading"
   assert_contains "${output}" $'\e[1m\e[32m- `alpha`\e[0m' "render colored project item"
-  assert_contains "${output}" $'\e[1m\e[38;5;202m  - jira project key: `missing`' "render missing jira project key as orange warning"
-  assert_contains "${output}" $'\e[1m\e[38;5;202m  - environments: `none`' "render missing environments as orange warning"
+  assert_contains "${output}" $'\e[1m\e[33m  - jira project key: `missing`' "render missing jira project key as orange warning"
+  assert_contains "${output}" $'\e[1m\e[33m  - environments: `none`' "render missing environments as orange warning"
 }
 
 test_run_config_main_can_show_named_projects_and_globals_only() {

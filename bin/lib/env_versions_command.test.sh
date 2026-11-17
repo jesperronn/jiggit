@@ -129,6 +129,8 @@ EOF
 
   local output=""
   if output="$(
+    # shellcheck disable=SC2329 # Called by the renderer under test.
+    use_color_output() { return 0; }
     JIGGIT_COLOR_OUTPUT=always \
       JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
@@ -137,7 +139,7 @@ EOF
     fail "fail when one configured environment has no info url"
   else
     pass "fail when one configured environment has no info url"
-    assert_contains "${output}" $'\e[1m\e[38;5;202m- `ft  `: `ERROR: missing info URL in config` from `missing`\e[0m' "render missing environment in orange"
+    assert_contains "${output}" $'\e[1m\e[33m- `ft  `: `ERROR: missing info URL in config` from `missing`\e[0m' "render missing environment in orange"
   fi
 }
 

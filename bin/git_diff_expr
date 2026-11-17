@@ -228,8 +228,11 @@ normalize_version() {
 debug() {
   # Print the provided message(s) with escape sequences interpreted, but only when verbose
   if [[ "${VERBOSE:-0}" -eq 1 ]]; then
-    # Automatically wrap debug output in cyan coloring so callers don't need to embed color codes.
-    printf '%b\n' "${C_CYAN}${*}${C_0}" >&2
+    if [[ -t 2 && "${TERM:-}" != dumb && ! ${NO_COLOR+x} ]]; then
+      printf '%b%s%b\n' "${C_CYAN}" "$*" "${C_0}" >&2
+    else
+      printf '%s\n' "$*" >&2
+    fi
   fi
 }
 
@@ -240,10 +243,14 @@ check_program() {
   command_exit_code=$?
   set -e
   if [[ "${command_exit_code}" -ne 0 ]]; then
-    echo -e "${C_BOLD}${C_RED}FATAL: Required ${1} command not found. You MUST install ${1} manually${C_0}" >&2
+    if [[ -t 2 && "${TERM:-}" != dumb && ! ${NO_COLOR+x} ]]; then
+      printf '%b%s%b\n' "${C_BOLD}${C_RED}" "FATAL: Required ${1} command not found. You MUST install ${1} manually" "${C_0}" >&2
+    else
+      printf 'FATAL: Required %s command not found. You MUST install %s manually\n' "$1" "$1" >&2
+    fi
     return 9
   else
-    debug "✅${C_GREEN} Found ${1} [${command_to_test}]"
+    debug "✅ Found ${1} [${command_to_test}]"
   fi
 
 }

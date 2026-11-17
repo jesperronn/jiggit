@@ -168,15 +168,17 @@ EOF
 
   local output
   output="$(
+    # shellcheck disable=SC2329 # Called by the renderer under test.
+    use_color_output() { return 0; }
     JIGGIT_COLOR_OUTPUT=always \
       JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \
       run_doctor_main --fix --ignore-failures 2>&1
   )"
 
-  assert_contains "${output}" $'\e[1m\e[34m# jiggit doctor\e[0m' "render colored doctor top heading"
+  assert_contains "${output}" $'\e[1m\e[36m# jiggit doctor\e[0m' "render colored doctor top heading"
   assert_contains "${output}" $'\e[1m\e[36m## Prerequisites\e[0m' "render colored doctor prerequisite heading"
-  assert_contains "${output}" $'\e[1m\e[32m## project-a\e[0m' "render colored doctor project heading"
+  assert_contains "${output}" $'\e[1m\e[36m## project-a\e[0m' "render colored doctor project heading"
 }
 
 test_run_doctor_main_scopes_release_summary_by_jira_release_prefix() {

@@ -247,6 +247,8 @@ EOF
 
   local output
   output="$(
+    # shellcheck disable=SC2329 # Called by the renderer under test.
+    use_color_output() { return 0; }
     JIGGIT_COLOR_OUTPUT=always \
       JIGGIT_PROJECTS_FILE="${projects_file}" \
       JIGGIT_DISCOVERED_PROJECTS_FILE="${TEST_TMPDIR}/discovered.toml" \

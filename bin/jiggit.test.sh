@@ -215,7 +215,7 @@ test_usage_renders_colored_help_when_color_is_enabled() {
   output="$(usage)"
 
   assert_contains "${output}" $'\033[1;36mUsage:\033[0m' "usage colors top-level headings"
-  assert_contains "${output}" $'\033[1;95mjiggit\033[0m' "usage colors the jiggit command name purple"
+  assert_contains "${output}" $'\033[1;36mjiggit\033[0m' "usage colors the jiggit command name cyan"
   assert_contains "${output}" $'\033[1;36mchanges\033[0m' "usage colors subcommands separately"
   assert_contains "${output}" $'\033[2m[\033[0m\033[2m<\033[0m\033[35mproject|path\033[0m\033[2m>\033[0m\033[2m]\033[0m' "usage dims brackets around placeholders"
   assert_contains "${output}" $'\033[2m[\033[0m\033[1;32m--verbose\033[0m\033[2m]\033[0m' "usage keeps optional flags green inside brackets"
@@ -230,9 +230,9 @@ test_jiggit_usage_line_highlights_the_subcommand_token() {
   local output
   output="$(setup_usage)"
 
-  assert_contains "${output}" $'\033[1;95mjiggit\033[0m \033[1;36msetup\033[0m' "usage line styles jiggit and bolds the subcommand token"
+  assert_contains "${output}" $'\033[1;36mjiggit\033[0m \033[1;36msetup\033[0m' "usage line styles jiggit and bolds the subcommand token"
   assert_contains "${output}" $'\033[2m<\033[0m\033[35mdir\033[0m\033[2m>\033[0m' "usage line colors parameter placeholders"
-  assert_contains "${output}" $'\033[1;95mjiggit\033[0m \033[1;36msetup\033[0m explore' "usage lists setup explore mode"
+  assert_contains "${output}" $'\033[1;36mjiggit\033[0m \033[1;36msetup\033[0m explore' "usage lists setup explore mode"
 }
 
 test_jiggit_config_accepts_global_verbose_flag() {

@@ -6,7 +6,7 @@ C_BOLD="\e[1m"
 C_U="\e[4m"
 C_RED="\e[31m"
 C_GREEN="\e[32m"
-C_ORANGE="\e[38;5;202m"
+C_ORANGE="\e[33m"
 C_MAGENTA="\e[35m"
 C_BLUE="\e[34m"
 C_CYAN="\e[36m"
@@ -26,12 +26,7 @@ NORMAL="${C_0}"
 
 # Return success when colored console output should be used.
 use_color_output() {
-  case "${JIGGIT_COLOR_OUTPUT:-auto}" in
-    always) return 0 ;;
-    never) return 1 ;;
-  esac
-
-  [[ -t 1 && "${TERM:-}" != "dumb" && -z "${NO_COLOR:-}" ]]
+  [[ "${JIGGIT_COLOR_OUTPUT:-auto}" != never && -t "${1:-1}" && "${TERM:-}" != dumb && ! ${NO_COLOR+x} ]]
 }
 
 # Print one line using the requested color and bold styling when color is enabled.
@@ -49,20 +44,20 @@ print_colored_line() {
 # Print a first-level Markdown heading with console styling.
 print_markdown_h1() {
   local text="${1:-}"
-  print_colored_line "${C_BLUE}" "# ${text}"
+  print_colored_line "${C_CYAN}" "# ${text}"
 }
 
 # Print a second-level Markdown heading with console styling.
 print_markdown_h2() {
   local text="${1:-}"
-  local color_code="${2:-${C_CYAN}}"
+  local color_code="${C_CYAN}"
   print_colored_line "${color_code}" "## ${text}"
 }
 
 # Print a third-level Markdown heading with console styling.
 print_markdown_h3() {
   local text="${1:-}"
-  local color_code="${2:-${C_BLUE}}"
+  local color_code="${C_CYAN}"
   print_colored_line "${color_code}" "### ${text}"
 }
 
@@ -203,19 +198,19 @@ _testcolors() {
 function debug {
   test "${VERBOSE:-false}" != true && return
 
-  printf '%b\n' "${C_DIM}[DEBUG] $1${C_0}" >&2
+  if use_color_output 2; then printf '%b\n' "${C_DIM}[DEBUG] $1${C_0}" >&2; else printf '[DEBUG] %s\n' "$1" >&2; fi
 }
 function info {
   echo -e "[INFO] $1" >&2
 }
 function ok {
-  echo -e "${C_BOLD}${C_GREEN}✅ [OK] $1${C_0}" >&2
+  if use_color_output 2; then printf '%b\n' "${C_BOLD}${C_GREEN}✅ [OK] $1${C_0}" >&2; else printf '✅ [OK] %s\n' "$1" >&2; fi
 }
 function warn {
-  echo -e "${C_BOLD}${C_ORANGE}⚠️ [WARN] $1${C_0}" >&2
+  if use_color_output 2; then printf '%b\n' "${C_BOLD}${C_ORANGE}⚠️ [WARN] $1${C_0}" >&2; else printf '⚠️ [WARN] %s\n' "$1" >&2; fi
 }
 function error {
-  echo -e "${C_RED}${C_BOLD}❌ [ERROR] $1${C_0}" >&2
+  if use_color_output 2; then printf '%b\n' "${C_RED}${C_BOLD}❌ [ERROR] $1${C_0}" >&2; else printf '❌ [ERROR] %s\n' "$1" >&2; fi
 }
 
 run_main() {

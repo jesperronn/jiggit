@@ -216,3 +216,7 @@ api_token = "token"
 ```
 
 Projects can keep using the default `[jira]` block, or point at named Jira entries when they need more than one Jira host or auth setup.
+
+Terminal colors are enabled only for terminal output when `NO_COLOR` is unset and
+`TERM` is not `dumb`. `JIGGIT_COLOR_OUTPUT=never` disables colors; `always`
+still respects these terminal and environment checks.
